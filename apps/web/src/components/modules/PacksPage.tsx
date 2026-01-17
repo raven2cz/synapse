@@ -1,0 +1,360 @@
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { 
+  Package, Search, Tag, 
+  ZoomIn, ZoomOut, Loader2, X, AlertTriangle
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { useSettingsStore } from '@/stores/settingsStore'
+
+interface PackSummary {
+  name: string
+  version: string
+  description?: string
+  installed: boolean
+  assets_count: number
+  previews_count: number
+  nsfw_previews_count: number
+  source_url?: string
+  created_at?: string
+  thumbnail?: string  // This is the URL to preview image
+  tags: string[]
+  user_tags: string[]
+  has_unresolved: boolean
+  model_type?: string  // LORA, Checkpoint, etc.
+  base_model?: string  // SD 1.5, SDXL, etc.
+}
+
+// Card widths for zoom - fixed sizes
+const CARD_WIDTHS = {
+  sm: 220,
+  md: 300,
+  lg: 380,
+}
+
+type CardSize = keyof typeof CARD_WIDTHS
+
+export function PacksPage() {
+  const { nsfwBlurEnabled } = useSettingsStore()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedTag, setSelectedTag] = useState('')
+  const [cardSize, setCardSize] = useState<CardSize>('md')
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
+
+  // Fetch packs with debug
+  const { data: packs = [], isLoading, error } = useQuery<PackSummary[]>({
+    queryKey: ['packs'],
+    queryFn: async () => {
+      console.log('[PacksPage] Fetching packs from /api/packs...')
+      const res = await fetch('/api/packs/')
+      console.log('[PacksPage] Response status:', res.status)
+      
+      if (!res.ok) {
+        const errText = await res.text()
+        console.error('[PacksPage] Error response:', errText)
+        throw new Error(`Failed to fetch packs: ${res.status}`)
+      }
+      
+      const data = await res.json()
+      console.log('[PacksPage] Received data:', data)
+      
+      // v2 API returns { packs: [...] }
+      const packsList = data.packs || data || []
+      console.log('[PacksPage] Packs count:', packsList.length)
+      
+      // Debug first pack
+      if (packsList.length > 0) {
+        console.log('[PacksPage] First pack:', JSON.stringify(packsList[0], null, 2))
+        console.log('[PacksPage] First pack thumbnail:', packsList[0].thumbnail)
+      }
+      
+      return packsList
+    },
+  })
+
+  // Get unique user tags from all packs
+  const allUserTags = Array.from(
+    new Set(packs.flatMap(p => p.user_tags || []))
+  ).sort()
+
+  // Filter packs
+  const filteredPacks = packs.filter(pack => {
+    // Search filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      const matchesName = pack.name.toLowerCase().includes(q)
+      const matchesDesc = pack.description?.toLowerCase().includes(q)
+      const matchesTags = pack.tags?.some(t => t.toLowerCase().includes(q))
+      const matchesUserTags = pack.user_tags?.some(t => t.toLowerCase().includes(q))
+      if (!matchesName && !matchesDesc && !matchesTags && !matchesUserTags) return false
+    }
+    
+    // User tag filter
+    if (selectedTag && !pack.user_tags?.includes(selectedTag)) return false
+    
+    return true
+  })
+
+  // Zoom handlers
+  const zoomIn = () => {
+    if (cardSize === 'sm') setCardSize('md')
+    else if (cardSize === 'md') setCardSize('lg')
+  }
+
+  const zoomOut = () => {
+    if (cardSize === 'lg') setCardSize('md')
+    else if (cardSize === 'md') setCardSize('sm')
+  }
+
+  const cardWidth = CARD_WIDTHS[cardSize]
+
+  return (
+    <div className="space-y-6">
+      {/* Fullscreen image viewer */}
+      {fullscreenImage && (
+        <div 
+          className="fixed inset-0 bg-black z-[90] flex items-center justify-center"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button 
+            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+            onClick={(e) => { e.stopPropagation(); setFullscreenImage(null) }}
+          >
+            <X className="w-8 h-8 text-white" />
+          </button>
+          <img 
+            src={fullscreenImage} 
+            alt="Fullscreen preview" 
+            className="max-w-[95vw] max-h-[95vh] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      {/* Header with zoom */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
+            <Package className="w-7 h-7 text-synapse" />
+            Asset Packs
+          </h1>
+          <p className="text-text-muted mt-1">
+            {packs.length} packs installed
+          </p>
+        </div>
+        
+        {/* Zoom controls */}
+        <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
+          <button
+            onClick={zoomOut}
+            disabled={cardSize === 'sm'}
+            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut className="w-4 h-4 text-text-secondary" />
+          </button>
+          <div className="w-px h-6 bg-slate-mid" />
+          <button
+            onClick={zoomIn}
+            disabled={cardSize === 'lg'}
+            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="w-4 h-4 text-text-secondary" />
+          </button>
+        </div>
+      </div>
+
+      {/* Search and filters */}
+      <div className="flex flex-wrap gap-4">
+        {/* Search */}
+        <div className="flex-1 min-w-[300px] relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search packs..."
+            className="w-full pl-12 pr-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-synapse transition-colors"
+          />
+        </div>
+
+        {/* User tag filter */}
+        {allUserTags.length > 0 && (
+          <select
+            value={selectedTag}
+            onChange={(e) => setSelectedTag(e.target.value)}
+            className="px-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary focus:outline-none focus:border-synapse cursor-pointer"
+          >
+            <option value="">All Tags</option>
+            {allUserTags.map(tag => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Active filters display */}
+      {selectedTag && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-text-muted">Active filters:</span>
+          <button
+            onClick={() => setSelectedTag('')}
+            className="px-3 py-1 bg-pulse/20 text-pulse rounded-lg text-sm flex items-center gap-1 hover:bg-pulse/30"
+          >
+            <Tag className="w-3 h-3" />
+            {selectedTag}
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {isLoading && (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-synapse" />
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 text-red-400">
+          <p className="font-medium">Error loading packs</p>
+          <p className="text-sm mt-1">{(error as Error).message}</p>
+        </div>
+      )}
+
+      {/* Debug info */}
+      {!isLoading && packs.length > 0 && (
+        <div className="text-xs text-text-muted bg-slate-dark/50 p-2 rounded">
+          Debug: {filteredPacks.length} packs shown, first thumbnail: {packs[0]?.thumbnail || 'none'}
+        </div>
+      )}
+
+      {/* Packs grid - CIVITAI STYLE */}
+      <div className="flex flex-wrap gap-4">
+        {filteredPacks.map(pack => {
+          const thumbnailUrl = pack.thumbnail
+          const isNsfwPack = pack.user_tags?.includes('nsfw-pack')
+          
+          console.log(`[PacksPage] Rendering pack: ${pack.name}, thumbnail: ${thumbnailUrl}, nsfw: ${isNsfwPack}`)
+          
+          return (
+            <Link
+              key={pack.name}
+              to={`/packs/${encodeURIComponent(pack.name)}`}
+              className="group cursor-pointer"
+              style={{ width: cardWidth }}
+            >
+              {/* Card - Civitai style */}
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark">
+                {/* Image with hover zoom and NSFW blur */}
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt={pack.name}
+                    className={clsx(
+                      "w-full h-full object-cover transition-all duration-500 ease-out",
+                      "group-hover:scale-110",
+                      isNsfwPack && nsfwBlurEnabled && "blur-xl group-hover:blur-0"
+                    )}
+                    loading="lazy"
+                    onError={(e) => {
+                      console.error(`[PacksPage] Image load error for ${pack.name}:`, thumbnailUrl)
+                      ;(e.target as HTMLImageElement).style.display = 'none'
+                    }}
+                    onLoad={() => {
+                      console.log(`[PacksPage] Image loaded for ${pack.name}`)
+                    }}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-dark to-slate-mid">
+                    <Package className="w-16 h-16 text-slate-mid" />
+                  </div>
+                )}
+                
+                {/* NSFW overlay indicator */}
+                {isNsfwPack && nsfwBlurEnabled && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none">
+                    <span className="px-3 py-1.5 bg-red-500/80 backdrop-blur-sm rounded-lg text-sm text-white font-semibold">
+                      NSFW
+                    </span>
+                  </div>
+                )}
+                
+                {/* Gradient overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
+                
+                {/* Top badges */}
+                <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap max-w-[80%]">
+                  <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold">
+                    {pack.assets_count} assets
+                  </span>
+                </div>
+                
+                {/* Unresolved warning */}
+                {pack.has_unresolved && (
+                  <div className="absolute top-3 right-3">
+                    <span className="px-2 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-xs text-white font-semibold flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      Needs Setup
+                    </span>
+                  </div>
+                )}
+                
+                {/* User tags */}
+                {pack.user_tags && pack.user_tags.length > 0 && (
+                  <div className="absolute top-12 left-3 flex gap-1 flex-wrap max-w-[90%]">
+                    {pack.user_tags.slice(0, 2).map(tag => (
+                      <span key={tag} className="px-2 py-0.5 bg-pulse/60 backdrop-blur-sm rounded text-xs text-white">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                
+                {/* Bottom content */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+                  {/* Title */}
+                  <h3 className="font-bold text-white text-sm leading-tight line-clamp-2 drop-shadow-lg">
+                    {pack.name}
+                  </h3>
+                  
+                  {/* Model type and base model badges */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {pack.model_type && (
+                      <span className="px-2 py-0.5 bg-synapse/80 rounded text-xs text-white font-medium">
+                        {pack.model_type}
+                      </span>
+                    )}
+                    {pack.base_model && (
+                      <span className="px-2 py-0.5 bg-white/20 rounded text-xs text-white/90">
+                        {pack.base_model}
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 bg-white/10 rounded text-xs text-white/70">
+                      v{pack.version}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* Empty state */}
+      {!isLoading && filteredPacks.length === 0 && (
+        <div className="text-center py-12">
+          <Package className="w-16 h-16 text-slate-mid mx-auto mb-4" />
+          <p className="text-text-muted">
+            {packs.length === 0 
+              ? 'No packs installed yet. Import models from Browse Civitai.'
+              : 'No packs match your filters.'}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}

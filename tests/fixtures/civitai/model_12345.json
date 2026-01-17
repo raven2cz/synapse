@@ -1,0 +1,63 @@
+{
+  "id": 12345,
+  "name": "Amazing LoRA",
+  "type": "LORA",
+  "description": "A great LoRA for testing",
+  "nsfw": false,
+  "tags": ["test", "lora"],
+  "modelVersions": [
+    {
+      "id": 67890,
+      "modelId": 12345,
+      "name": "v2.0",
+      "baseModel": "SDXL 1.0",
+      "trainedWords": ["amazinglora", "test"],
+      "files": [
+        {
+          "id": 11111,
+          "name": "amazing_lora_v2.safetensors",
+          "sizeKB": 144000,
+          "primary": true,
+          "downloadUrl": "https://civitai.com/api/download/models/67890",
+          "hashes": {
+            "SHA256": "abc123def456789012345678901234567890123456789012345678901234abcd"
+          }
+        }
+      ],
+      "images": [
+        {
+          "id": 1,
+          "url": "https://image.civitai.com/preview1.jpg",
+          "width": 1024,
+          "height": 1024
+        },
+        {
+          "id": 2,
+          "url": "https://image.civitai.com/preview2.jpg",
+          "width": 768,
+          "height": 1024
+        }
+      ]
+    },
+    {
+      "id": 55555,
+      "modelId": 12345,
+      "name": "v1.0",
+      "baseModel": "SDXL 1.0",
+      "trainedWords": ["amazinglora"],
+      "files": [
+        {
+          "id": 22222,
+          "name": "amazing_lora_v1.safetensors",
+          "sizeKB": 120000,
+          "primary": true,
+          "downloadUrl": "https://civitai.com/api/download/models/55555",
+          "hashes": {
+            "SHA256": "old123old456789012345678901234567890123456789012345678901234old"
+          }
+        }
+      ],
+      "images": []
+    }
+  ]
+}

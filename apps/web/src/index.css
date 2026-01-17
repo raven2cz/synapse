@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-obsidian text-text-primary antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-deep;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-mid rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-synapse/50;
+  }
+}
+
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-slate-deep/50 rounded-2xl border border-slate-mid/50;
+  }
+  
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-synapse/30 hover:shadow-lg hover:shadow-synapse/5;
+  }
+  
+  /* Button base */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-synapse/50;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply btn bg-gradient-to-r from-synapse to-pulse text-white shadow-lg shadow-synapse/25;
+    @apply hover:shadow-xl hover:shadow-synapse/30 hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  .btn-secondary {
+    @apply btn bg-slate-deep border border-slate-mid/50 text-text-primary;
+    @apply hover:bg-slate-mid/50 hover:border-synapse/30;
+  }
+  
+  .btn-ghost {
+    @apply btn text-text-secondary hover:bg-slate-mid/30 hover:text-text-primary;
+  }
+  
+  .btn-danger {
+    @apply btn bg-error/10 border border-error/30 text-error hover:bg-error/20;
+  }
+}
+
+/* NSFW blur effect */
+.nsfw-blur {
+  filter: blur(20px);
+  transition: filter 0.3s ease;
+}
+
+.nsfw-blur:hover {
+  filter: blur(8px);
+}
+
+.nsfw-unblur {
+  filter: none;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-gradient-to-r from-synapse to-pulse bg-clip-text text-transparent;
+}
+
+/* Loading skeleton */
+.skeleton {
+  @apply bg-slate-mid/50 animate-pulse rounded;
+}
+
+/* Thin scrollbar for horizontal scroll */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  @apply bg-slate-mid rounded-full;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  @apply bg-synapse/50;
+}
+
+/* Animation utilities */
+@keyframes slide-in-from-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-in {
+  animation-duration: 300ms;
+  animation-fill-mode: both;
+}
+
+.slide-in-from-right {
+  animation-name: slide-in-from-right;
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
