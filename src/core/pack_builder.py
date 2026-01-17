@@ -29,6 +29,7 @@ from ..clients.civitai_client import CivitaiClient, CivitaiModel, CivitaiModelVe
 from ..clients.huggingface_client import HuggingFaceClient
 from ..workflows.scanner import WorkflowScanner, WorkflowScanResult
 from ..workflows.resolver import DependencyResolver
+from ..utils.media_detection import detect_media_type, get_video_thumbnail_url
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -285,7 +286,14 @@ class PackBuilder:
         download: bool = True,
         detailed_version_images: List[Dict[str, Any]] = None,
     ) -> List[PreviewImage]:
-        """Download preview images to pack resources directory."""
+        """
+        Download preview media (images and videos) to pack resources directory.
+        
+        Detects media type from URL and handles both images and videos.
+        """
+        # Local imports to avoid circular dependency issues if any (though top-level is fine usually)
+        from ..utils.media_detection import detect_media_type, get_video_thumbnail_url
+        
         previews = []
         resources_dir = pack_dir / "resources" / "previews"
         
@@ -309,7 +317,6 @@ class PackBuilder:
                 continue
                 
             # MERGE: Check if we have richer data for this image
-            # The summary 'img_data' has limited info. 'detailed_img' has full meta if available.
             detailed_img = detailed_map.get(url)
             source_img = detailed_img if detailed_img else img_data
             
@@ -319,9 +326,20 @@ class PackBuilder:
             if nsfw_level >= 2:
                 nsfw = True
             
-            # Generate filename
-            ext = Path(url.split("?")[0]).suffix or ".png"
-            filename = f"preview_{i+1}{ext}"
+            # Detect media type from URL
+            media_info = detect_media_type(url, use_head_request=False)
+            media_type = media_info.type.value  # 'image', 'video', or 'unknown'
+            
+            # Generate filename with appropriate extension
+            url_path = url.split("?")[0]
+            original_ext = Path(url_path).suffix or ".png"
+            
+            # For videos, ensure we use video extension
+            if media_type == 'video' and original_ext in ['.jpg', '.jpeg', '.png']:
+                # Civitai sometimes serves videos as .jpeg - keep original but mark as video
+                pass
+            
+            filename = f"preview_{i+1}{original_ext}"
             local_path = f"resources/previews/{filename}"
             
             # Extract metadata safely
@@ -333,6 +351,12 @@ class PackBuilder:
             if isinstance(meta, dict) and "meta" in meta and isinstance(meta["meta"], dict):
                 meta = meta["meta"]
             
+            # Get video thumbnail URL
+            thumbnail_url = None
+            if media_type == 'video':
+                thumbnail_url = get_video_thumbnail_url(url)
+            
+            # Create PreviewImage with media type
             preview = PreviewImage(
                 filename=filename,
                 url=url,
@@ -340,19 +364,26 @@ class PackBuilder:
                 nsfw=nsfw,
                 width=source_img.get("width"),
                 height=source_img.get("height"),
-                # Store full metadata dictionary as requested
+                media_type=media_type,
+                thumbnail_url=thumbnail_url,
                 meta=meta if isinstance(meta, dict) else None,
             )
             
-            # Download the image
+            # Download the media file
             if download:
                 try:
                     dest_path = resources_dir / filename
-                    response = requests.get(url, timeout=30, stream=True)
+                    response = requests.get(url, timeout=60, stream=True)  # Longer timeout for videos
                     if response.status_code == 200:
                         with open(dest_path, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 f.write(chunk)
+                        
+                        # Log video downloads
+                        if media_type == 'video':
+                            file_size = dest_path.stat().st_size
+                            print(f"[PackBuilder] Downloaded video preview: {filename} ({file_size / 1024 / 1024:.1f} MB)")
+                            
                 except Exception as e:
                     print(f"Warning: Failed to download preview {url}: {e}")
             

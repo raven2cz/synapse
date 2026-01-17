@@ -10,12 +10,14 @@ Search and browse Civitai models with enhanced search:
 import logging
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Literal, Dict, Any
 from pathlib import Path
 import re
 
 from src.clients.civitai_client import CivitaiClient
+from src.utils.media_detection import detect_media_type, get_video_thumbnail_url
 from config.settings import get_config
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -24,7 +26,7 @@ router = APIRouter()
 
 
 class ModelPreview(BaseModel):
-    """Model preview image."""
+    """Model preview media (image or video)."""
     model_config = ConfigDict(protected_namespaces=())
     
     url: str
@@ -32,6 +34,42 @@ class ModelPreview(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     meta: Optional[Dict[str, Any]] = None
+    
+    # Media type: 'image', 'video', or 'unknown'
+    # Backend detects this from URL, frontend uses it for rendering
+    media_type: Literal['image', 'video', 'unknown'] = 'image'
+    
+    # Video-specific fields
+    duration: Optional[float] = None  # seconds
+    has_audio: Optional[bool] = None
+    thumbnail_url: Optional[str] = None
+
+
+def create_model_preview(img: Dict[str, Any]) -> 'ModelPreview':
+    """
+    Create a ModelPreview from Civitai image data.
+    Detects media type (image vs video) from URL.
+    """
+    url = img.get("url", "")
+    
+    # Detect media type from URL
+    media_info = detect_media_type(url, use_head_request=False)
+    media_type = media_info.type.value  # 'image', 'video', or 'unknown'
+    
+    # Get thumbnail for videos
+    thumbnail_url = None
+    if media_type == 'video':
+        thumbnail_url = get_video_thumbnail_url(url)
+    
+    return ModelPreview(
+        url=url,
+        nsfw=img.get("nsfw", False) or img.get("nsfwLevel", 0) >= 2,
+        width=img.get("width"),
+        height=img.get("height"),
+        meta=img.get("meta"),
+        media_type=media_type,
+        thumbnail_url=thumbnail_url,
+    )
 
 
 class ModelFile(BaseModel):
@@ -261,13 +299,7 @@ def _convert_model_to_result(model_data: Dict[str, Any]) -> Optional[CivitaiMode
     # Get previews from first version
     first_version_images = model_versions[0].get("images", [])
     for img in first_version_images[:8]:
-        previews.append(ModelPreview(
-            url=img.get("url", ""),
-            nsfw=img.get("nsfw", False) or img.get("nsfwLevel", 0) >= 2,
-            width=img.get("width"),
-            height=img.get("height"),
-            meta=img.get("meta"),
-        ))
+        previews.append(create_model_preview(img))
     
     for ver in model_versions:
         files = ver.get("files", [])
@@ -367,13 +399,7 @@ async def get_model(model_id: int, version_id: Optional[int] = None):
             for img in ver.get("images", []):
                 if len(previews) < 50:
                     meta = img.get("meta", {})
-                    previews.append(ModelPreview(
-                        url=img.get("url", ""),
-                        nsfw=img.get("nsfw", False) or img.get("nsfwLevel", 0) >= 2,
-                        width=img.get("width"),
-                        height=img.get("height"),
-                        meta=meta,
-                    ))
+                    previews.append(create_model_preview(img))
                     
                     # Get example params from first image with meta
                     if not example_params and meta:

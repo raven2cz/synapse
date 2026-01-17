@@ -458,13 +458,37 @@ class WorkflowInfo(BaseModel):
 
 
 class PreviewInfo(BaseModel):
-    """Preview image information."""
+    """
+    Preview media information (image or video).
+    
+    Supports both images and videos from Civitai and other sources.
+    The `media_type` field indicates whether this is an image or video.
+    """
     filename: str
     url: Optional[str] = None
     nsfw: bool = False
     width: Optional[int] = None
     height: Optional[int] = None
     meta: Optional[Dict[str, Any]] = None
+    
+    # Media type: 'image', 'video', or 'unknown'
+    # Default is 'image' for backward compatibility
+    media_type: Literal['image', 'video', 'unknown'] = 'image'
+    
+    # Video-specific fields
+    duration: Optional[float] = None  # Duration in seconds
+    has_audio: Optional[bool] = None  # Whether video has audio track
+    thumbnail_url: Optional[str] = None  # Thumbnail/poster image URL for video
+    
+    @property
+    def is_video(self) -> bool:
+        """Check if this preview is a video."""
+        return self.media_type == 'video'
+    
+    @property
+    def is_image(self) -> bool:
+        """Check if this preview is an image."""
+        return self.media_type == 'image'
 
 
 class Pack(BaseModel):

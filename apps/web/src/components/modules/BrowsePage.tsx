@@ -3,11 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
-  ZoomIn, ZoomOut, Maximize2, MessageSquare, Link2, ThumbsUp
+  ZoomIn, ZoomOut, MessageSquare, Link2, ThumbsUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
-import { useSettingsStore } from '@/stores/settingsStore'
+
+import { MediaPreview } from '@/components/ui/MediaPreview'
+import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
+import { MediaType } from '@/lib/media'
 
 interface ModelPreview {
   url: string
@@ -15,6 +18,9 @@ interface ModelPreview {
   width?: number
   height?: number
   meta?: Record<string, any>
+  media_type?: MediaType
+  duration?: number
+  thumbnail_url?: string
 }
 
 interface ModelFile {
@@ -107,7 +113,7 @@ type CardSize = keyof typeof CARD_WIDTHS
 
 export function BrowsePage() {
   const queryClient = useQueryClient()
-  const { nsfwBlurEnabled } = useSettingsStore()
+
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
@@ -116,7 +122,10 @@ export function BrowsePage() {
   const [useCivArchive, setUseCivArchive] = useState(false)  // CivArchive toggle
   const [selectedModel, setSelectedModel] = useState<number | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
-  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
+
+  const [fullscreenIndex, setFullscreenIndex] = useState<number>(-1)
+  const isFullscreenOpen = fullscreenIndex >= 0
+
   const [cardSize, setCardSize] = useState<CardSize>('md')
 
   // Pagination state
@@ -379,25 +388,23 @@ export function BrowsePage() {
         ))}
       </div>
 
-      {/* Fullscreen image viewer */}
-      {fullscreenImage && (
-        <div
-          className="fixed inset-0 bg-black z-[90] flex items-center justify-center"
-          onClick={() => setFullscreenImage(null)}
-        >
-          <button
-            className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
-            onClick={(e) => { e.stopPropagation(); setFullscreenImage(null) }}
-          >
-            <X className="w-8 h-8 text-white" />
-          </button>
-          <img
-            src={fullscreenImage}
-            alt="Fullscreen preview"
-            className="max-w-[95vw] max-h-[95vh] object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+      {/* Fullscreen media viewer */}
+      {modelDetail && (
+        <FullscreenMediaViewer
+          items={modelDetail.previews.map(p => ({
+            url: p.url,
+            type: p.media_type,
+            thumbnailUrl: p.thumbnail_url,
+            nsfw: p.nsfw,
+            width: p.width,
+            height: p.height,
+            meta: p.meta
+          }))}
+          initialIndex={fullscreenIndex}
+          isOpen={isFullscreenOpen}
+          onClose={() => setFullscreenIndex(-1)}
+          onIndexChange={setFullscreenIndex}
+        />
       )}
 
       {/* Header with zoom */}
@@ -524,31 +531,19 @@ export function BrowsePage() {
             {/* Card - Civitai style: image fills card, content overlaid */}
             <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark">
               {/* Image with hover zoom */}
-              {model.previews[0]?.url ? (
-                <img
-                  src={model.previews[0].url}
-                  alt={model.name}
-                  className={clsx(
-                    "w-full h-full object-cover transition-all duration-500 ease-out",
-                    "group-hover:scale-110",
-                    nsfwBlurEnabled && model.nsfw && "blur-xl group-hover:blur-0"
-                  )}
-                  loading="lazy"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-text-muted bg-gradient-to-br from-slate-dark to-slate-mid">
-                  <span className="text-sm">No Preview</span>
-                </div>
-              )}
+              <MediaPreview
+                src={model.previews[0]?.url || ''}
+                type={model.previews[0]?.media_type}
+                thumbnailSrc={model.previews[0]?.thumbnail_url}
+                nsfw={model.nsfw}
+                aspectRatio="portrait"
+                className="w-full h-full"
+                // Auto-play videos on card hover
+                autoPlay={true} // Auto-play preview
+                playFullOnHover={true} // Play on hover
+              />
 
-              {/* NSFW overlay indicator */}
-              {nsfwBlurEnabled && model.nsfw && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none z-10">
-                  <span className="px-3 py-1.5 bg-red-500/80 backdrop-blur-sm rounded-lg text-sm text-white font-semibold">
-                    NSFW
-                  </span>
-                </div>
-              )}
+              {/* Gradient overlay */}
 
               {/* Gradient overlay */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
@@ -696,32 +691,16 @@ export function BrowsePage() {
                     </h3>
                     <div className="grid grid-cols-6 gap-3 max-h-[360px] overflow-y-auto p-1">
                       {modelDetail.previews.map((preview, idx) => (
-                        <div
+                        <MediaPreview
                           key={idx}
-                          className="aspect-[3/4] rounded-xl overflow-hidden bg-slate-dark cursor-pointer group relative"
-                          onClick={() => setFullscreenImage(preview.url)}
-                        >
-                          <img
-                            src={preview.url}
-                            alt={`Preview ${idx + 1}`}
-                            className={clsx(
-                              "w-full h-full object-cover transition-all duration-300 group-hover:scale-105",
-                              nsfwBlurEnabled && preview.nsfw && "blur-xl group-hover:blur-0"
-                            )}
-                            loading="lazy"
-                          />
-                          {/* NSFW overlay */}
-                          {nsfwBlurEnabled && preview.nsfw && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none z-10">
-                              <span className="px-2 py-1 bg-red-500/80 backdrop-blur-sm rounded text-xs text-white font-semibold">
-                                NSFW
-                              </span>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center z-20">
-                            <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-                          </div>
-                        </div>
+                          src={preview.url}
+                          type={preview.media_type}
+                          thumbnailSrc={preview.thumbnail_url}
+                          nsfw={preview.nsfw}
+                          aspectRatio="portrait"
+                          className="cursor-pointer hover:ring-2 ring-synapse"
+                          onClick={() => setFullscreenIndex(idx)}
+                        />
                       ))}
                     </div>
                   </div>
