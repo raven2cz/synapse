@@ -32,3 +32,6 @@ export {
   SUPPORTED_VIDEO_FORMATS,
   STORAGE_KEYS,
 } from './constants'
+
+// Video Playback Manager (for optimized concurrent video playback)
+export { VideoPlaybackManager, useManagedVideo } from './VideoPlaybackManager'

@@ -5,13 +5,14 @@
  * Used in fullscreen viewer and modal dialogs.
  *
  * Features:
- * - Custom control bar
- * - Progress bar with seek
- * - Play/pause
+ * - Custom control bar with gradient background
+ * - Progress bar with seek and buffer indicator
+ * - Play/pause with center button
  * - Mute/unmute with volume slider
  * - Fullscreen toggle
  * - Keyboard shortcuts
  * - Time display
+ * - Loading and error states
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
@@ -20,11 +21,14 @@ import {
   Play,
   Pause,
   Volume2,
+  Volume1,
   VolumeX,
   Maximize,
   Minimize,
   SkipBack,
   SkipForward,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react'
 import { PLAYER_SETTINGS, STORAGE_KEYS } from '@/lib/media'
 
@@ -83,16 +87,19 @@ export function VideoPlayer({
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(initialMuted)
   const [volume, setVolume] = useState(() => {
-    // Load saved volume from localStorage
     const saved = localStorage.getItem(STORAGE_KEYS.VOLUME)
     return saved ? parseFloat(saved) : PLAYER_SETTINGS.DEFAULT_VOLUME
   })
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [buffered, setBuffered] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showControlsOverlay, setShowControlsOverlay] = useState(true)
   const [isDraggingProgress, setIsDraggingProgress] = useState(false)
   const [showVolumeSlider, setShowVolumeSlider] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
+  const [showCenterPlay, setShowCenterPlay] = useState(!autoPlay)
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -102,6 +109,7 @@ export function VideoPlayer({
 
   // Progress percentage
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+  const bufferedPercent = duration > 0 ? (buffered / duration) * 100 : 0
 
   // Hide controls after inactivity
   const resetControlsTimeout = useCallback(() => {
@@ -122,32 +130,69 @@ export function VideoPlayer({
     const video = videoRef.current
     if (!video) return
 
-    const handlePlay = () => setIsPlaying(true)
-    const handlePause = () => setIsPlaying(false)
+    const handlePlay = () => {
+      setIsPlaying(true)
+      setShowCenterPlay(false)
+    }
+    const handlePause = () => {
+      setIsPlaying(false)
+      setShowCenterPlay(true)
+    }
     const handleTimeUpdate = () => setCurrentTime(video.currentTime)
     const handleDurationChange = () => setDuration(video.duration)
+    const handleProgress = () => {
+      if (video.buffered.length > 0) {
+        setBuffered(video.buffered.end(video.buffered.length - 1))
+      }
+    }
     const handleEnded = () => {
       setIsPlaying(false)
+      setShowCenterPlay(true)
       onEnded?.()
     }
     const handleError = () => {
+      setHasError(true)
+      setIsLoading(false)
       onError?.(new Error(`Failed to load video: ${src}`))
+    }
+    const handleLoadStart = () => {
+      setIsLoading(true)
+      setHasError(false)
+    }
+    const handleCanPlay = () => {
+      setIsLoading(false)
+    }
+    const handleWaiting = () => {
+      setIsLoading(true)
+    }
+    const handlePlaying = () => {
+      setIsLoading(false)
     }
 
     video.addEventListener('play', handlePlay)
     video.addEventListener('pause', handlePause)
     video.addEventListener('timeupdate', handleTimeUpdate)
     video.addEventListener('durationchange', handleDurationChange)
+    video.addEventListener('progress', handleProgress)
     video.addEventListener('ended', handleEnded)
     video.addEventListener('error', handleError)
+    video.addEventListener('loadstart', handleLoadStart)
+    video.addEventListener('canplay', handleCanPlay)
+    video.addEventListener('waiting', handleWaiting)
+    video.addEventListener('playing', handlePlaying)
 
     return () => {
       video.removeEventListener('play', handlePlay)
       video.removeEventListener('pause', handlePause)
       video.removeEventListener('timeupdate', handleTimeUpdate)
       video.removeEventListener('durationchange', handleDurationChange)
+      video.removeEventListener('progress', handleProgress)
       video.removeEventListener('ended', handleEnded)
       video.removeEventListener('error', handleError)
+      video.removeEventListener('loadstart', handleLoadStart)
+      video.removeEventListener('canplay', handleCanPlay)
+      video.removeEventListener('waiting', handleWaiting)
+      video.removeEventListener('playing', handlePlaying)
     }
   }, [src, onEnded, onError])
 
@@ -168,7 +213,6 @@ export function VideoPlayer({
     if (!enableShortcuts) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
@@ -294,26 +338,32 @@ export function VideoPlayer({
   }, [handleProgressClick])
 
   const handleProgressMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isDraggingProgress) {
-      handleProgressClick(e)
-    }
+    if (!isDraggingProgress) return
+    handleProgressClick(e)
   }, [isDraggingProgress, handleProgressClick])
 
   const handleProgressMouseUp = useCallback(() => {
     setIsDraggingProgress(false)
   }, [])
 
-  // Render
+  const handleCenterClick = useCallback(() => {
+    togglePlay()
+  }, [togglePlay])
+
+  // Volume icon based on level
+  const VolumeIcon = isMuted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2
+
   return (
     <div
       ref={containerRef}
       className={clsx(
-        'relative bg-black group',
-        isFullscreen && 'fixed inset-0 z-50',
+        'relative bg-black overflow-hidden group',
         className
       )}
       onMouseMove={resetControlsTimeout}
-      onMouseLeave={() => isPlaying && setShowControlsOverlay(false)}
+      onMouseLeave={() => {
+        if (isPlaying) setShowControlsOverlay(false)
+      }}
     >
       {/* Video element */}
       <video
@@ -325,27 +375,45 @@ export function VideoPlayer({
         muted={isMuted}
         playsInline
         className="w-full h-full object-contain"
-        onClick={togglePlay}
+        onClick={handleCenterClick}
       />
 
-      {/* Play overlay (center) */}
-      {!isPlaying && (
-        <div
-          className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          onClick={togglePlay}
-        >
-          <div className="p-4 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 transition-colors">
-            <Play className="w-12 h-12 text-white fill-white" />
-          </div>
+      {/* Loading overlay */}
+      {isLoading && !hasError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <Loader2 className="w-12 h-12 text-white animate-spin" />
         </div>
       )}
 
-      {/* Controls overlay */}
-      {showControls && (
+      {/* Error overlay */}
+      {hasError && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 gap-2">
+          <AlertTriangle className="w-12 h-12 text-red-500" />
+          <span className="text-white/70">Failed to load video</span>
+        </div>
+      )}
+
+      {/* Center play button */}
+      {showCenterPlay && !isLoading && !hasError && (
+        <button
+          onClick={handleCenterClick}
+          className={clsx(
+            'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2',
+            'w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm',
+            'flex items-center justify-center',
+            'hover:bg-white/30 hover:scale-110 transition-all duration-200',
+          )}
+        >
+          <Play className="w-10 h-10 text-white ml-1" fill="white" />
+        </button>
+      )}
+
+      {/* Controls */}
+      {showControls && !hasError && (
         <div
           className={clsx(
-            'absolute bottom-0 left-0 right-0 p-4',
-            'bg-gradient-to-t from-black/80 to-transparent',
+            'absolute bottom-0 left-0 right-0 px-4 pb-4 pt-12',
+            'bg-gradient-to-t from-black/80 via-black/40 to-transparent',
             'transition-opacity duration-300',
             showControlsOverlay ? 'opacity-100' : 'opacity-0 pointer-events-none'
           )}
@@ -353,13 +421,18 @@ export function VideoPlayer({
           {/* Progress bar */}
           <div
             ref={progressRef}
-            className="relative h-1 bg-white/30 rounded-full mb-3 cursor-pointer group/progress"
+            className="relative h-1.5 bg-white/30 rounded-full mb-3 cursor-pointer group/progress hover:h-2 transition-all"
             onClick={handleProgressClick}
             onMouseDown={handleProgressMouseDown}
             onMouseMove={handleProgressMouseMove}
             onMouseUp={handleProgressMouseUp}
             onMouseLeave={handleProgressMouseUp}
           >
+            {/* Buffer indicator */}
+            <div
+              className="absolute inset-y-0 left-0 bg-white/30 rounded-full"
+              style={{ width: `${bufferedPercent}%` }}
+            />
             {/* Progress fill */}
             <div
               className="absolute inset-y-0 left-0 bg-synapse rounded-full"
@@ -368,20 +441,20 @@ export function VideoPlayer({
             {/* Progress handle */}
             <div
               className={clsx(
-                'absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full',
+                'absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg',
                 'opacity-0 group-hover/progress:opacity-100 transition-opacity',
                 isDraggingProgress && 'opacity-100'
               )}
-              style={{ left: `calc(${progress}% - 6px)` }}
+              style={{ left: `calc(${progress}% - 8px)` }}
             />
           </div>
 
           {/* Control buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Play/Pause */}
             <button
               onClick={togglePlay}
-              className="p-1.5 text-white hover:text-synapse transition-colors"
+              className="p-2 text-white hover:text-synapse hover:bg-white/10 rounded-lg transition-colors"
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5" />
@@ -397,7 +470,7 @@ export function VideoPlayer({
                   videoRef.current.currentTime -= PLAYER_SETTINGS.SEEK_STEP_SECONDS
                 }
               }}
-              className="p-1.5 text-white/70 hover:text-white transition-colors"
+              className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             >
               <SkipBack className="w-4 h-4" />
             </button>
@@ -409,7 +482,7 @@ export function VideoPlayer({
                   videoRef.current.currentTime += PLAYER_SETTINGS.SEEK_STEP_SECONDS
                 }
               }}
-              className="p-1.5 text-white/70 hover:text-white transition-colors"
+              className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             >
               <SkipForward className="w-4 h-4" />
             </button>
@@ -422,37 +495,33 @@ export function VideoPlayer({
             >
               <button
                 onClick={toggleMute}
-                className="p-1.5 text-white hover:text-synapse transition-colors"
+                className="p-2 text-white hover:text-synapse hover:bg-white/10 rounded-lg transition-colors"
               >
-                {isMuted || volume === 0 ? (
-                  <VolumeX className="w-5 h-5" />
-                ) : (
-                  <Volume2 className="w-5 h-5" />
-                )}
+                <VolumeIcon className="w-5 h-5" />
               </button>
 
               {/* Volume slider */}
               <div
                 className={clsx(
-                  'absolute left-full ml-2 flex items-center',
+                  'absolute left-full ml-1 flex items-center px-2 py-1 bg-black/80 backdrop-blur-sm rounded-lg',
                   'transition-all duration-200',
-                  showVolumeSlider ? 'opacity-100 w-20' : 'opacity-0 w-0 overflow-hidden'
+                  showVolumeSlider ? 'opacity-100 w-24' : 'opacity-0 w-0 overflow-hidden pointer-events-none'
                 )}
               >
                 <input
                   type="range"
                   min="0"
                   max="1"
-                  step="0.1"
+                  step="0.05"
                   value={isMuted ? 0 : volume}
                   onChange={(e) => changeVolume(parseFloat(e.target.value))}
-                  className="w-full h-1 accent-synapse"
+                  className="w-full h-1 accent-synapse cursor-pointer"
                 />
               </div>
             </div>
 
             {/* Time display */}
-            <div className="ml-2 text-sm text-white/70 font-mono">
+            <div className="ml-2 text-sm text-white/70 font-mono tabular-nums">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
 
@@ -462,7 +531,7 @@ export function VideoPlayer({
             {/* Fullscreen */}
             <button
               onClick={toggleFullscreen}
-              className="p-1.5 text-white hover:text-synapse transition-colors"
+              className="p-2 text-white hover:text-synapse hover:bg-white/10 rounded-lg transition-colors"
             >
               {isFullscreen ? (
                 <Minimize className="w-5 h-5" />

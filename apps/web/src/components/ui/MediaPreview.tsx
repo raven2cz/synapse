@@ -1,21 +1,24 @@
 /**
- * MediaPreview Component
+ * MediaPreview Component - OPTIMIZED v3
  *
- * Unified component for displaying image or video previews.
- *
- * Features:
- * - Auto-detection of media type from URL
- * - Auto-play for videos (first 5 seconds, looped)
- * - Full playback on hover
- * - NSFW blur support
- * - Fallback handling (video as image, etc.)
- * - Lazy loading with intersection observer
+ * CRITICAL PERFORMANCE OPTIMIZATIONS:
+ * 1. Video element stays in DOM - no mounting/unmounting on NSFW toggle
+ * 2. Video src set only once when first entering viewport (true lazy loading)
+ * 3. Uses VideoPlaybackManager to limit concurrent playback (max 3)
+ * 4. NSFW is purely visual overlay - doesn't affect video loading/playback
+ * 5. Staggered playback prevents thread blocking
+ * 
+ * This solves:
+ * - "Sekání" (stuttering) when multiple videos play
+ * - "Failed to Load" appearing on NSFW toggle
+ * - Videos not loading at all
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react'
 import { clsx } from 'clsx'
-import { Eye, EyeOff, AlertTriangle, Play, Volume2, VolumeX } from 'lucide-react'
+import { Eye, EyeOff, AlertTriangle, Play, Volume2, VolumeX, Film } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { VideoPlaybackManager } from '@/lib/media/VideoPlaybackManager'
 import {
   detectMediaType,
   PREVIEW_SETTINGS,
@@ -65,7 +68,13 @@ export interface MediaPreviewProps {
 
 type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 
-export function MediaPreview({
+// Generate unique ID for video management
+let videoIdCounter = 0
+function generateVideoId(): string {
+  return `video-${++videoIdCounter}-${Date.now()}`
+}
+
+export const MediaPreview = memo(function MediaPreview({
   src,
   type: explicitType,
   thumbnailSrc,
@@ -86,6 +95,9 @@ export function MediaPreview({
 }: MediaPreviewProps) {
   const { nsfwBlurEnabled } = useSettingsStore()
 
+  // Stable unique ID for this video instance
+  const videoId = useMemo(() => generateVideoId(), [])
+
   // State
   const [mediaType, setMediaType] = useState<MediaType>(explicitType || 'unknown')
   const [loadState, setLoadState] = useState<LoadState>('idle')
@@ -93,20 +105,28 @@ export function MediaPreview({
   const [isHovering, setIsHovering] = useState(false)
   const [isMuted, setIsMuted] = useState(muted)
   const [hasAudio, setHasAudio] = useState(false)
-  const [isInView, setIsInView] = useState(false)
-  const [fallbackToImage, setFallbackToImage] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  // Track if video src has been set (lazy loading - only set once)
+  const [videoSrcLoaded, setVideoSrcLoaded] = useState(false)
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const hasBeenInViewRef = useRef(false)
 
-  // Computed
+  // Computed - NSFW is purely visual
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
-  const isVideo = mediaType === 'video' && !fallbackToImage
-  const showVideo = isVideo && isInView && !shouldBlur
+  const isVideo = mediaType === 'video' && !videoError
 
   // Detect media type on mount or src change
   useEffect(() => {
+    // Reset state on src change
+    setLoadState('idle')
+    setVideoError(false)
+    setVideoSrcLoaded(false)
+    hasBeenInViewRef.current = false
+
     if (explicitType && explicitType !== 'unknown') {
       setMediaType(explicitType)
       onTypeDetected?.(explicitType)
@@ -118,30 +138,71 @@ export function MediaPreview({
     onTypeDetected?.(detected.type)
   }, [src, explicitType, onTypeDetected])
 
-  // Intersection observer for lazy loading
+  // Register video with playback manager
+  useEffect(() => {
+    if (isVideo && videoRef.current) {
+      VideoPlaybackManager.register(videoId, videoRef.current)
+    }
+
+    return () => {
+      VideoPlaybackManager.unregister(videoId)
+    }
+  }, [videoId, isVideo])
+
+  // Intersection observer for lazy loading AND play/pause
   useEffect(() => {
     if (!containerRef.current) return
+
+    // Clean up previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          setIsInView(entry.isIntersecting)
+          const isInView = entry.isIntersecting
+          const ratio = entry.intersectionRatio
+
+          if (isInView) {
+            // Mark as having been in view (for lazy loading)
+            if (!hasBeenInViewRef.current) {
+              hasBeenInViewRef.current = true
+              // Set video src now (lazy loading)
+              if (isVideo) {
+                setVideoSrcLoaded(true)
+              }
+            }
+
+            // Request playback with priority based on visibility
+            if (isVideo && autoPlay) {
+              VideoPlaybackManager.requestPlay(videoId, Math.round(ratio * 100))
+            }
+          } else {
+            // Out of view - pause
+            if (isVideo) {
+              VideoPlaybackManager.requestPause(videoId)
+            }
+          }
         })
       },
       {
-        threshold: PREVIEW_SETTINGS.LAZY_LOAD_THRESHOLD,
-        rootMargin: PREVIEW_SETTINGS.LAZY_LOAD_MARGIN,
+        threshold: [0, 0.25, 0.5, 0.75, 1.0],
+        rootMargin: '100px', // Start loading slightly before visible
       }
     )
 
     observer.observe(containerRef.current)
+    observerRef.current = observer
 
-    return () => observer.disconnect()
-  }, [])
+    return () => {
+      observer.disconnect()
+    }
+  }, [videoId, isVideo, autoPlay])
 
-  // Handle video preview timing
+  // Handle video preview timing (5 second loop unless hovering)
   useEffect(() => {
-    if (!showVideo || !videoRef.current || !autoPlay) return
+    if (!isVideo || !videoRef.current) return
 
     const video = videoRef.current
 
@@ -157,27 +218,13 @@ export function MediaPreview({
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate)
     }
-  }, [showVideo, autoPlay, isHovering, previewDuration])
-
-  // Play/pause video based on visibility and hover
-  useEffect(() => {
-    if (!videoRef.current || !isVideo) return
-
-    const video = videoRef.current
-
-    if (showVideo && (autoPlay || isHovering)) {
-      video.play().catch(() => {
-        // Autoplay blocked, that's okay
-      })
-    } else {
-      video.pause()
-    }
-  }, [showVideo, autoPlay, isHovering, isVideo])
+  }, [isVideo, isHovering, previewDuration])
 
   // Handlers
   const handleReveal = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     setIsRevealed(!isRevealed)
+    // Don't stop video - just toggle visual blur
   }, [isRevealed])
 
   const handleMouseEnter = useCallback(() => {
@@ -196,6 +243,7 @@ export function MediaPreview({
 
   const handleVideoLoad = useCallback(() => {
     setLoadState('loaded')
+    setVideoError(false)
 
     if (videoRef.current) {
       const video = videoRef.current
@@ -217,31 +265,41 @@ export function MediaPreview({
   }, [onMediaLoad, hasAudio])
 
   const handleVideoError = useCallback(() => {
-    // Video failed to load - fall back to image
-    console.warn(`Video failed to load: ${src}, falling back to image`)
-    setFallbackToImage(true)
-    setMediaType('image')
-  }, [src])
+    console.warn(`[MediaPreview] Video failed to load: ${src}`)
+    setVideoError(true)
+    // Show thumbnail/image fallback
+    if (thumbnailSrc) {
+      setLoadState('loaded')
+    }
+  }, [src, thumbnailSrc])
 
   const handleImageLoad = useCallback(() => {
     setLoadState('loaded')
-    onMediaLoad?.({
-      type: 'image',
-    })
-  }, [onMediaLoad])
+    if (!isVideo) {
+      onMediaLoad?.({
+        type: 'image',
+      })
+    }
+  }, [onMediaLoad, isVideo])
 
   const handleImageError = useCallback(() => {
-    setLoadState('error')
-    onError?.(new Error(`Failed to load media: ${src}`))
-  }, [src, onError])
+    if (!isVideo) {
+      setLoadState('error')
+      onError?.(new Error(`Failed to load media: ${src}`))
+    }
+  }, [src, onError, isVideo])
 
   const handleToggleMute = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsMuted(!isMuted)
+    const newMuted = !isMuted
+    setIsMuted(newMuted)
     if (videoRef.current) {
-      videoRef.current.muted = !isMuted
+      videoRef.current.muted = newMuted
     }
   }, [isMuted])
+
+  // Determine what image source to show
+  const imageSrc = thumbnailSrc || src
 
   // Render
   return (
@@ -259,32 +317,37 @@ export function MediaPreview({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Loading skeleton */}
-      {loadState === 'idle' || loadState === 'loading' && (
+      {/* Loading skeleton - only show when truly loading and no content yet */}
+      {loadState === 'idle' && !videoSrcLoaded && (
         <div className="absolute inset-0 skeleton" />
       )}
 
-      {/* Error state */}
-      {loadState === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-deep/50">
+      {/* Error state - only show if not video or video completely failed */}
+      {loadState === 'error' && !isVideo && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-deep/50 gap-2">
           <AlertTriangle className="w-8 h-8 text-text-muted" />
+          <span className="text-xs text-text-muted">Failed to load</span>
         </div>
       )}
 
-      {/* Video element */}
+      {/* 
+        VIDEO ELEMENT - ALWAYS in DOM when it's a video
+        This is critical - don't conditionally mount/unmount based on NSFW or visibility
+        Just control src and playback
+      */}
       {isVideo && (
         <video
           ref={videoRef}
-          src={showVideo ? src : undefined}
+          // Only set src when has been in view (lazy loading)
+          src={videoSrcLoaded ? src : undefined}
           poster={thumbnailSrc}
           muted={isMuted}
           loop={loop}
           playsInline
-          preload="metadata"
+          preload="none"
           className={clsx(
-            'w-full h-full object-cover transition-all duration-300',
-            loadState !== 'loaded' && 'opacity-0',
-            loadState === 'loaded' && 'opacity-100',
+            'w-full h-full object-cover transition-all duration-200',
+            // Blur is purely visual - video keeps playing underneath
             shouldBlur && 'blur-xl scale-110',
           )}
           onLoadedData={handleVideoLoad}
@@ -292,16 +355,16 @@ export function MediaPreview({
         />
       )}
 
-      {/* Image element (for images or video fallback) */}
-      {(!isVideo || !showVideo) && (
+      {/* Image/thumbnail - show when not a video OR as fallback */}
+      {(!isVideo || videoError) && loadState !== 'error' && (
         <img
-          src={thumbnailSrc || src}
+          src={imageSrc}
           alt={alt}
+          loading="lazy"
           className={clsx(
-            'w-full h-full object-cover transition-all duration-300',
-            loadState !== 'loaded' && !isVideo && 'opacity-0',
+            'w-full h-full object-cover transition-all duration-200',
+            loadState === 'idle' && 'opacity-0',
             loadState === 'loaded' && 'opacity-100',
-            isVideo && showVideo && 'hidden', // Hide when video is playing
             shouldBlur && 'blur-xl scale-110',
           )}
           onLoad={handleImageLoad}
@@ -309,15 +372,19 @@ export function MediaPreview({
         />
       )}
 
-      {/* Video indicator icon */}
+      {/* Video indicator icon - bottom left */}
       {isVideo && !isHovering && loadState === 'loaded' && !shouldBlur && (
         <div className="absolute bottom-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm">
-          <Play className="w-4 h-4 text-white fill-white" />
+          {videoError ? (
+            <Film className="w-4 h-4 text-white/70" />
+          ) : (
+            <Play className="w-4 h-4 text-white fill-white" />
+          )}
         </div>
       )}
 
-      {/* Audio indicator */}
-      {isVideo && hasAudio && showAudioIndicator && loadState === 'loaded' && !shouldBlur && (
+      {/* Audio indicator - only when video has audio and is not blurred */}
+      {isVideo && hasAudio && showAudioIndicator && !shouldBlur && !videoError && (
         <button
           onClick={handleToggleMute}
           className={clsx(
@@ -336,15 +403,9 @@ export function MediaPreview({
         </button>
       )}
 
-      {/* NSFW overlay */}
-      {nsfw && nsfwBlurEnabled && (
-        <div
-          className={clsx(
-            'absolute inset-0 flex flex-col items-center justify-center',
-            'transition-opacity duration-300',
-            isRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          )}
-        >
+      {/* NSFW overlay - purely visual, sits ON TOP of video */}
+      {nsfw && nsfwBlurEnabled && !isRevealed && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm z-10 pointer-events-none">
           <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
             <EyeOff className="w-6 h-6 text-text-muted mx-auto mb-1" />
             <span className="text-xs text-text-muted">NSFW</span>
@@ -352,7 +413,7 @@ export function MediaPreview({
         </div>
       )}
 
-      {/* NSFW toggle button */}
+      {/* NSFW toggle button - always clickable */}
       {nsfw && nsfwBlurEnabled && (
         <button
           onClick={handleReveal}
@@ -361,7 +422,7 @@ export function MediaPreview({
             'bg-slate-deep/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
             'transition-colors duration-200',
-            'z-10',
+            'z-20',
           )}
         >
           {isRevealed ? (
@@ -373,6 +434,6 @@ export function MediaPreview({
       )}
     </div>
   )
-}
+})
 
 export default MediaPreview
