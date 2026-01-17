@@ -1,4 +1,4 @@
-import { Copy, FileJson, Info, X, Zap, Hash, Sliders, Layers, Box, Cpu, Ruler, Activity } from 'lucide-react'
+import { Copy, Info, X, Zap, Hash, Sliders, Layers, Box, Cpu, Ruler, Activity } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 

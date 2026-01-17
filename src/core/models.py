@@ -6,7 +6,7 @@ All serializable to JSON for file-based storage.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from enum import Enum
 from pathlib import Path
 from datetime import datetime
@@ -235,13 +235,27 @@ class CustomNodeDependency:
 
 @dataclass
 class PreviewImage:
-    """Preview image with NSFW flag for blur toggle support."""
+    """
+    Preview media (image or video) with NSFW flag for blur toggle support.
+    
+    Supports both images and videos from Civitai and other sources.
+    The `media_type` field indicates whether this is an image or video.
+    """
     filename: str
     url: Optional[str] = None
     local_path: Optional[str] = None
     nsfw: bool = False
     width: Optional[int] = None
     height: Optional[int] = None
+    
+    # Media type: 'image', 'video', or 'unknown'
+    # Default is 'image' for backward compatibility
+    media_type: Literal['image', 'video', 'unknown'] = 'image'
+    
+    # Video-specific fields
+    duration: Optional[float] = None  # Duration in seconds
+    has_audio: Optional[bool] = None  # Whether video has audio track
+    thumbnail_url: Optional[str] = None  # Thumbnail/poster image URL for video
     
     # Generation metadata (raw dictionary from Civitai)
     meta: Optional[Dict[str, Any]] = None
@@ -250,6 +264,7 @@ class PreviewImage:
         result = {
             "filename": self.filename,
             "nsfw": self.nsfw,
+            "media_type": self.media_type,
         }
         if self.url:
             result["url"] = self.url
@@ -259,6 +274,14 @@ class PreviewImage:
             result["width"] = self.width
         if self.height:
             result["height"] = self.height
+            
+        # Video fields
+        if self.duration is not None:
+            result["duration"] = self.duration
+        if self.has_audio is not None:
+            result["has_audio"] = self.has_audio
+        if self.thumbnail_url:
+            result["thumbnail_url"] = self.thumbnail_url
             
         # Metadata
         if self.meta:
@@ -275,8 +298,22 @@ class PreviewImage:
             nsfw=data.get("nsfw", False),
             width=data.get("width"),
             height=data.get("height"),
+            media_type=data.get("media_type", "image"),
+            duration=data.get("duration"),
+            has_audio=data.get("has_audio"),
+            thumbnail_url=data.get("thumbnail_url"),
             meta=data.get("meta"),
         )
+    
+    @property
+    def is_video(self) -> bool:
+        """Check if this preview is a video."""
+        return self.media_type == 'video'
+    
+    @property  
+    def is_image(self) -> bool:
+        """Check if this preview is an image."""
+        return self.media_type == 'image'
 
 
 @dataclass

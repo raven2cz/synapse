@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, Download, Play, Trash2, ExternalLink, Tag,
-  AlertTriangle, Check, Search, Loader2, X, Maximize2, Database,
+  AlertTriangle, Check, Search, Loader2, X, Database,
   HardDrive, Globe, Package, Info, Copy, ChevronRight, ChevronDown, Edit3,
   FileJson, DownloadCloud, FolderOpen, Gauge, Timer,
   ArrowLeftRight, RotateCcw, Zap, ZoomIn, ZoomOut
@@ -12,9 +12,11 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { clsx } from 'clsx'
-import { useSettingsStore } from '@/stores/settingsStore'
-import { GenerationDataPanel } from '@/components/modules/GenerationDataPanel'
+
 import { toast } from '@/stores/toastStore'
+import { MediaPreview } from '@/components/ui/MediaPreview'
+import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
+import { MediaType } from '@/lib/media'
 
 // Download progress tracking
 interface DownloadProgress {
@@ -99,6 +101,10 @@ interface PreviewInfo {
   width?: number
   height?: number
   meta?: Record<string, any>
+  media_type?: MediaType
+  duration?: number
+  thumbnail_url?: string
+  has_audio?: boolean
 }
 
 interface ParametersInfo {
@@ -201,9 +207,13 @@ export function PackDetailPage() {
   const { packName: packNameParam } = useParams<{ packName: string }>()  // Route uses :packName
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { nsfwBlurEnabled } = useSettingsStore()
 
-  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
+
+  const [fullscreenIndex, setFullscreenIndex] = useState<number>(-1)
+  const isFullscreenOpen = fullscreenIndex >= 0
+
+
+
   // Zoom state - extended with xs and xl for more granular control
   const [cardSize, setCardSize] = useState<'xs' | 'sm' | 'md' | 'lg' | 'xl'>('sm')
 
@@ -292,6 +302,20 @@ export function PackDetailPage() {
     },
     enabled: !!packName,
   })
+
+  // Create MediaItems for viewer
+  const mediaItems = pack?.previews.map(p => ({
+    url: p.url || '',
+    type: p.media_type,
+    thumbnailUrl: p.thumbnail_url,
+    nsfw: p.nsfw,
+    width: p.width,
+    height: p.height,
+    meta: p.meta
+  })) || []
+
+  const openFullscreen = (index: number) => setFullscreenIndex(index)
+  const closeFullscreen = () => setFullscreenIndex(-1)
 
   // Fetch local models from ComfyUI for resolver
   const { data: localModels = [] } = useQuery<LocalModel[]>({
@@ -876,71 +900,19 @@ export function PackDetailPage() {
   const allDependenciesInstalled = pack.all_installed === true
   const needsBaseModel = pack.has_unresolved || !allDependenciesInstalled
   const baseModelHint = pack.model_info?.base_model || extractBaseModelHint(pack.description)
-  const selectedPreview = fullscreenImage ? pack?.previews.find(p => p.url === fullscreenImage) : null
 
   return (
     <div className="space-y-6">
       {/* Fullscreen image viewer */}
       {/* Fullscreen image viewer */}
-      {fullscreenImage && (
-        <div
-          className="fixed inset-0 bg-black/95 z-[90] flex overflow-hidden"
-          onClick={() => setFullscreenImage(null)}
-        >
-          {/* Main Image Area */}
-          <div className="flex-1 relative flex items-center justify-center p-4 min-w-0" onClick={() => setFullscreenImage(null)}>
-            {/* Close button (mobile/overlay) */}
-            <button
-              className="absolute top-4 right-4 md:hidden p-2 bg-black/50 hover:bg-white/20 rounded-full transition-colors z-20 text-white"
-              onClick={(e) => { e.stopPropagation(); setFullscreenImage(null) }}
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            <img
-              src={fullscreenImage}
-              alt="Fullscreen preview"
-              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-
-          {/* Sidebar Panel - Desktop */}
-          {(() => {
-            const meta = selectedPreview?.meta || (selectedPreview as any)?.metadata
-            if (!meta || Object.keys(meta).length === 0) return null
-
-            return (
-              <div
-                className="w-[320px] shrink-0 border-l border-white/10 bg-[#1a1b1e] h-full hidden md:block overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <GenerationDataPanel
-                  meta={meta}
-                  className="h-full border-none"
-                  onClose={() => setFullscreenImage(null)}
-                />
-              </div>
-            )
-          })()}
-
-          {/* Close button if no panel or panel hidden */}
-          {(() => {
-            const meta = selectedPreview?.meta || (selectedPreview as any)?.metadata
-            if (!meta || Object.keys(meta).length === 0) {
-              return (
-                <button
-                  className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10 hidden md:block"
-                  onClick={(e) => { e.stopPropagation(); setFullscreenImage(null) }}
-                >
-                  <X className="w-6 h-6 text-white" />
-                </button>
-              )
-            }
-            return null
-          })()}
-        </div>
-      )}
+      {/* Fullscreen media viewer */}
+      <FullscreenMediaViewer
+        items={mediaItems}
+        initialIndex={fullscreenIndex}
+        isOpen={isFullscreenOpen}
+        onClose={closeFullscreen}
+        onIndexChange={setFullscreenIndex}
+      />
 
       {/* Base Model Resolver Modal */}
       {showBaseModelResolver && (
@@ -1165,7 +1137,7 @@ export function PackDetailPage() {
                           onClick={() => setSelectedBaseModel(result)}
                           className={clsx(
                             'w-full p-4 rounded-xl border text-left transition-all',
-                            selectedBaseModel && 'model_id' in selectedBaseModel && 
+                            selectedBaseModel && 'model_id' in selectedBaseModel &&
                               selectedBaseModel.model_id === result.model_id &&
                               selectedBaseModel.file_name === result.file_name
                               ? 'bg-synapse/20 border-synapse'
@@ -1592,7 +1564,7 @@ export function PackDetailPage() {
               <Button
                 onClick={async () => {
                   if (!importModelFile) return
-                  
+
                   setIsImportingModel(true)
                   try {
                     const formData = new FormData()
@@ -1600,20 +1572,20 @@ export function PackDetailPage() {
                     formData.append('model_type', importModelType)
                     formData.append('model_name', importModelName || importModelFile.name)
                     formData.append('base_model', importModelBaseModel)
-                    
+
                     const res = await fetch('/api/packs/import-model', {
                       method: 'POST',
                       body: formData,
                     })
-                    
+
                     if (!res.ok) {
                       const error = await res.text()
                       throw new Error(error)
                     }
-                    
+
                     const result = await res.json()
                     console.log('[PackDetailPage] Import result:', result)
-                    
+
                     // Auto-select the imported model
                     setSelectedBaseModel({
                       name: result.model_name,
@@ -1621,16 +1593,16 @@ export function PackDetailPage() {
                       type: result.model_type,
                       size: result.file_size,
                     })
-                    
+
                     // Close modal and refresh
                     setShowImportModelModal(false)
                     setImportModelFile(null)
                     setImportModelName('')
                     setImportModelBaseModel('')
-                    
+
                     // Invalidate local models query
                     queryClient.invalidateQueries({ queryKey: ['local-models'] })
-                    
+
                   } catch (error) {
                     console.error('[PackDetailPage] Import failed:', error)
                     alert(`Import failed: ${error}`)
@@ -1778,43 +1750,17 @@ export function PackDetailPage() {
           </div>
           <div className={`grid ${gridClass}`}>
             {pack.previews.map((preview, idx) => (
-              <div
+              <MediaPreview
                 key={idx}
-                className="aspect-[3/4] rounded-xl overflow-hidden bg-slate-dark cursor-pointer group relative"
-                onClick={() => preview.url && setFullscreenImage(preview.url)}
-              >
-                {preview.url ? (
-                  <>
-                    <img
-                      src={preview.url}
-                      alt={`Preview ${idx + 1}`}
-                      className={clsx(
-                        "w-full h-full object-cover transition-all duration-500 ease-out group-hover:scale-105",
-                        nsfwBlurEnabled && preview.nsfw && "blur-xl group-hover:blur-0"
-                      )}
-                      loading="lazy"
-                      onError={() => {
-                        console.error(`[PackDetailPage] Preview load error:`, preview.url)
-                      }}
-                    />
-                    {/* NSFW overlay indicator */}
-                    {nsfwBlurEnabled && preview.nsfw && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none z-10">
-                        <span className="px-2 py-1 bg-red-500/80 backdrop-blur-sm rounded text-xs text-white font-semibold">
-                          NSFW
-                        </span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center z-20">
-                      <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-                    </div>
-                  </>
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <span className="text-text-muted text-sm">No image</span>
-                  </div>
-                )}
-              </div>
+                src={preview.url || ''}
+                type={preview.media_type || 'image'}
+                thumbnailSrc={preview.thumbnail_url}
+                nsfw={preview.nsfw}
+                aspectRatio="portrait"
+                className="w-full h-full bg-slate-dark"
+                onClick={() => openFullscreen(idx)}
+                showAudioIndicator={true}
+              />
             ))}
           </div>
         </div>
@@ -1879,122 +1825,122 @@ export function PackDetailPage() {
 
       {/* Generation Settings - Parameters from Civitai or user-defined */}
       <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-synapse flex items-center gap-2">
-              <Info className="w-4 h-4" />
-              Generation Settings
-            </h3>
-            <button
-              onClick={() => {
-                // Build initial parameters from ALL sources in pack
-                const params: Record<string, string> = {}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-synapse flex items-center gap-2">
+            <Info className="w-4 h-4" />
+            Generation Settings
+          </h3>
+          <button
+            onClick={() => {
+              // Build initial parameters from ALL sources in pack
+              const params: Record<string, string> = {}
 
-                // From model_info
-                if (pack.model_info?.strength_recommended != null) {
-                  params['strength'] = pack.model_info.strength_recommended.toString()
+              // From model_info
+              if (pack.model_info?.strength_recommended != null) {
+                params['strength'] = pack.model_info.strength_recommended.toString()
+              }
+
+              // From parameters
+              if (pack.parameters) {
+                if (pack.parameters.cfg_scale != null) {
+                  params['cfgScale'] = pack.parameters.cfg_scale.toString()
                 }
-
-                // From parameters
-                if (pack.parameters) {
-                  if (pack.parameters.cfg_scale != null) {
-                    params['cfgScale'] = pack.parameters.cfg_scale.toString()
-                  }
-                  if (pack.parameters.steps != null) {
-                    params['steps'] = pack.parameters.steps.toString()
-                  }
-                  if (pack.parameters.sampler) {
-                    params['sampler'] = pack.parameters.sampler
-                  }
-                  if (pack.parameters.clip_skip != null) {
-                    params['clipSkip'] = pack.parameters.clip_skip.toString()
-                  }
-                  if (pack.parameters.width != null) {
-                    params['width'] = pack.parameters.width.toString()
-                  }
-                  if (pack.parameters.height != null) {
-                    params['height'] = pack.parameters.height.toString()
-                  }
-                  if (pack.parameters.denoise != null) {
-                    params['denoise'] = pack.parameters.denoise.toString()
-                  }
-                  if (pack.parameters.scheduler) {
-                    params['scheduler'] = pack.parameters.scheduler
-                  }
+                if (pack.parameters.steps != null) {
+                  params['steps'] = pack.parameters.steps.toString()
                 }
+                if (pack.parameters.sampler) {
+                  params['sampler'] = pack.parameters.sampler
+                }
+                if (pack.parameters.clip_skip != null) {
+                  params['clipSkip'] = pack.parameters.clip_skip.toString()
+                }
+                if (pack.parameters.width != null) {
+                  params['width'] = pack.parameters.width.toString()
+                }
+                if (pack.parameters.height != null) {
+                  params['height'] = pack.parameters.height.toString()
+                }
+                if (pack.parameters.denoise != null) {
+                  params['denoise'] = pack.parameters.denoise.toString()
+                }
+                if (pack.parameters.scheduler) {
+                  params['scheduler'] = pack.parameters.scheduler
+                }
+              }
 
-                console.log('[PackDetailPage] Opening edit parameters modal with:', params)
-                setEditParameters(params)
-                setNewParamKey('')
-                setNewParamValue('')
-                setShowParametersModal(true)
-              }}
-              className="text-xs text-synapse hover:text-synapse/80 flex items-center gap-1"
-            >
-              <Edit3 className="w-3 h-3" />
-              Edit
-            </button>
-          </div>
+              console.log('[PackDetailPage] Opening edit parameters modal with:', params)
+              setEditParameters(params)
+              setNewParamKey('')
+              setNewParamValue('')
+              setShowParametersModal(true)
+            }}
+            className="text-xs text-synapse hover:text-synapse/80 flex items-center gap-1"
+          >
+            <Edit3 className="w-3 h-3" />
+            Edit
+          </button>
+        </div>
 
-          {/* Parameters grid - responsive with wrapping */}
-          <div className="flex flex-wrap gap-3">
-            {pack.parameters?.clip_skip != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
-                <span className="text-text-muted block text-xs mb-1">Clip Skip</span>
-                <span className="text-synapse font-bold text-xl">{pack.parameters.clip_skip}</span>
-              </div>
-            )}
-            {pack.model_info?.strength_recommended != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
-                <span className="text-text-muted block text-xs mb-1">Strength</span>
-                <span className="text-synapse font-bold text-xl">{pack.model_info.strength_recommended}</span>
-              </div>
-            )}
-            {pack.parameters?.cfg_scale != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
-                <span className="text-text-muted block text-xs mb-1">CFG Scale</span>
-                <span className="text-text-primary font-bold text-xl">{pack.parameters.cfg_scale}</span>
-              </div>
-            )}
-            {pack.parameters?.steps != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
-                <span className="text-text-muted block text-xs mb-1">Steps</span>
-                <span className="text-text-primary font-bold text-xl">{pack.parameters.steps}</span>
-              </div>
-            )}
-            {pack.parameters?.sampler && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
-                <span className="text-text-muted block text-xs mb-1">Sampler</span>
-                <span className="text-text-primary font-medium">{pack.parameters.sampler}</span>
-              </div>
-            )}
-            {pack.parameters?.scheduler && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
-                <span className="text-text-muted block text-xs mb-1">Scheduler</span>
-                <span className="text-text-primary font-medium">{pack.parameters.scheduler}</span>
-              </div>
-            )}
-            {pack.parameters?.width != null && pack.parameters?.height != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
-                <span className="text-text-muted block text-xs mb-1">Resolution</span>
-                <span className="text-text-primary font-medium">{pack.parameters.width}×{pack.parameters.height}</span>
-              </div>
-            )}
-            {pack.parameters?.denoise != null && (
-              <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
-                <span className="text-text-muted block text-xs mb-1">Denoise</span>
-                <span className="text-text-primary font-bold text-xl">{pack.parameters.denoise}</span>
-              </div>
-            )}
-          </div>
+        {/* Parameters grid - responsive with wrapping */}
+        <div className="flex flex-wrap gap-3">
+          {pack.parameters?.clip_skip != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
+              <span className="text-text-muted block text-xs mb-1">Clip Skip</span>
+              <span className="text-synapse font-bold text-xl">{pack.parameters.clip_skip}</span>
+            </div>
+          )}
+          {pack.model_info?.strength_recommended != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
+              <span className="text-text-muted block text-xs mb-1">Strength</span>
+              <span className="text-synapse font-bold text-xl">{pack.model_info.strength_recommended}</span>
+            </div>
+          )}
+          {pack.parameters?.cfg_scale != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
+              <span className="text-text-muted block text-xs mb-1">CFG Scale</span>
+              <span className="text-text-primary font-bold text-xl">{pack.parameters.cfg_scale}</span>
+            </div>
+          )}
+          {pack.parameters?.steps != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
+              <span className="text-text-muted block text-xs mb-1">Steps</span>
+              <span className="text-text-primary font-bold text-xl">{pack.parameters.steps}</span>
+            </div>
+          )}
+          {pack.parameters?.sampler && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
+              <span className="text-text-muted block text-xs mb-1">Sampler</span>
+              <span className="text-text-primary font-medium">{pack.parameters.sampler}</span>
+            </div>
+          )}
+          {pack.parameters?.scheduler && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
+              <span className="text-text-muted block text-xs mb-1">Scheduler</span>
+              <span className="text-text-primary font-medium">{pack.parameters.scheduler}</span>
+            </div>
+          )}
+          {pack.parameters?.width != null && pack.parameters?.height != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[120px]">
+              <span className="text-text-muted block text-xs mb-1">Resolution</span>
+              <span className="text-text-primary font-medium">{pack.parameters.width}×{pack.parameters.height}</span>
+            </div>
+          )}
+          {pack.parameters?.denoise != null && (
+            <div className="bg-slate-dark rounded-xl p-3 text-center min-w-[100px]">
+              <span className="text-text-muted block text-xs mb-1">Denoise</span>
+              <span className="text-text-primary font-bold text-xl">{pack.parameters.denoise}</span>
+            </div>
+          )}
+        </div>
 
-          {/* Show message if no parameters are set */}
-          {!pack.parameters?.clip_skip && !pack.model_info?.strength_recommended &&
-            !pack.parameters?.cfg_scale && !pack.parameters?.steps && !pack.parameters?.sampler && (
-              <p className="text-text-muted text-sm text-center py-2">
-                No generation parameters set. Click Edit to add some.
-              </p>
-            )}
-        </Card>
+        {/* Show message if no parameters are set */}
+        {!pack.parameters?.clip_skip && !pack.model_info?.strength_recommended &&
+          !pack.parameters?.cfg_scale && !pack.parameters?.steps && !pack.parameters?.sampler && (
+            <p className="text-text-muted text-sm text-center py-2">
+              No generation parameters set. Click Edit to add some.
+            </p>
+          )}
+      </Card>
 
       {/* Description */}
       {pack.description && (
@@ -2280,7 +2226,7 @@ export function PackDetailPage() {
                           <code className="bg-slate-mid/50 px-2 py-0.5 rounded flex-1 truncate">{asset.filename}</code>
                         </div>
                       )}
-                      
+
                       {/* Version */}
                       {asset.version_name && (
                         <div className="flex items-center gap-2 text-text-muted">
@@ -2288,7 +2234,7 @@ export function PackDetailPage() {
                           <span className="text-synapse">{asset.version_name}</span>
                         </div>
                       )}
-                      
+
                       {/* Source info */}
                       {asset.source_info && (
                         <>
@@ -2315,7 +2261,7 @@ export function PackDetailPage() {
                           )}
                         </>
                       )}
-                      
+
                       {/* Size */}
                       {asset.size && (
                         <div className="flex items-center gap-2 text-text-muted">
@@ -2323,7 +2269,7 @@ export function PackDetailPage() {
                           <span>{formatBytes(asset.size)}</span>
                         </div>
                       )}
-                      
+
                       {/* SHA256 */}
                       {asset.sha256 && (
                         <div className="flex items-center gap-2 text-text-muted">
@@ -2333,14 +2279,14 @@ export function PackDetailPage() {
                           </code>
                         </div>
                       )}
-                      
+
                       {/* Download URL */}
                       {asset.url && !isInstalled && (
                         <div className="flex items-center gap-2 text-text-muted">
                           <span className="font-medium text-text-secondary w-16">URL:</span>
-                          <a 
-                            href={asset.url} 
-                            target="_blank" 
+                          <a
+                            href={asset.url}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="truncate flex-1 text-blue-400 hover:underline"
                             title={asset.url}
@@ -2349,7 +2295,7 @@ export function PackDetailPage() {
                           </a>
                         </div>
                       )}
-                      
+
                       {/* Local path */}
                       {asset.local_path && (
                         <div className="flex items-center gap-2 text-text-muted">
