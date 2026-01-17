@@ -82,7 +82,6 @@ export const MediaPreview = memo(function MediaPreview({
   showPlayIcon = true,
   onClick,
   onTypeDetected,
-  onError,
 }: MediaPreviewProps) {
   const { nsfwBlurEnabled } = useSettingsStore()
 
@@ -169,7 +168,7 @@ export const MediaPreview = memo(function MediaPreview({
       },
       {
         threshold: 0.1,
-        rootMargin: '200px',
+        rootMargin: '50px', // Tighter margin to save resources on Firefox
       }
     )
 
@@ -229,13 +228,41 @@ export const MediaPreview = memo(function MediaPreview({
   // ---------------------------------------------------------------------------
 
   const handleMouseEnter = useCallback(() => {
+    // AGGRESSIVE RECOVERY Logic for "stuck" videos
+    const video = videoRef.current
+    if (video) {
+      // Recovery conditions:
+      // 1. Error state
+      // 2. Network State = NO_SOURCE (3)
+      // 3. Ready State < HAVE_CURRENT_DATA (2) -> stuck loading
+      const isStuck =
+        videoLoadState === 'error' ||
+        video.error ||
+        video.networkState === 3 ||
+        (video.readyState < 2 && !video.ended)
+
+      if (isStuck) {
+        setVideoLoadState('idle')
+        // Add a cache-busting param to force browser to drop the cached failed request? 
+        // Maybe safer just to reload() for now.
+        video.load()
+
+        const playPromise = video.play()
+        playPromise.catch(() => { })
+      }
+      // If it's just paused but looks healthy
+      else if (video.paused) {
+        video.play().catch(() => { })
+      }
+    }
+
     if (!playOnHover && !autoPlay) return
 
     // Small delay to prevent accidental triggers/flicker
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true)
     }, 50)
-  }, [playOnHover, autoPlay])
+  }, [playOnHover, autoPlay, videoLoadState])
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimeoutRef.current) {

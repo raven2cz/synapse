@@ -363,7 +363,7 @@ export function BrowsePage() {
 
   const cardWidth = CARD_WIDTHS[cardSize]
 
-  // CRITICAL: Helper to get NSFW status - combines model AND preview NSFW flags
+  // CRITICAL: Helper to get NSFW status
   const getPreviewNsfw = (model: CivitaiModel): boolean => {
     return model.nsfw || model.previews[0]?.nsfw || false
   }
