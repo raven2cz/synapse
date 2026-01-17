@@ -1,14 +1,8 @@
 /**
- * MediaPreview Component - Optimized Version
+ * MediaPreview Component (Civitai Architecture)
  *
- * Professional-grade media preview with thumbnail-first rendering.
- * Designed for maximum performance in grid layouts.
- *
- * Key principles:
- * 1. Thumbnail-first: Always show image immediately, never wait
- * 2. Progressive enhancement: Video loads lazily in background
- * 3. No blocking: UI renders instantly, media loads async
- * 4. Hover-to-play: Videos only play on user interaction
+ * Efficient media preview with thumbnail-first rendering.
+ * Refactored to match Civitai's EdgeVideo.tsx playback logic for maximum stability.
  *
  * @author Synapse Team
  */
@@ -61,13 +55,6 @@ type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
 // Component
 // ============================================================================
 
-/**
- * MediaPreview displays images and videos with optimal loading strategy.
- *
- * For images: Native lazy loading, instant display
- * For videos: Thumbnail-first, video loads on hover OR when autoPlay is true.
- *             Falls back to video element as poster if no thumbnail provided.
- */
 export const MediaPreview = memo(function MediaPreview({
   src,
   type: explicitType,
@@ -92,13 +79,17 @@ export const MediaPreview = memo(function MediaPreview({
     if (explicitType && explicitType !== 'unknown') return explicitType
     return detectMediaType(src).type
   })
+
   const [imageLoadState, setImageLoadState] = useState<LoadState>('idle')
   const [videoLoadState, setVideoLoadState] = useState<LoadState>('idle')
   const [isRevealed, setIsRevealed] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
-  const [isInView, setIsInView] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
+
+  // Civitai-style playback state
+  const [canPlay, setCanPlay] = useState(false) // Visibility threshold met
+  const [isPlaying, setIsPlaying] = useState(false) // Actual playback state
+  const [autoplayFailed, setAutoplayFailed] = useState(false)
 
   // ---------------------------------------------------------------------------
   // Refs
@@ -114,37 +105,35 @@ export const MediaPreview = memo(function MediaPreview({
   const isVideo = mediaType === 'video'
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
 
-  // Determine if we need to load the video content
-  // Load if:
-  // 1. Hovering (and playOnHover)
-  // 2. Autoplay enabled
-  // 3. NO thumbnail available (need video frame as poster)
-  const shouldLoadVideo = isVideo && isInView && (
+  // Determine if we should attempt playback
+  // Criteria: Video + Visible (canPlay) + Not blurred + Policy (Hover or Auto)
+  const shouldPlay = isVideo && canPlay && !shouldBlur && (
     (playOnHover && isHovering) ||
-    autoPlay ||
-    !thumbnailSrc
-  )
-
-  // Determine if we should actually be PLAYING
-  const shouldPlay = isVideo && isInView && !shouldBlur && (
-    (playOnHover && isHovering) ||
-    (autoPlay && !isHovering) // Autoplay, but pause on hover (optional style, or keep playing?) -> Let's keep playing
+    (autoPlay && !isHovering) // Keep playing if autoplay enabled, even if not hovering
   )
 
   // Thumbnail logic
-  // If video and we have a thumbnailSrc -> use it.
-  // If video and NO thumbnailSrc -> use '' (img tag won't render, video will serve as poster)
-  // If image -> use src
   const thumbnailUrl = isVideo ? (thumbnailSrc || '') : src
   const hasThumbnail = !!thumbnailUrl
 
-  const hasLoadedVideo = videoLoadState === 'loaded'
+  // Decide if we render the video tag at all (Progressive enhancement)
+  // We mirror Civitai: Render video if we intend to play or if wrapping logic requires it.
+  // Here we optimize: Render if simple boolean tells us.
+  // Ideally, always render video but keep display:none or opacity:0 until needed?
+  // Civitai renders video always but uses IntersectionObserver to play/pause.
+  // To save memory, we only render if "close" to playing (isInView/canPlay)? 
+  // For now, let's keep rendering it if it's a video, but let IO handle loading optionally.
+  // But wait, Synapse design was "only render video if hovered/autoplay".
+  // Let's stick to: Render if canPlay (visible) or Hovering.
+  // Actually, Civitai renders it always in EdgeVideo component.
+  // Let's rely on `canPlay` (visibility) to trigger load?
+  const shouldLoadVideo = isVideo && (canPlay || isHovering || autoPlay || !hasThumbnail)
 
   // ---------------------------------------------------------------------------
   // Effects
   // ---------------------------------------------------------------------------
 
-  // Detect media type on src change
+  // Detect media type
   useEffect(() => {
     if (explicitType && explicitType !== 'unknown') {
       setMediaType(explicitType)
@@ -156,56 +145,55 @@ export const MediaPreview = memo(function MediaPreview({
     onTypeDetected?.(detected.type)
   }, [src, explicitType, onTypeDetected])
 
-  // Intersection Observer
+  // Intersection Observer (Civitai Style)
+  // Toggles `canPlay` based on threshold.
   useEffect(() => {
-    if (!containerRef.current) return
+    const element = containerRef.current
+    if (!element) return
 
+    const threshold = 0.25 // Civitai default
     const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          setIsInView(entry.isIntersecting)
-        })
+      ([{ intersectionRatio, isIntersecting }]) => {
+        // Civitai logic: intersectionRatio >= threshold
+        // We also check isIntersecting to be safe
+        setCanPlay(isIntersecting && intersectionRatio >= threshold)
       },
       {
-        threshold: 0.1,
-        rootMargin: '50px', // Tighter margin to save resources on Firefox
+        threshold: [threshold],
       }
     )
 
-    observer.observe(containerRef.current)
+    observer.observe(element)
     return () => observer.disconnect()
   }, [])
 
-  // Video Playback Control
+  // Playback Control Effect (Decoupled)
   useEffect(() => {
     const video = videoRef.current
     if (!video || !isVideo) return
 
-    if (shouldPlay && hasLoadedVideo) {
-      // Start playing
+    if (shouldPlay) {
       const playPromise = video.play()
       playPromise
         .then(() => {
           setIsPlaying(true)
+          setAutoplayFailed(false)
 
-          // Handle preview duration limit
+          // Handle preview duration limit (Synapse specific)
           if (autoPlay && !isHovering && previewDuration > 0) {
-            // Clear existing timeout
             if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
-
-            // Set new timeout to pause after duration
             previewTimeoutRef.current = setTimeout(() => {
               video.pause()
               setIsPlaying(false)
             }, previewDuration * 1000)
           }
         })
-        .catch(() => {
-          // Autoplay often blocked
+        .catch((e) => {
+          console.warn('[MediaPreview] Autoplay failed/interrupted', e)
+          setAutoplayFailed(true)
           setIsPlaying(false)
         })
     } else {
-      // Pause
       video.pause()
       setIsPlaying(false)
       if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
@@ -214,7 +202,7 @@ export const MediaPreview = memo(function MediaPreview({
     return () => {
       if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
     }
-  }, [shouldPlay, hasLoadedVideo, isVideo, autoPlay, isHovering, previewDuration])
+  }, [shouldPlay, isVideo, autoPlay, isHovering, previewDuration])
 
   // Cleanup hover timeout
   useEffect(() => {
@@ -228,41 +216,15 @@ export const MediaPreview = memo(function MediaPreview({
   // ---------------------------------------------------------------------------
 
   const handleMouseEnter = useCallback(() => {
-    // AGGRESSIVE RECOVERY Logic for "stuck" videos
-    const video = videoRef.current
-    if (video) {
-      // Recovery conditions:
-      // 1. Error state
-      // 2. Network State = NO_SOURCE (3)
-      // 3. Ready State < HAVE_CURRENT_DATA (2) -> stuck loading
-      const isStuck =
-        videoLoadState === 'error' ||
-        video.error ||
-        video.networkState === 3 ||
-        (video.readyState < 2 && !video.ended)
-
-      if (isStuck) {
-        setVideoLoadState('idle')
-        // Add a cache-busting param to force browser to drop the cached failed request? 
-        // Maybe safer just to reload() for now.
-        video.load()
-
-        const playPromise = video.play()
-        playPromise.catch(() => { })
-      }
-      // If it's just paused but looks healthy
-      else if (video.paused) {
-        video.play().catch(() => { })
-      }
-    }
-
     if (!playOnHover && !autoPlay) return
 
-    // Small delay to prevent accidental triggers/flicker
+    // Check if we need to "wake up" a stuck video (simple version)
+    // If we are about to play, the Effect will handle it.
+
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true)
     }, 50)
-  }, [playOnHover, autoPlay, videoLoadState])
+  }, [playOnHover, autoPlay])
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimeoutRef.current) {
@@ -270,8 +232,6 @@ export const MediaPreview = memo(function MediaPreview({
       hoverTimeoutRef.current = null
     }
     setIsHovering(false)
-
-    // If we were autoplaying, ensure we reset to autoplay state (logic handled in effect)
   }, [])
 
   const handleReveal = useCallback((e: React.MouseEvent) => {
@@ -311,19 +271,19 @@ export const MediaPreview = memo(function MediaPreview({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Loading skeleton - visible until something loads */}
-      {imageLoadState !== 'loaded' && !hasLoadedVideo && imageLoadState !== 'error' && (
+      {/* Loading skeleton */}
+      {imageLoadState !== 'loaded' && !hasThumbnail && imageLoadState !== 'error' && (
         <div className="absolute inset-0 skeleton" />
       )}
 
-      {/* Error state - only if BOTH fail */}
+      {/* Error state */}
       {imageLoadState === 'error' && videoLoadState === 'error' && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-deep/50">
           <AlertTriangle className="w-8 h-8 text-text-muted" />
         </div>
       )}
 
-      {/* Thumbnail/Image - ALWAYS rendered if available */}
+      {/* Thumbnail/Image */}
       {hasThumbnail && (
         <img
           src={thumbnailUrl}
@@ -334,7 +294,7 @@ export const MediaPreview = memo(function MediaPreview({
             'w-full h-full object-cover transition-all duration-300',
             imageLoadState !== 'loaded' && 'opacity-0',
             imageLoadState === 'loaded' && 'opacity-100',
-            // Hide when video is playing
+            // Simple fade out when video plays
             isPlaying && 'opacity-0',
             shouldBlur && 'blur-xl scale-110'
           )}
@@ -343,40 +303,41 @@ export const MediaPreview = memo(function MediaPreview({
         />
       )}
 
-      {/* Video element - content */}
-      {isVideo && shouldLoadVideo && (
+      {/* Video Element */}
+      {shouldLoadVideo && (
         <video
           ref={videoRef}
+          // Try to use webm if available? (Future: check if src has alternative)
+          // For now, assume backend provides one src.
           src={src}
-          poster={thumbnailSrc} // Browser native poster handling
+          poster={thumbnailSrc}
           muted={isMuted}
           loop
           playsInline
-          preload="metadata" // Important for gathering dimensions/first frame
+          // Civitai Strategy: 'none' if no intent to play, 'metadata' if controls or likely to play.
+          // Since we load this conditionally (shouldLoadVideo), we can use 'metadata' or 'auto'.
+          preload="metadata"
           className={clsx(
             'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
-            // Visible if playing OR (no thumbnail and loaded)
-            (isPlaying || (!hasThumbnail && hasLoadedVideo)) ? 'opacity-100' : 'opacity-0',
-            shouldBlur && 'blur-xl scale-110',
-            // Pointer events allowed if controls needed (future), else none
+            (isPlaying || (!hasThumbnail && videoLoadState === 'loaded')) ? 'opacity-100' : 'opacity-0',
+            shouldBlur && 'blur-xl scale-110'
           )}
           onLoadedData={() => setVideoLoadState('loaded')}
           onError={() => setVideoLoadState('error')}
         />
       )}
 
-      {/* Play indicators */}
-      {isVideo && showPlayIcon && !isPlaying && !shouldBlur && (
+      {/* Play/Mute Controls */}
+      {isVideo && showPlayIcon && !isPlaying && !shouldBlur && (autoplayFailed || !autoPlay) && (
         <div className={clsx(
           "absolute bottom-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm pointer-events-none transition-opacity",
-          imageLoadState === 'loaded' || hasLoadedVideo ? 'opacity-100' : 'opacity-0'
+          imageLoadState === 'loaded' || videoLoadState === 'loaded' ? 'opacity-100' : 'opacity-0'
         )}>
           <Play className="w-4 h-4 text-white fill-white" />
         </div>
       )}
 
-      {/* Mute toggle */}
-      {isVideo && (isPlaying || isHovering) && hasLoadedVideo && !shouldBlur && (
+      {isVideo && (isPlaying || isHovering) && (videoLoadState === 'loaded' || isPlaying) && !shouldBlur && (
         <button
           onClick={handleToggleMute}
           className={clsx(
@@ -390,7 +351,7 @@ export const MediaPreview = memo(function MediaPreview({
         </button>
       )}
 
-      {/* NSFW blur overlay */}
+      {/* NSFW Overlay */}
       {nsfw && nsfwBlurEnabled && !isRevealed && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
           <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
@@ -400,7 +361,6 @@ export const MediaPreview = memo(function MediaPreview({
         </div>
       )}
 
-      {/* NSFW reveal button */}
       {nsfw && nsfwBlurEnabled && (
         <button
           onClick={handleReveal}
