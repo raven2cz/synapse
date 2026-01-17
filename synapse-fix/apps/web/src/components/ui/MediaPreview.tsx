@@ -18,7 +18,7 @@ import { clsx } from 'clsx'
 import { Eye, EyeOff, AlertTriangle, Play, Volume2, VolumeX } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { detectMediaType } from '@/lib/media'
-import type { MediaType } from '@/lib/media'
+import type { MediaType, MediaInfo } from '@/lib/media'
 
 // ============================================================================
 // Types
@@ -41,10 +41,6 @@ export interface MediaPreviewProps {
   aspectRatio?: 'square' | 'video' | 'portrait' | 'auto'
   /** Play video on hover (default: true) */
   playOnHover?: boolean
-  /** Autoplay video (default: false). If true, plays for previewDuration. */
-  autoPlay?: boolean
-  /** Duration to play in autoplay mode (seconds). 0 = loop forever. Default: 10s */
-  previewDuration?: number
   /** Show play icon for videos */
   showPlayIcon?: boolean
   /** Click handler */
@@ -65,8 +61,7 @@ type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
  * MediaPreview displays images and videos with optimal loading strategy.
  *
  * For images: Native lazy loading, instant display
- * For videos: Thumbnail-first, video loads on hover OR when autoPlay is true.
- *             Falls back to video element as poster if no thumbnail provided.
+ * For videos: Thumbnail-first, video loads on hover only
  */
 export const MediaPreview = memo(function MediaPreview({
   src,
@@ -77,8 +72,6 @@ export const MediaPreview = memo(function MediaPreview({
   className,
   aspectRatio = 'square',
   playOnHover = true,
-  autoPlay = false,
-  previewDuration = 10,
   showPlayIcon = true,
   onClick,
   onTypeDetected,
@@ -99,7 +92,6 @@ export const MediaPreview = memo(function MediaPreview({
   const [isHovering, setIsHovering] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [isInView, setIsInView] = useState(false)
-  const [isPlaying, setIsPlaying] = useState(false)
 
   // ---------------------------------------------------------------------------
   // Refs
@@ -107,38 +99,17 @@ export const MediaPreview = memo(function MediaPreview({
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ---------------------------------------------------------------------------
   // Computed values
   // ---------------------------------------------------------------------------
   const isVideo = mediaType === 'video'
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
-
-  // Determine if we need to load the video content
-  // Load if:
-  // 1. Hovering (and playOnHover)
-  // 2. Autoplay enabled
-  // 3. NO thumbnail available (need video frame as poster)
-  const shouldLoadVideo = isVideo && isInView && (
-    (playOnHover && isHovering) ||
-    autoPlay ||
-    !thumbnailSrc
-  )
-
-  // Determine if we should actually be PLAYING
-  const shouldPlay = isVideo && isInView && !shouldBlur && (
-    (playOnHover && isHovering) ||
-    (autoPlay && !isHovering) // Autoplay, but pause on hover (optional style, or keep playing?) -> Let's keep playing
-  )
-
-  // Thumbnail logic
-  // If video and we have a thumbnailSrc -> use it.
-  // If video and NO thumbnailSrc -> use '' (img tag won't render, video will serve as poster)
-  // If image -> use src
+  // Video is visible when: hovering OR (in view and no thumbnail available)
+  const shouldShowVideo = isVideo && isHovering && isInView && !shouldBlur
+  // Thumbnail to show (for videos, use thumbnailSrc or fallback to src for images)
   const thumbnailUrl = isVideo ? (thumbnailSrc || '') : src
-  const hasThumbnail = !!thumbnailUrl
-
+  const hasLoadedImage = imageLoadState === 'loaded'
   const hasLoadedVideo = videoLoadState === 'loaded'
 
   // ---------------------------------------------------------------------------
@@ -157,9 +128,9 @@ export const MediaPreview = memo(function MediaPreview({
     onTypeDetected?.(detected.type)
   }, [src, explicitType, onTypeDetected])
 
-  // Intersection Observer
+  // Intersection Observer for lazy video loading
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || !isVideo) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -169,58 +140,35 @@ export const MediaPreview = memo(function MediaPreview({
       },
       {
         threshold: 0.1,
-        rootMargin: '200px',
+        rootMargin: '200px', // Preload slightly before visible
       }
     )
 
     observer.observe(containerRef.current)
     return () => observer.disconnect()
-  }, [])
+  }, [isVideo])
 
-  // Video Playback Control
+  // Handle video play/pause based on hover state
   useEffect(() => {
     const video = videoRef.current
     if (!video || !isVideo) return
 
-    if (shouldPlay && hasLoadedVideo) {
-      // Start playing
-      const playPromise = video.play()
-      playPromise
-        .then(() => {
-          setIsPlaying(true)
-
-          // Handle preview duration limit
-          if (autoPlay && !isHovering && previewDuration > 0) {
-            // Clear existing timeout
-            if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
-
-            // Set new timeout to pause after duration
-            previewTimeoutRef.current = setTimeout(() => {
-              video.pause()
-              setIsPlaying(false)
-            }, previewDuration * 1000)
-          }
-        })
-        .catch(() => {
-          // Autoplay often blocked
-          setIsPlaying(false)
-        })
+    if (shouldShowVideo && hasLoadedVideo) {
+      video.currentTime = 0
+      video.play().catch(() => {
+        // Autoplay blocked - that's fine
+      })
     } else {
-      // Pause
       video.pause()
-      setIsPlaying(false)
-      if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
     }
+  }, [shouldShowVideo, hasLoadedVideo, isVideo])
 
-    return () => {
-      if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
-    }
-  }, [shouldPlay, hasLoadedVideo, isVideo, autoPlay, isHovering, previewDuration])
-
-  // Cleanup hover timeout
+  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current)
+      }
     }
   }, [])
 
@@ -229,13 +177,13 @@ export const MediaPreview = memo(function MediaPreview({
   // ---------------------------------------------------------------------------
 
   const handleMouseEnter = useCallback(() => {
-    if (!playOnHover && !autoPlay) return
+    if (!playOnHover || !isVideo) return
 
-    // Small delay to prevent accidental triggers/flicker
+    // Small delay to prevent accidental triggers
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHovering(true)
-    }, 50)
-  }, [playOnHover, autoPlay])
+    }, 100)
+  }, [playOnHover, isVideo])
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimeoutRef.current) {
@@ -243,13 +191,29 @@ export const MediaPreview = memo(function MediaPreview({
       hoverTimeoutRef.current = null
     }
     setIsHovering(false)
-
-    // If we were autoplaying, ensure we reset to autoplay state (logic handled in effect)
   }, [])
 
   const handleReveal = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     setIsRevealed((prev) => !prev)
+  }, [])
+
+  const handleImageLoad = useCallback(() => {
+    setImageLoadState('loaded')
+  }, [])
+
+  const handleImageError = useCallback(() => {
+    setImageLoadState('error')
+    onError?.(new Error(`Failed to load image: ${thumbnailUrl || src}`))
+  }, [thumbnailUrl, src, onError])
+
+  const handleVideoLoad = useCallback(() => {
+    setVideoLoadState('loaded')
+  }, [])
+
+  const handleVideoError = useCallback(() => {
+    setVideoLoadState('error')
+    // Fallback: just show thumbnail, don't report error
   }, [])
 
   const handleToggleMute = useCallback((e: React.MouseEvent) => {
@@ -284,22 +248,22 @@ export const MediaPreview = memo(function MediaPreview({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Loading skeleton - visible until something loads */}
-      {imageLoadState !== 'loaded' && !hasLoadedVideo && imageLoadState !== 'error' && (
+      {/* Loading skeleton - always visible until image loads */}
+      {imageLoadState !== 'loaded' && imageLoadState !== 'error' && (
         <div className="absolute inset-0 skeleton" />
       )}
 
-      {/* Error state - only if BOTH fail */}
-      {imageLoadState === 'error' && videoLoadState === 'error' && (
+      {/* Error state */}
+      {imageLoadState === 'error' && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-deep/50">
           <AlertTriangle className="w-8 h-8 text-text-muted" />
         </div>
       )}
 
-      {/* Thumbnail/Image - ALWAYS rendered if available */}
-      {hasThumbnail && (
+      {/* Thumbnail/Image - ALWAYS rendered for instant display */}
+      {(thumbnailUrl || !isVideo) && (
         <img
-          src={thumbnailUrl}
+          src={thumbnailUrl || src}
           alt={alt}
           loading="lazy"
           decoding="async"
@@ -308,48 +272,44 @@ export const MediaPreview = memo(function MediaPreview({
             imageLoadState !== 'loaded' && 'opacity-0',
             imageLoadState === 'loaded' && 'opacity-100',
             // Hide when video is playing
-            isPlaying && 'opacity-0',
+            shouldShowVideo && hasLoadedVideo && 'opacity-0',
             shouldBlur && 'blur-xl scale-110'
           )}
-          onLoad={() => setImageLoadState('loaded')}
-          onError={() => setImageLoadState('error')}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
         />
       )}
 
-      {/* Video element - content */}
-      {isVideo && shouldLoadVideo && (
+      {/* Video element - only loads when in view AND hovering */}
+      {isVideo && isInView && (
         <video
           ref={videoRef}
-          src={src}
-          poster={thumbnailSrc} // Browser native poster handling
+          // Only set src when hovering to trigger load
+          src={isHovering ? src : undefined}
+          poster={thumbnailSrc}
           muted={isMuted}
           loop
           playsInline
-          preload="metadata" // Important for gathering dimensions/first frame
+          preload="none"
           className={clsx(
             'absolute inset-0 w-full h-full object-cover transition-opacity duration-300',
-            // Visible if playing OR (no thumbnail and loaded)
-            (isPlaying || (!hasThumbnail && hasLoadedVideo)) ? 'opacity-100' : 'opacity-0',
-            shouldBlur && 'blur-xl scale-110',
-            // Pointer events allowed if controls needed (future), else none
+            shouldShowVideo && hasLoadedVideo ? 'opacity-100' : 'opacity-0 pointer-events-none',
+            shouldBlur && 'blur-xl scale-110'
           )}
-          onLoadedData={() => setVideoLoadState('loaded')}
-          onError={() => setVideoLoadState('error')}
+          onLoadedData={handleVideoLoad}
+          onError={handleVideoError}
         />
       )}
 
-      {/* Play indicators */}
-      {isVideo && showPlayIcon && !isPlaying && !shouldBlur && (
-        <div className={clsx(
-          "absolute bottom-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm pointer-events-none transition-opacity",
-          imageLoadState === 'loaded' || hasLoadedVideo ? 'opacity-100' : 'opacity-0'
-        )}>
+      {/* Play icon indicator for videos */}
+      {isVideo && showPlayIcon && !isHovering && hasLoadedImage && !shouldBlur && (
+        <div className="absolute bottom-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm pointer-events-none">
           <Play className="w-4 h-4 text-white fill-white" />
         </div>
       )}
 
-      {/* Mute toggle */}
-      {isVideo && (isPlaying || isHovering) && hasLoadedVideo && !shouldBlur && (
+      {/* Mute toggle for videos with audio */}
+      {isVideo && isHovering && hasLoadedVideo && !shouldBlur && (
         <button
           onClick={handleToggleMute}
           className={clsx(
@@ -365,7 +325,7 @@ export const MediaPreview = memo(function MediaPreview({
 
       {/* NSFW blur overlay */}
       {nsfw && nsfwBlurEnabled && !isRevealed && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-20">
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
           <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
             <EyeOff className="w-6 h-6 text-text-muted mx-auto mb-1" />
             <span className="text-xs text-text-muted">NSFW</span>
@@ -378,7 +338,7 @@ export const MediaPreview = memo(function MediaPreview({
         <button
           onClick={handleReveal}
           className={clsx(
-            'absolute top-2 right-2 p-1.5 rounded-lg z-30',
+            'absolute top-2 right-2 p-1.5 rounded-lg z-10',
             'bg-slate-deep/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
             'transition-colors duration-200'

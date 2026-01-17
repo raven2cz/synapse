@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
-  ZoomIn, ZoomOut, MessageSquare, Link2, ThumbsUp
+  ZoomIn, ZoomOut, ThumbsUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
@@ -522,6 +522,7 @@ export function BrowsePage() {
       )}
 
       {/* Results grid */}
+      {/* Results grid */}
       <div
         className="flex flex-wrap gap-4"
         style={{ '--card-width': `${cardWidth}px` } as React.CSSProperties}
@@ -544,7 +545,7 @@ export function BrowsePage() {
                 aspectRatio="portrait"
                 className="w-full h-full"
                 autoPlay={true}
-                playFullOnHover={true}
+                previewDuration={0}
               />
 
               {/* Gradient overlay */}
@@ -594,9 +595,9 @@ export function BrowsePage() {
       {/* CRITICAL: Load More button - must be visible when there's more data */}
       {nextCursor && !isFetching && allModels.length > 0 && (
         <div className="flex justify-center pt-4 pb-8">
-          <Button 
-            onClick={handleLoadMore} 
-            variant="secondary" 
+          <Button
+            onClick={handleLoadMore}
+            variant="secondary"
             className="px-8 py-3"
           >
             Load More ({allModels.length} loaded)
@@ -670,6 +671,8 @@ export function BrowsePage() {
                           aspectRatio="portrait"
                           className="cursor-pointer hover:ring-2 ring-synapse"
                           onClick={() => setFullscreenIndex(idx)}
+                          autoPlay={true}
+                          previewDuration={0}
                         />
                       ))}
                     </div>
