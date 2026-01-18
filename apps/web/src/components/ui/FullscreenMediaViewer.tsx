@@ -1,21 +1,19 @@
 /**
- * FullscreenMediaViewer Component - Optimized Version
+ * FullscreenMediaViewer Component
  *
- * Modal viewer for images and videos in fullscreen.
- * Designed for seamless navigation and immediate response.
+ * Modal overlay for viewing media in fullscreen.
+ * Supports both images and videos with navigation.
  *
- * Key features:
+ * Features:
  * - Image zoom and pan
- * - Video player with full controls
- * - Keyboard navigation
- * - NSFW content handling
- * - Preloading adjacent items
- *
- * @author Synapse Team
+ * - Video player with full controls and audio
+ * - Loop toggle for videos
+ * - Keyboard navigation (arrows, escape)
+ * - Previous/Next navigation
+ * - NSFW blur support
  */
 
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { clsx } from 'clsx'
 import {
   X,
@@ -27,25 +25,67 @@ import {
   EyeOff,
   ZoomIn,
   ZoomOut,
+  Repeat,
   Play,
   Pause,
   Volume2,
   VolumeX,
   Maximize,
-  SkipBack,
-  SkipForward,
 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { detectMediaType } from '@/lib/media'
-import type { MediaType } from '@/lib/media'
 
-// ============================================================================
-// Types
-// ============================================================================
+// URL transformation utilities (same as MediaPreview)
+function getCivitaiVideoUrl(url: string, width: number = 1080): string {
+  if (!url || !url.includes('civitai.com')) {
+    return url
+  }
+
+  try {
+    const urlObj = new URL(url)
+    const pathParts = urlObj.pathname.split('/')
+
+    let paramsIndex = -1
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i].includes('=') || pathParts[i].startsWith('width')) {
+        paramsIndex = i
+        break
+      }
+    }
+
+    const newParams = `transcode=true,width=${width},optimized=true`
+
+    if (paramsIndex >= 0) {
+      pathParts[paramsIndex] = newParams
+    } else if (pathParts.length >= 3) {
+      pathParts.splice(-1, 0, newParams)
+    }
+
+    // Ensure .mp4 extension
+    const lastIndex = pathParts.length - 1
+    if (lastIndex >= 0) {
+      const filename = pathParts[lastIndex]
+      const baseName = filename.replace(/\.[^.]+$/, '')
+      pathParts[lastIndex] = `${baseName}.mp4`
+    }
+
+    urlObj.pathname = pathParts.join('/')
+    return urlObj.toString()
+  } catch {
+    return url
+  }
+}
+
+function isLikelyVideo(url: string): boolean {
+  if (!url) return false
+  const lowerUrl = url.toLowerCase()
+  if (/\.(mp4|webm|mov|avi|mkv|gif)(\?|$)/i.test(url)) return true
+  if (lowerUrl.includes('civitai.com') && lowerUrl.includes('transcode=true') && !lowerUrl.includes('anim=false')) return true
+  return false
+}
 
 export interface MediaItem {
   url: string
-  type?: MediaType
+  type?: 'image' | 'video' | 'unknown'
   thumbnailUrl?: string
   nsfw?: boolean
   width?: number
@@ -54,255 +94,14 @@ export interface MediaItem {
 }
 
 export interface FullscreenMediaViewerProps {
-  /** Array of media items */
   items: MediaItem[]
-  /** Initial index to display */
   initialIndex?: number
-  /** Whether viewer is open */
   isOpen: boolean
-  /** Close handler */
   onClose: () => void
-  /** Callback when index changes */
   onIndexChange?: (index: number) => void
 }
 
-// ============================================================================
-// Helper: Format time
-// ============================================================================
-
-function formatTime(seconds: number): string {
-  if (!isFinite(seconds) || seconds < 0) return '0:00'
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-// ============================================================================
-// Inline Video Player (simplified for fullscreen)
-// ============================================================================
-
-interface InlineVideoPlayerProps {
-  src: string
-  poster?: string
-  className?: string
-}
-
-const InlineVideoPlayer = memo(function InlineVideoPlayer({
-  src,
-  poster,
-  className,
-}: InlineVideoPlayerProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const progressRef = useRef<HTMLDivElement>(null)
-
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-  const [showControls, setShowControls] = useState(true)
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
-
-  // Auto-hide controls
-  const resetControlsTimeout = useCallback(() => {
-    if (controlsTimeoutRef.current) {
-      clearTimeout(controlsTimeoutRef.current)
-    }
-    setShowControls(true)
-    if (isPlaying) {
-      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000)
-    }
-  }, [isPlaying])
-
-  // Video event listeners
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const onPlay = () => setIsPlaying(true)
-    const onPause = () => setIsPlaying(false)
-    const onTimeUpdate = () => setCurrentTime(video.currentTime)
-    const onDurationChange = () => setDuration(video.duration)
-    const onLoadedData = () => setIsLoaded(true)
-
-    video.addEventListener('play', onPlay)
-    video.addEventListener('pause', onPause)
-    video.addEventListener('timeupdate', onTimeUpdate)
-    video.addEventListener('durationchange', onDurationChange)
-    video.addEventListener('loadeddata', onLoadedData)
-
-    return () => {
-      video.removeEventListener('play', onPlay)
-      video.removeEventListener('pause', onPause)
-      video.removeEventListener('timeupdate', onTimeUpdate)
-      video.removeEventListener('durationchange', onDurationChange)
-      video.removeEventListener('loadeddata', onLoadedData)
-    }
-  }, [])
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
-    }
-  }, [])
-
-  const togglePlay = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
-    if (isPlaying) {
-      video.pause()
-    } else {
-      video.play().catch(() => {})
-    }
-    resetControlsTimeout()
-  }, [isPlaying, resetControlsTimeout])
-
-  const toggleMute = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
-    video.muted = !isMuted
-    setIsMuted(!isMuted)
-  }, [isMuted])
-
-  const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const video = videoRef.current
-    const bar = progressRef.current
-    if (!video || !bar) return
-
-    const rect = bar.getBoundingClientRect()
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-    video.currentTime = pos * video.duration
-  }, [])
-
-  const skip = useCallback((seconds: number) => {
-    const video = videoRef.current
-    if (!video) return
-    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seconds))
-  }, [])
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-
-      switch (e.key) {
-        case ' ':
-          e.preventDefault()
-          togglePlay()
-          break
-        case 'm':
-          toggleMute()
-          break
-        case 'ArrowLeft':
-          skip(-5)
-          break
-        case 'ArrowRight':
-          skip(5)
-          break
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [togglePlay, toggleMute, skip])
-
-  return (
-    <div
-      className={clsx('relative bg-black group', className)}
-      onMouseMove={resetControlsTimeout}
-      onMouseLeave={() => isPlaying && setShowControls(false)}
-    >
-      {/* Video */}
-      <video
-        ref={videoRef}
-        src={src}
-        poster={poster}
-        autoPlay
-        playsInline
-        className="w-full h-full object-contain"
-        onClick={togglePlay}
-      />
-
-      {/* Loading indicator */}
-      {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-        </div>
-      )}
-
-      {/* Play button overlay (when paused) */}
-      {!isPlaying && isLoaded && (
-        <div
-          className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          onClick={togglePlay}
-        >
-          <div className="p-4 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 transition-colors">
-            <Play className="w-12 h-12 text-white fill-white" />
-          </div>
-        </div>
-      )}
-
-      {/* Controls overlay */}
-      <div
-        className={clsx(
-          'absolute bottom-0 left-0 right-0 p-4',
-          'bg-gradient-to-t from-black/80 to-transparent',
-          'transition-opacity duration-300',
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        )}
-      >
-        {/* Progress bar */}
-        <div
-          ref={progressRef}
-          className="relative h-1 bg-white/30 rounded-full mb-3 cursor-pointer group/progress"
-          onClick={handleSeek}
-        >
-          <div
-            className="absolute inset-y-0 left-0 bg-synapse rounded-full"
-            style={{ width: `${progress}%` }}
-          />
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover/progress:opacity-100 transition-opacity"
-            style={{ left: `calc(${progress}% - 6px)` }}
-          />
-        </div>
-
-        {/* Control buttons */}
-        <div className="flex items-center gap-3">
-          <button onClick={togglePlay} className="p-1.5 text-white hover:text-synapse transition-colors">
-            {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-          </button>
-
-          <button onClick={() => skip(-5)} className="p-1.5 text-white/70 hover:text-white transition-colors">
-            <SkipBack className="w-4 h-4" />
-          </button>
-
-          <button onClick={() => skip(5)} className="p-1.5 text-white/70 hover:text-white transition-colors">
-            <SkipForward className="w-4 h-4" />
-          </button>
-
-          <button onClick={toggleMute} className="p-1.5 text-white hover:text-synapse transition-colors">
-            {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-          </button>
-
-          <span className="text-white/70 text-sm ml-2">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-})
-
-// ============================================================================
-// Main Component
-// ============================================================================
-
-export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
+export function FullscreenMediaViewer({
   items,
   initialIndex = 0,
   isOpen,
@@ -311,90 +110,91 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
 }: FullscreenMediaViewerProps) {
   const { nsfwBlurEnabled } = useSettingsStore()
 
-  // ---------------------------------------------------------------------------
   // State
-  // ---------------------------------------------------------------------------
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [isRevealed, setIsRevealed] = useState(false)
   const [imageZoom, setImageZoom] = useState(1)
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [imageLoaded, setImageLoaded] = useState(false)
+
+  // Video state
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isLooping, setIsLooping] = useState(true)
+  const [isMuted, setIsMuted] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  // Refs
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Current item
   const currentItem = items[currentIndex]
-  const mediaType = currentItem?.type || detectMediaType(currentItem?.url || '').type
-  const isVideo = mediaType === 'video'
+  const isVideo = currentItem?.type === 'video' || isLikelyVideo(currentItem?.url || '')
   const shouldBlur = currentItem?.nsfw && nsfwBlurEnabled && !isRevealed
 
-  // ---------------------------------------------------------------------------
-  // Effects
-  // ---------------------------------------------------------------------------
+  // Get optimized video URL
+  const videoUrl = isVideo && currentItem?.url.includes('civitai.com')
+    ? getCivitaiVideoUrl(currentItem.url)
+    : currentItem?.url
 
-  // Reset state when opening or changing initial index
+  // Reset state when opening or changing item
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex)
       setIsRevealed(false)
       setImageZoom(1)
       setImagePosition({ x: 0, y: 0 })
-      setImageLoaded(false)
+      setIsPlaying(false)
+      setCurrentTime(0)
+      setDuration(0)
     }
   }, [isOpen, initialIndex])
 
-  // Reset when changing items
+  // Reset reveal state when changing items
   useEffect(() => {
     setIsRevealed(false)
     setImageZoom(1)
     setImagePosition({ x: 0, y: 0 })
-    setImageLoaded(false)
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
   }, [currentIndex])
 
-  // Keyboard navigation
+  // Auto-play video when item changes
   useEffect(() => {
-    if (!isOpen) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          onClose()
-          break
-        case 'ArrowLeft':
-          if (!isVideo) goToPrevious()
-          break
-        case 'ArrowRight':
-          if (!isVideo) goToNext()
-          break
-      }
+    if (isVideo && videoRef.current && !shouldBlur) {
+      const playTimer = setTimeout(() => {
+        videoRef.current?.play().catch(() => {})
+      }, 100)
+      return () => clearTimeout(playTimer)
     }
+  }, [currentIndex, isVideo, shouldBlur])
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, isVideo, currentIndex, items.length])
-
-  // Preload adjacent images
+  // Video event handlers
   useEffect(() => {
-    if (!isOpen) return
+    const video = videoRef.current
+    if (!video) return
 
-    const preloadIndices = [currentIndex - 1, currentIndex + 1].filter(
-      (i) => i >= 0 && i < items.length
-    )
+    const handlePlay = () => setIsPlaying(true)
+    const handlePause = () => setIsPlaying(false)
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime)
+    const handleDurationChange = () => setDuration(video.duration)
 
-    preloadIndices.forEach((i) => {
-      const item = items[i]
-      const type = item?.type || detectMediaType(item?.url || '').type
-      if (type !== 'video' && item?.url) {
-        const img = new Image()
-        img.src = item.url
-      }
-    })
-  }, [isOpen, currentIndex, items])
+    video.addEventListener('play', handlePlay)
+    video.addEventListener('pause', handlePause)
+    video.addEventListener('timeupdate', handleTimeUpdate)
+    video.addEventListener('durationchange', handleDurationChange)
 
-  // ---------------------------------------------------------------------------
-  // Navigation
-  // ---------------------------------------------------------------------------
+    return () => {
+      video.removeEventListener('play', handlePlay)
+      video.removeEventListener('pause', handlePause)
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+      video.removeEventListener('durationchange', handleDurationChange)
+    }
+  }, [currentIndex])
 
+  // Navigation handlers
   const goToPrevious = useCallback(() => {
     if (currentIndex > 0) {
       const newIndex = currentIndex - 1
@@ -411,77 +211,165 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
     }
   }, [currentIndex, items.length, onIndexChange])
 
-  // ---------------------------------------------------------------------------
-  // Image drag handlers
-  // ---------------------------------------------------------------------------
+  // Keyboard handlers
+  useEffect(() => {
+    if (!isOpen) return
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (isVideo || imageZoom <= 1) return
-      e.preventDefault()
+    const handleKeyDown = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'Escape':
+          onClose()
+          break
+        case 'ArrowLeft':
+          goToPrevious()
+          break
+        case 'ArrowRight':
+          goToNext()
+          break
+        case '+':
+        case '=':
+          if (!isVideo) setImageZoom((z) => Math.min(4, z + 0.25))
+          break
+        case '-':
+          if (!isVideo) setImageZoom((z) => Math.max(0.5, z - 0.25))
+          break
+        case '0':
+          setImageZoom(1)
+          setImagePosition({ x: 0, y: 0 })
+          break
+        case ' ':
+          e.preventDefault()
+          if (isVideo && videoRef.current) {
+            if (isPlaying) videoRef.current.pause()
+            else videoRef.current.play()
+          }
+          break
+        case 'm':
+        case 'M':
+          if (isVideo) setIsMuted(m => !m)
+          break
+        case 'l':
+        case 'L':
+          if (isVideo) setIsLooping(l => !l)
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose, goToPrevious, goToNext, isVideo, isPlaying])
+
+  // Prevent body scroll when open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [isOpen])
+
+  // Image drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!isVideo && imageZoom > 1) {
       setIsDragging(true)
       setDragStart({ x: e.clientX - imagePosition.x, y: e.clientY - imagePosition.y })
-    },
-    [isVideo, imageZoom, imagePosition]
-  )
+    }
+  }, [isVideo, imageZoom, imagePosition])
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isDragging) return
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (isDragging) {
       setImagePosition({
         x: e.clientX - dragStart.x,
         y: e.clientY - dragStart.y,
       })
-    },
-    [isDragging, dragStart]
-  )
+    }
+  }, [isDragging, dragStart])
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
   }, [])
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      if (isVideo) return
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!isVideo) {
       e.preventDefault()
       const delta = e.deltaY > 0 ? -0.1 : 0.1
       setImageZoom((z) => Math.max(0.5, Math.min(4, z + delta)))
-    },
-    [isVideo]
-  )
+    }
+  }, [isVideo])
 
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
-
+  // Download handler
   const handleDownload = useCallback(() => {
-    if (!currentItem?.url) return
-    const a = document.createElement('a')
-    a.href = currentItem.url
-    a.download = currentItem.url.split('/').pop() || 'download'
-    a.target = '_blank'
-    a.click()
+    if (currentItem?.url) {
+      const a = document.createElement('a')
+      a.href = currentItem.url
+      a.download = currentItem.url.split('/').pop() || 'download'
+      a.target = '_blank'
+      a.click()
+    }
   }, [currentItem])
 
+  // Open in new tab
   const handleOpenExternal = useCallback(() => {
-    if (!currentItem?.url) return
-    window.open(currentItem.url, '_blank')
+    if (currentItem?.url) {
+      window.open(currentItem.url, '_blank')
+    }
   }, [currentItem])
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  // Video controls
+  const togglePlay = useCallback(() => {
+    if (videoRef.current) {
+      if (isPlaying) videoRef.current.pause()
+      else videoRef.current.play()
+    }
+  }, [isPlaying])
+
+  const toggleMute = useCallback(() => {
+    setIsMuted(m => !m)
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted
+    }
+  }, [isMuted])
+
+  const toggleLoop = useCallback(() => {
+    setIsLooping(l => !l)
+  }, [])
+
+  // Progress bar click
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!videoRef.current || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const pos = (e.clientX - rect.left) / rect.width
+    videoRef.current.currentTime = pos * duration
+  }, [duration])
+
+  // Format time
+  const formatTime = (seconds: number): string => {
+    if (!isFinite(seconds)) return '0:00'
+    const m = Math.floor(seconds / 60)
+    const s = Math.floor(seconds % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   if (!isOpen || !currentItem) return null
 
-  const content = (
-    <div className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm" onClick={onClose}>
-      {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
-        {/* Counter */}
-        <div className="text-white/70 text-sm">{currentIndex + 1} / {items.length}</div>
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
-        {/* Actions */}
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/95"
+      onClick={onClose}
+    >
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 to-transparent">
+        {/* Left: Counter */}
+        <div className="text-white/70 text-sm">
+          {currentIndex + 1} / {items.length}
+        </div>
+
+        {/* Right: Actions */}
         <div className="flex items-center gap-2">
           {/* NSFW toggle */}
           {currentItem.nsfw && nsfwBlurEnabled && (
@@ -497,6 +385,25 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
             </button>
           )}
 
+          {/* Loop toggle (videos only) */}
+          {isVideo && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggleLoop()
+              }}
+              className={clsx(
+                'p-2 rounded-lg transition-colors',
+                isLooping
+                  ? 'bg-synapse/30 text-synapse hover:bg-synapse/40'
+                  : 'bg-white/10 text-white/50 hover:bg-white/20 hover:text-white'
+              )}
+              title={isLooping ? 'Loop ON (L)' : 'Loop OFF (L)'}
+            >
+              <Repeat className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Zoom controls (images only) */}
           {!isVideo && (
             <>
@@ -506,6 +413,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
                   setImageZoom((z) => Math.max(0.5, z - 0.25))
                 }}
                 className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Zoom out (-)"
               >
                 <ZoomOut className="w-5 h-5" />
               </button>
@@ -518,6 +426,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
                   setImageZoom((z) => Math.min(4, z + 0.25))
                 }}
                 className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                title="Zoom in (+)"
               >
                 <ZoomIn className="w-5 h-5" />
               </button>
@@ -531,6 +440,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
               handleDownload()
             }}
             className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Download"
           >
             <Download className="w-5 h-5" />
           </button>
@@ -542,6 +452,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
               handleOpenExternal()
             }}
             className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Open in new tab"
           >
             <ExternalLink className="w-5 h-5" />
           </button>
@@ -553,6 +464,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
               onClose()
             }}
             className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+            title="Close (Esc)"
           >
             <X className="w-5 h-5" />
           </button>
@@ -577,7 +489,6 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
           >
             <ChevronLeft className="w-8 h-8" />
           </button>
-
           <button
             onClick={(e) => {
               e.stopPropagation()
@@ -608,7 +519,7 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
       >
         {/* NSFW blur overlay */}
         {shouldBlur && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-2xl z-10">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
             <div className="text-center">
               <EyeOff className="w-16 h-16 text-white/50 mx-auto mb-4" />
               <p className="text-white/70 text-lg mb-4">NSFW Content</p>
@@ -624,40 +535,96 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
 
         {/* Video player */}
         {isVideo && !shouldBlur && (
-          <div className="w-full h-full max-w-6xl max-h-full">
-            <InlineVideoPlayer
-              src={currentItem.url}
-              poster={currentItem.thumbnailUrl}
-              className="w-full h-full"
-            />
+          <div className="relative w-full h-full max-w-6xl max-h-full flex flex-col">
+            {/* Video element */}
+            <div className="flex-1 flex items-center justify-center min-h-0">
+              <video
+                ref={videoRef}
+                src={videoUrl}
+                poster={currentItem.thumbnailUrl}
+                loop={isLooping}
+                muted={isMuted}
+                playsInline
+                className="max-w-full max-h-full object-contain"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  togglePlay()
+                }}
+              />
+            </div>
+
+            {/* Video controls bar */}
+            <div
+              className="mt-4 p-3 bg-black/60 rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Progress bar */}
+              <div
+                className="h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 group"
+                onClick={handleProgressClick}
+              >
+                <div
+                  className="h-full bg-synapse rounded-full relative transition-all"
+                  style={{ width: `${progress}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-3">
+                {/* Play/Pause */}
+                <button
+                  onClick={togglePlay}
+                  className="p-2 text-white hover:text-synapse transition-colors"
+                  title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+                >
+                  {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current" />}
+                </button>
+
+                {/* Mute */}
+                <button
+                  onClick={toggleMute}
+                  className="p-2 text-white hover:text-synapse transition-colors"
+                  title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
+                >
+                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                </button>
+
+                {/* Time */}
+                <div className="text-white/70 text-sm font-mono">
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </div>
+
+                <div className="flex-1" />
+
+                {/* Loop indicator */}
+                <span className={clsx(
+                  'text-xs px-2 py-1 rounded',
+                  isLooping ? 'bg-synapse/30 text-synapse' : 'bg-white/10 text-white/50'
+                )}>
+                  {isLooping ? 'LOOP' : 'ONCE'}
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Image viewer */}
         {!isVideo && !shouldBlur && (
-          <>
-            {/* Loading indicator */}
-            {!imageLoaded && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-              </div>
+          <img
+            src={currentItem.url}
+            alt="Preview"
+            className={clsx(
+              'max-w-full max-h-full object-contain transition-transform duration-200',
+              isDragging && 'cursor-grabbing',
+              imageZoom > 1 && !isDragging && 'cursor-grab'
             )}
-            <img
-              src={currentItem.url}
-              alt="Preview"
-              className={clsx(
-                'max-w-full max-h-full object-contain transition-all duration-200',
-                isDragging && 'cursor-grabbing',
-                imageZoom > 1 && !isDragging && 'cursor-grab',
-                !imageLoaded && 'opacity-0'
-              )}
-              style={{
-                transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`,
-              }}
-              draggable={false}
-              onLoad={() => setImageLoaded(true)}
-            />
-          </>
+            style={{
+              transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`,
+            }}
+            draggable={false}
+          />
         )}
       </div>
 
@@ -666,16 +633,15 @@ export const FullscreenMediaViewer = memo(function FullscreenMediaViewer({
         <div className="absolute bottom-0 left-0 right-0 z-10 p-4 bg-gradient-to-t from-black/80 to-transparent pointer-events-none">
           <div className="max-w-2xl mx-auto">
             {currentItem.meta.prompt && (
-              <p className="text-white/70 text-sm line-clamp-2">{currentItem.meta.prompt}</p>
+              <p className="text-white/70 text-sm line-clamp-2">
+                {currentItem.meta.prompt}
+              </p>
             )}
           </div>
         </div>
       )}
     </div>
   )
-
-  // Render via portal for proper z-index stacking
-  return createPortal(content, document.body)
-})
+}
 
 export default FullscreenMediaViewer

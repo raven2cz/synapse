@@ -11,12 +11,9 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Volume2, VolumeX } from 'lucide-react'
-
-// Simple className merge utility (inline to avoid dependency)
-function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ')
-}
+import { clsx } from 'clsx'
+import { Volume2, VolumeX, Eye, EyeOff } from 'lucide-react'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 // ============================================================================
 // URL Transformation Utilities
@@ -189,13 +186,20 @@ export function MediaPreview({
   onLoad,
   onError,
 }: MediaPreviewProps) {
+  // Use selector to only re-render when nsfwBlurEnabled actually changes
+  // This is efficient - Zustand only triggers re-render if selected value changes
+  const nsfwBlurEnabled = useSettingsStore((state) => state.nsfwBlurEnabled)
+
   // State
   const [isHovering, setIsHovering] = useState(false)
-  const [showNsfw, setShowNsfw] = useState(false)
+  const [isRevealed, setIsRevealed] = useState(false) // For NSFW reveal toggle
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [videoError, setVideoError] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
+
+  // Computed: should we blur this content?
+  const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
@@ -285,10 +289,10 @@ export function MediaPreview({
     setVideoError(true)
   }, [videoUrl])
 
-  // Handle NSFW reveal
-  const handleNsfwReveal = useCallback((e: React.MouseEvent) => {
+  // Handle NSFW reveal toggle
+  const handleRevealToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setShowNsfw(true)
+    setIsRevealed((prev) => !prev)
   }, [])
 
   // Handle mute toggle
@@ -311,7 +315,7 @@ export function MediaPreview({
   return (
     <div
       ref={containerRef}
-      className={cn(
+      className={clsx(
         'group relative overflow-hidden bg-slate-800',
         aspectClasses[aspectRatio],
         className
@@ -324,10 +328,11 @@ export function MediaPreview({
       <img
         src={thumbnailUrl}
         alt={alt}
-        className={cn(
+        className={clsx(
           'absolute inset-0 w-full h-full object-cover transition-all duration-300',
           showVideo && !videoError ? 'opacity-0' : 'opacity-100',
-          !showVideo && 'group-hover:scale-105'
+          !showVideo && 'group-hover:scale-105',
+          shouldBlur && 'blur-xl scale-110'
         )}
         loading="lazy"
         onLoad={handleImageLoad}
@@ -339,9 +344,10 @@ export function MediaPreview({
         <video
           ref={videoRef}
           src={showVideo ? videoUrl : undefined}
-          className={cn(
-            'absolute inset-0 w-full h-full object-cover transition-opacity duration-200',
-            showVideo ? 'opacity-100' : 'opacity-0'
+          className={clsx(
+            'absolute inset-0 w-full h-full object-cover transition-all duration-300',
+            showVideo ? 'opacity-100' : 'opacity-0',
+            shouldBlur && 'blur-xl scale-110'
           )}
           loop
           muted={isMuted}
@@ -363,21 +369,57 @@ export function MediaPreview({
         </div>
       )}
 
-      {/* NSFW Blur Overlay */}
-      {nsfw && !showNsfw && (
+      {/* NSFW Blur Overlay - centered indicator (no backdrop-blur to prevent flickering) */}
+      {nsfw && nsfwBlurEnabled && !isRevealed && (
         <div
-          className="absolute inset-0 backdrop-blur-xl bg-black/30 flex items-center justify-center cursor-pointer z-10"
-          onClick={handleNsfwReveal}
+          className={clsx(
+            'absolute inset-0 flex flex-col items-center justify-center',
+            'transition-opacity duration-300 pointer-events-none'
+          )}
         >
-          <span className="text-white/80 text-sm font-medium px-3 py-1.5 rounded-full bg-black/40">
-            NSFW - Click to reveal
-          </span>
+          <div className="bg-slate-900/90 p-3 rounded-xl text-center shadow-lg">
+            <EyeOff className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+            <span className="text-xs text-slate-400">NSFW</span>
+          </div>
         </div>
       )}
 
-      {/* Video indicator badge */}
+      {/* NSFW Toggle Button - ONLY visible when card is revealed (to hide it back) */}
+      {/* When blur is ON and NOT revealed, the overlay itself is clickable */}
+      {nsfw && nsfwBlurEnabled && isRevealed && (
+        <button
+          onClick={handleRevealToggle}
+          className={clsx(
+            'absolute top-2 right-2 p-1.5 rounded-lg z-20',
+            'bg-slate-900/90',
+            'text-slate-400 hover:text-white',
+            'transition-colors duration-200'
+          )}
+          title="Hide content"
+        >
+          <EyeOff className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Clickable reveal area when blurred - clicking anywhere reveals */}
+      {nsfw && nsfwBlurEnabled && !isRevealed && (
+        <button
+          onClick={handleRevealToggle}
+          className="absolute inset-0 z-10 cursor-pointer"
+          title="Click to reveal"
+        />
+      )}
+
+      {/* NSFW Badge - shown when blur is disabled globally */}
+      {nsfw && !nsfwBlurEnabled && (
+        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-500/80 text-white text-xs font-medium z-20">
+          NSFW
+        </div>
+      )}
+
+      {/* Video indicator badge - bottom left (to not conflict with NSFW badge) */}
       {isVideo && !showVideo && !videoError && (
-        <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-5">
+        <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10">
           VIDEO
         </div>
       )}

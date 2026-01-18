@@ -1,3 +1,75 @@
+## [2.4.2] - 2025-01-18 (Final NSFW + Z-index Fix)
+
+### Critical Fixes
+
+**1. NSFW Eye Icon Visibility:**
+- Eye toggle button now **HIDDEN** when card is blurred
+- Shows **ONLY when card is revealed** (EyeOff icon to hide back)
+- Clicking anywhere on blurred card reveals it
+- Clean UX: No distracting icon on blurred content
+
+**2. FullscreenMediaViewer Z-Index:**
+- Changed from `z-50` to `z-[100]`
+- Now properly displays ABOVE modal dialogs (which use z-50)
+
+**3. Store Usage:**
+- Using Zustand selector: `useSettingsStore((state) => state.nsfwBlurEnabled)`
+- Efficient - only re-renders when nsfwBlurEnabled actually changes
+- Global toggle in header works correctly
+
+### NSFW Behavior Summary
+
+| State | Eye Button | Overlay | Badge |
+|-------|------------|---------|-------|
+| Blur ON, NOT revealed | Hidden | Visible (EyeOff + NSFW text) | - |
+| Blur ON, revealed | Visible (EyeOff) | Hidden | - |
+| Blur OFF globally | - | - | Red NSFW badge |
+
+---
+
+## [2.4.1] - 2025-01-18 (Performance Fix + NSFW Features)
+
+### Performance Critical Fix
+
+**Problem:** Using `useSettingsStore` inside MediaPreview caused each card to have its own
+store subscription, leading to massive re-renders and stuttering.
+
+**Solution:** `nsfwBlurEnabled` is now passed as a prop from parent component.
+
+### NSFW Features Restored
+
+- ✅ Global NSFW toggle in header works
+- ✅ Eye icon (top-right) for individual reveal/hide
+- ✅ Blur effect on NSFW content
+- ✅ Red "NSFW" badge when blur is globally disabled
+- ✅ No flickering (removed backdrop-blur from overlays)
+
+### FullscreenMediaViewer Enhanced
+
+- ✅ Loop toggle button (Repeat icon, keyboard: L)
+- ✅ Custom video controls (progress bar, play/pause, mute)
+- ✅ Time display
+- ✅ Keyboard shortcuts: Space, M, L, Esc, arrows
+
+### CRITICAL: Parent Patches Required
+
+**You MUST update parent components to pass `nsfwBlurEnabled` prop!**
+
+See `patches/` folder for:
+- `BrowsePage.patch`
+- `PackDetailPage.patch`
+
+Quick fix pattern:
+```tsx
+// Add at component level
+const { nsfwBlurEnabled } = useSettingsStore()
+
+// Pass to MediaPreview
+<MediaPreview ... nsfwBlurEnabled={nsfwBlurEnabled} />
+```
+
+---
+
 ## [2.4.0] - 2025-01-18 (CivArchive Approach - Complete Rewrite)
 
 ### Root Cause Analysis
@@ -52,14 +124,19 @@ getCivitaiVideoUrl(url)
 
 ```
 apps/web/src/components/ui/MediaPreview.tsx - Complete rewrite (~300 lines)
+apps/web/src/components/ui/FullscreenMediaViewer.tsx - Loop toggle + controls
 src/utils/media_detection.py - Added URL transformation functions
+patches/BrowsePage.patch - Parent component patch
+patches/PackDetailPage.patch - Parent component patch
 ```
 
 ### Testing
 
-1. Open Browse Civitai
-2. Scroll through grid - all cards show static thumbnails
-3. Hover over video card - video plays
-4. Move mouse away - returns to thumbnail
-5. Click "Load more" multiple times - no issues
-6. Scroll rapidly - no black screens
+1. **Apply patches first!**
+2. Open Browse Civitai
+3. Scroll through grid - all cards show static thumbnails
+4. Hover over video card - video plays smoothly
+5. Toggle NSFW in header - works immediately
+6. Click eye icon on NSFW card - reveals/hides
+7. Open fullscreen - test loop toggle
+8. Scroll rapidly - no stuttering
