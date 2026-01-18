@@ -3,14 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
-  ZoomIn, ZoomOut, MessageSquare, Link2, ThumbsUp
+  ZoomIn, ZoomOut, ThumbsUp
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
 
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
-import { MediaType } from '@/lib/media'
+import type { MediaType } from '@/lib/media'
 
 interface ModelPreview {
   url: string
@@ -114,12 +114,11 @@ type CardSize = keyof typeof CARD_WIDTHS
 export function BrowsePage() {
   const queryClient = useQueryClient()
 
-
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [selectedType, setSelectedType] = useState('')
   const [includeNsfw] = useState(true)
-  const [useCivArchive, setUseCivArchive] = useState(false)  // CivArchive toggle
+  const [useCivArchive, setUseCivArchive] = useState(false)
   const [selectedModel, setSelectedModel] = useState<number | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
 
@@ -128,7 +127,7 @@ export function BrowsePage() {
 
   const [cardSize, setCardSize] = useState<CardSize>('md')
 
-  // Pagination state
+  // CRITICAL: Pagination state for Load More
   const [allModels, setAllModels] = useState<CivitaiModel[]>([])
   const [currentCursor, setCurrentCursor] = useState<string | undefined>()
   const [nextCursor, setNextCursor] = useState<string | undefined>()
@@ -144,10 +143,10 @@ export function BrowsePage() {
 
   const removeToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id))
 
-  // Check if search is a special query (tag: or url:) - CivArchive only for regular queries
+  // Check if search is a special query
   const isSpecialQuery = activeSearch.startsWith('tag:') || activeSearch.startsWith('url:') || activeSearch.startsWith('https://')
 
-  // Search query with longer timeout
+  // Search query
   const { data: searchResults, isLoading, error, isFetching } = useQuery({
     queryKey: ['civitai-search', activeSearch, selectedType, includeNsfw, currentCursor, useCivArchive],
     queryFn: async () => {
@@ -160,7 +159,7 @@ export function BrowsePage() {
         params.append('limit', '20')
 
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 90000) // 90s timeout for CivArchive
+        const timeoutId = setTimeout(() => controller.abort(), 90000)
 
         try {
           const res = await fetch(`/api/browse/search-civarchive?${params}`, {
@@ -176,7 +175,6 @@ export function BrowsePage() {
           const civarchiveData = await res.json()
           console.log('[BrowsePage] CivArchive results:', civarchiveData.results?.length)
 
-          // Transform CivArchive results to CivitaiModel format
           const transformedItems = (civarchiveData.results || []).map((r: any) => ({
             id: r.model_id,
             name: r.model_name,
@@ -202,20 +200,18 @@ export function BrowsePage() {
                 download_url: r.download_url,
               }] : [],
             }],
-            // Include preview from CivArchive response
-            previews: r.preview_url ? [{
-              url: r.preview_url,
-              nsfw: r.nsfw || false,
-            }] : [],
+            // CHANGED: Use previews array directly from backend
+            // This preserves media_type, thumbnail_url, and other fields for video support
+            previews: r.previews || [],
           }))
 
           return {
             items: transformedItems,
-            next_cursor: null,  // CivArchive doesn't support pagination yet
+            next_cursor: null, // CivArchive doesn't support pagination yet
           }
         } catch (err: any) {
           if (err.name === 'AbortError') {
-            throw new Error('CivArchive request timeout - try again')
+            throw new Error('CivArchive search timed out. Try a more specific query.')
           }
           throw err
         }
@@ -230,7 +226,7 @@ export function BrowsePage() {
       params.append('limit', '20')
 
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000)
 
       try {
         const res = await fetch(`/api/browse/search?${params}`, {
@@ -242,28 +238,32 @@ export function BrowsePage() {
           const errData = await res.json().catch(() => ({}))
           throw new Error(errData.detail || 'Search failed')
         }
+
         return res.json()
       } catch (err: any) {
         if (err.name === 'AbortError') {
-          throw new Error('Request timeout - try again')
+          throw new Error('Search timed out. Try a more specific query.')
         }
         throw err
       }
     },
-    enabled: !!activeSearch || activeSearch === '',
+    enabled: true,
     staleTime: 5 * 60 * 1000,
     retry: 2,
   })
 
-  // Handle search results
+  // CRITICAL: Handle search results for pagination
   useEffect(() => {
     if (searchResults) {
       if (isLoadingMore.current) {
+        // Append to existing results (Load More)
         setAllModels(prev => [...prev, ...(searchResults.items || [])])
         isLoadingMore.current = false
       } else {
+        // Replace with new results (new search)
         setAllModels(searchResults.items || [])
       }
+      // Save next cursor for Load More
       setNextCursor(searchResults.next_cursor)
     }
   }, [searchResults])
@@ -285,7 +285,6 @@ export function BrowsePage() {
   // Import mutation
   const importMutation = useMutation({
     mutationFn: async (url: string) => {
-      // V2 API endpoint
       const res = await fetch('/api/packs/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,6 +307,7 @@ export function BrowsePage() {
   // Handlers
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
+    // Reset pagination state on new search
     isLoadingMore.current = false
     setAllModels([])
     setCurrentCursor(undefined)
@@ -315,8 +315,10 @@ export function BrowsePage() {
     setActiveSearch(searchQuery)
   }
 
+  // CRITICAL: Load More handler
   const handleLoadMore = () => {
     if (nextCursor && !isFetching) {
+      console.log('[BrowsePage] Loading more with cursor:', nextCursor)
       isLoadingMore.current = true
       setCurrentCursor(nextCursor)
     }
@@ -358,6 +360,11 @@ export function BrowsePage() {
   }
 
   const cardWidth = CARD_WIDTHS[cardSize]
+
+  // CRITICAL: Helper to get NSFW status
+  const getPreviewNsfw = (model: CivitaiModel): boolean => {
+    return model.nsfw || model.previews[0]?.nsfw || false
+  }
 
   return (
     <div className="space-y-6">
@@ -415,95 +422,84 @@ export function BrowsePage() {
             Search and import models. Use <code className="text-synapse px-1 py-0.5 bg-synapse/10 rounded">tag:</code> for tags.
           </p>
         </div>
-
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
-          <button
-            onClick={zoomOut}
-            disabled={cardSize === 'sm'}
-            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom out"
-          >
-            <ZoomOut className="w-4 h-4 text-text-secondary" />
-          </button>
-          <div className="w-px h-6 bg-slate-mid" />
-          <button
-            onClick={zoomIn}
-            disabled={cardSize === 'lg'}
-            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn className="w-4 h-4 text-text-secondary" />
-          </button>
+        <div className="flex items-center gap-3">
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
+            <button
+              onClick={zoomOut}
+              disabled={cardSize === 'sm'}
+              className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Smaller cards"
+            >
+              <ZoomOut className="w-4 h-4 text-text-secondary" />
+            </button>
+            <div className="w-px h-4 bg-slate-mid" />
+            <button
+              onClick={zoomIn}
+              disabled={cardSize === 'lg'}
+              className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Larger cards"
+            >
+              <ZoomIn className="w-4 h-4 text-text-secondary" />
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Search bar */}
+      {/* Search and filters */}
       <form onSubmit={handleSearch} className="flex gap-4">
-        <div className="flex-1 relative">
+        <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-muted" />
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search models, tag:anime, or paste Civitai URL..."
-            className="w-full pl-12 pr-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-synapse transition-colors"
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search models... (tag:anime, url:civitai.com/...)"
+            className="w-full bg-slate-dark border border-slate-mid rounded-xl pl-12 pr-4 py-3 text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-synapse"
           />
         </div>
-
         <select
           value={selectedType}
-          onChange={(e) => setSelectedType(e.target.value)}
-          className="px-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary focus:outline-none focus:border-synapse cursor-pointer"
+          onChange={e => {
+            setSelectedType(e.target.value)
+            // Reset pagination on type change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          className="bg-slate-dark border border-slate-mid rounded-xl px-4 py-3 text-text-primary focus:outline-none focus:ring-2 focus:ring-synapse"
         >
-          {MODEL_TYPES.map(type => (
-            <option key={type.value} value={type.value}>{type.label}</option>
+          {MODEL_TYPES.map(t => (
+            <option key={t.value} value={t.value}>{t.label}</option>
           ))}
         </select>
-
-        {/* CivArchive toggle - compact design matching NSFW toggle style */}
-        <button
-          type="button"
-          onClick={() => setUseCivArchive(!useCivArchive)}
-          className={clsx(
-            "flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all",
-            useCivArchive
-              ? "bg-synapse/20 text-synapse border border-synapse/50"
-              : "bg-slate-dark text-text-muted border border-slate-mid hover:border-slate-light"
-          )}
-          title="Use CivArchive.com for better full-text search (slower but more accurate)"
-        >
-          <span className="font-medium">Archive</span>
-          {/* Toggle switch */}
-          <div className={clsx(
-            "w-8 h-4 rounded-full relative transition-colors",
-            useCivArchive ? "bg-synapse/40" : "bg-slate-mid"
-          )}>
-            <div className={clsx(
-              "absolute top-0.5 w-3 h-3 rounded-full transition-all duration-200",
-              useCivArchive
-                ? "left-4 bg-synapse"
-                : "left-0.5 bg-text-muted"
-            )} />
-          </div>
-        </button>
-
-        <Button type="submit" disabled={isLoading}>
-          {isLoading && !isLoadingMore.current ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Search className="w-5 h-5" />
-          )}
-          Search
+        <Button type="submit" disabled={isLoading && !isFetching}>
+          {isLoading && !isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
         </Button>
       </form>
 
-      {/* CivArchive info banner - only show when active */}
-      {useCivArchive && (
-        <div className="bg-synapse/10 border border-synapse/30 rounded-lg px-3 py-1.5 flex items-center gap-2 text-xs">
-          <Info className="w-3 h-3 text-synapse flex-shrink-0" />
+      {/* CivArchive toggle */}
+      {!isSpecialQuery && (
+        <div className="flex items-center gap-3 text-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useCivArchive}
+              onChange={e => {
+                setUseCivArchive(e.target.checked)
+                // Reset on toggle
+                isLoadingMore.current = false
+                setAllModels([])
+                setCurrentCursor(undefined)
+                setNextCursor(undefined)
+              }}
+              className="w-4 h-4 rounded border-slate-mid bg-slate-dark text-synapse focus:ring-synapse"
+            />
+            <span className="text-text-secondary">Use CivArchive</span>
+          </label>
           <span className="text-text-muted">
-            <span className="text-synapse font-medium">Archive search:</span> Better quality via civarchive.com. Slower but searches descriptions.
+            Slower but searches descriptions.
           </span>
         </div>
       )}
@@ -516,7 +512,15 @@ export function BrowsePage() {
         </div>
       )}
 
-      {/* Results grid - CIVITAI STYLE: fixed width cards, flex wrap */}
+      {/* Loading state for initial load */}
+      {isLoading && allModels.length === 0 && !isLoadingMore.current && (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-synapse" />
+        </div>
+      )}
+
+      {/* Results grid */}
+      {/* Results grid */}
       <div
         className="flex flex-wrap gap-4"
         style={{ '--card-width': `${cardWidth}px` } as React.CSSProperties}
@@ -528,85 +532,45 @@ export function BrowsePage() {
             className="group cursor-pointer"
             style={{ width: cardWidth }}
           >
-            {/* Card - Civitai style: image fills card, content overlaid */}
+            {/* Card */}
             <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark">
-              {/* Image with hover zoom */}
+              {/* Preview with proper NSFW handling - combines model.nsfw AND preview.nsfw */}
               <MediaPreview
                 src={model.previews[0]?.url || ''}
                 type={model.previews[0]?.media_type}
                 thumbnailSrc={model.previews[0]?.thumbnail_url}
-                nsfw={model.nsfw}
+                nsfw={getPreviewNsfw(model)}
                 aspectRatio="portrait"
                 className="w-full h-full"
-                // Auto-play videos on card hover
-                autoPlay={true} // Auto-play preview
-                playFullOnHover={true} // Play on hover
+                autoPlay={true}
               />
 
               {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
 
-              {/* Gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
-
-              {/* Top left badges */}
-              <div className="absolute top-3 left-3 flex gap-1.5">
-                <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold">
-                  {model.type}
-                </span>
-                {model.versions[0]?.base_model && (
-                  <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white/80">
-                    {model.versions[0].base_model.replace('SD ', '').replace('SDXL ', 'XL ')}
-                  </span>
-                )}
-              </div>
-
-              {/* Top right icons */}
-              <div className="absolute top-3 right-3 flex gap-1.5">
-                <button
-                  className="p-1.5 bg-white/90 hover:bg-white rounded-full transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigator.clipboard.writeText(`https://civitai.com/models/${model.id}`)
-                    addToast('info', 'Link copied')
-                  }}
-                >
-                  <Link2 className="w-4 h-4 text-slate-700" />
-                </button>
-              </div>
-
-              {/* Bottom content */}
+              {/* Content overlay */}
               <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-                {/* Creator row */}
-                {model.creator && (
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-synapse to-pulse flex items-center justify-center text-white text-xs font-bold">
-                      {model.creator.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-white/90 font-medium">{model.creator}</span>
-                  </div>
-                )}
-
-                {/* Title */}
-                <h3 className="font-bold text-white text-sm leading-tight line-clamp-2">
+                <h3 className="font-semibold text-white text-sm leading-tight line-clamp-2 group-hover:text-synapse transition-colors">
                   {model.name}
                 </h3>
 
-                {/* Stats row - exactly like Civitai */}
-                <div className="flex items-center gap-3 text-xs text-white/70">
+                <div className="flex items-center gap-2 text-xs text-white/70">
+                  <span className="px-1.5 py-0.5 bg-white/20 rounded text-white/90">{model.type}</span>
+                  {model.creator && (
+                    <span className="flex items-center gap-1 truncate">
+                      <User className="w-3 h-3" />
+                      {model.creator}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-white/60">
                   <span className="flex items-center gap-1">
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3 h-3" />
                     {formatNumber(model.stats?.downloadCount)}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    {formatNumber(model.stats?.commentCount)}
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Heart className="w-3.5 h-3.5" />
-                    {formatNumber(model.stats?.favoriteCount)}
-                  </span>
-                  {(model.stats?.thumbsUpCount || model.stats?.rating) && (
-                    <span className="flex items-center gap-1 ml-auto bg-white/20 px-2 py-0.5 rounded-md">
+                  {model.stats?.thumbsUpCount != null && (
+                    <span className="flex items-center gap-0.5">
                       <ThumbsUp className="w-3 h-3" />
                       {model.stats?.thumbsUpCount || Math.round((model.stats?.rating || 0) * 10)}
                     </span>
@@ -618,24 +582,28 @@ export function BrowsePage() {
         ))}
       </div>
 
-      {/* Loading indicator */}
+      {/* Loading indicator for Load More */}
       {isFetching && isLoadingMore.current && (
         <div className="flex justify-center py-8">
           <Loader2 className="w-8 h-8 animate-spin text-synapse" />
         </div>
       )}
 
-      {/* Load More button */}
-      {nextCursor && !isFetching && (
-        <div className="flex justify-center pt-4">
-          <Button onClick={handleLoadMore} variant="secondary" className="px-8">
+      {/* CRITICAL: Load More button - must be visible when there's more data */}
+      {nextCursor && !isFetching && allModels.length > 0 && (
+        <div className="flex justify-center pt-4 pb-8">
+          <Button
+            onClick={handleLoadMore}
+            variant="secondary"
+            className="px-8 py-3"
+          >
             Load More ({allModels.length} loaded)
           </Button>
         </div>
       )}
 
       {/* Empty state */}
-      {!isLoading && allModels.length === 0 && activeSearch && (
+      {!isLoading && !isFetching && allModels.length === 0 && activeSearch && (
         <div className="text-center py-12 text-text-muted">
           No models found for "{activeSearch}"
         </div>
@@ -684,7 +652,7 @@ export function BrowsePage() {
 
                 {/* Modal Content - Scrollable */}
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                  {/* Preview Gallery - 2 rows, ALL previews */}
+                  {/* Preview Gallery */}
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-text-primary">
                       Preview Images ({modelDetail.previews.length})
@@ -699,13 +667,13 @@ export function BrowsePage() {
                           nsfw={preview.nsfw}
                           aspectRatio="portrait"
                           className="cursor-pointer hover:ring-2 ring-synapse"
-                          onClick={() => setFullscreenIndex(idx)}
+                          autoPlay={true}
                         />
                       ))}
                     </div>
                   </div>
 
-                  {/* Usage Tips / Parameters - CRITICAL SECTION */}
+                  {/* Usage Tips */}
                   <div className="bg-gradient-to-r from-synapse/10 to-pulse/10 border border-synapse/30 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-synapse mb-3 flex items-center gap-2">
                       <Info className="w-4 h-4" />
@@ -727,88 +695,118 @@ export function BrowsePage() {
                       {modelDetail.example_params?.cfg_scale != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
                           <span className="text-text-muted block text-xs mb-1">CFG Scale</span>
-                          <span className="text-text-primary font-bold text-xl">{modelDetail.example_params.cfg_scale}</span>
+                          <span className="text-synapse font-bold text-xl">{modelDetail.example_params.cfg_scale}</span>
                         </div>
                       )}
                       {modelDetail.example_params?.steps != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
                           <span className="text-text-muted block text-xs mb-1">Steps</span>
-                          <span className="text-text-primary font-bold text-xl">{modelDetail.example_params.steps}</span>
+                          <span className="text-synapse font-bold text-xl">{modelDetail.example_params.steps}</span>
                         </div>
                       )}
-                      {modelDetail.example_params?.sampler && (
+                      {modelDetail.example_params?.sampler != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center col-span-2">
                           <span className="text-text-muted block text-xs mb-1">Sampler</span>
-                          <span className="text-text-primary font-medium text-sm">{modelDetail.example_params.sampler}</span>
+                          <span className="text-synapse font-bold text-sm">{modelDetail.example_params.sampler}</span>
                         </div>
                       )}
                     </div>
-                    {!modelDetail.example_params?.clip_skip && !modelDetail.example_params?.cfg_scale && modelDetail.type !== 'LORA' && (
-                      <p className="text-text-muted text-sm mt-3">No usage parameters available from example images.</p>
-                    )}
                   </div>
-
-                  {/* Description */}
-                  {modelDetail.description && (
-                    <div className="bg-slate-dark rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-text-primary mb-3">Description</h3>
-                      <div
-                        className="prose prose-invert prose-sm max-w-none text-text-secondary [&_a]:text-synapse"
-                        dangerouslySetInnerHTML={{ __html: modelDetail.description }}
-                      />
-                    </div>
-                  )}
 
                   {/* Trigger Words */}
                   {modelDetail.trained_words?.length > 0 && (
-                    <div className="bg-slate-dark rounded-xl p-4">
-                      <h3 className="text-sm font-semibold text-text-primary mb-3">Trigger Words</h3>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-text-primary">Trigger Words</h3>
                       <div className="flex flex-wrap gap-2">
                         {modelDetail.trained_words.map((word, idx) => (
                           <button
                             key={idx}
                             onClick={() => copyToClipboard(word)}
-                            className="px-3 py-1.5 bg-synapse/20 text-synapse rounded-lg text-sm hover:bg-synapse/30 transition-colors flex items-center gap-2"
+                            className="px-3 py-1.5 bg-synapse/20 text-synapse rounded-lg text-sm hover:bg-synapse/30 transition-colors flex items-center gap-1.5"
                           >
-                            <code>{word}</code>
                             <Copy className="w-3 h-3" />
+                            {word}
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Model Info */}
-                  <div className="bg-slate-dark rounded-xl p-4">
-                    <h3 className="text-sm font-semibold text-text-primary mb-3">Model Info</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div>
-                        <span className="text-text-muted block">Type</span>
-                        <span className="text-text-primary font-medium">{modelDetail.type}</span>
+                  {/* Versions */}
+                  {modelDetail.versions?.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-text-primary">
+                        Versions ({modelDetail.versions.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {modelDetail.versions.slice(0, 5).map((version, idx) => (
+                          <div
+                            key={version.id}
+                            className={clsx(
+                              'p-3 rounded-xl border',
+                              idx === 0 ? 'bg-synapse/10 border-synapse/30' : 'bg-slate-dark border-slate-mid'
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-medium text-text-primary">{version.name}</span>
+                                {idx === 0 && (
+                                  <span className="ml-2 text-xs bg-synapse/30 text-synapse px-2 py-0.5 rounded">Latest</span>
+                                )}
+                                <div className="text-xs text-text-muted mt-1 flex items-center gap-3">
+                                  {version.base_model && <span>{version.base_model}</span>}
+                                  {version.file_size && <span>{formatSize(version.file_size)}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    window.open(`https://civitai.com/models/${modelDetail.id}?modelVersionId=${version.id}`, '_blank')
+                                  }}
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleImport(modelDetail.id)
+                                  }}
+                                  disabled={importMutation.isPending}
+                                >
+                                  {importMutation.isPending ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Download className="w-4 h-4" />
+                                  )}
+                                  Import
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      {modelDetail.base_model && (
-                        <div>
-                          <span className="text-text-muted block">Base Model</span>
-                          <span className="text-text-primary font-medium">{modelDetail.base_model}</span>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-text-muted block">Downloads</span>
-                        <span className="text-text-primary font-medium">{formatNumber(modelDetail.download_count)}</span>
-                      </div>
-                      {modelDetail.rating && (
-                        <div>
-                          <span className="text-text-muted block">Rating</span>
-                          <span className="text-text-primary font-medium">⭐ {modelDetail.rating.toFixed(2)}</span>
-                        </div>
-                      )}
                     </div>
-                  </div>
+                  )}
+
+                  {/* Description */}
+                  {modelDetail.description && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-text-primary">Description</h3>
+                      <div
+                        className="prose prose-invert prose-sm max-w-none text-text-secondary"
+                        dangerouslySetInnerHTML={{ __html: modelDetail.description }}
+                      />
+                    </div>
+                  )}
 
                   {/* Tags */}
                   {modelDetail.tags?.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary mb-2">Tags</h3>
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold text-text-primary">Tags</h3>
                       <div className="flex flex-wrap gap-2">
                         {modelDetail.tags.map((tag, idx) => (
                           <span
@@ -826,70 +824,35 @@ export function BrowsePage() {
                     </div>
                   )}
 
-                  {/* Versions */}
-                  {modelDetail.versions?.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary mb-2">
-                        Versions ({modelDetail.versions.length})
-                      </h3>
-                      <div className="space-y-2">
-                        {modelDetail.versions.slice(0, 5).map((version, idx) => (
-                          <div
-                            key={version.id}
-                            className={clsx(
-                              'p-3 rounded-xl border',
-                              idx === 0 ? 'bg-synapse/10 border-synapse/50' : 'bg-slate-dark border-slate-mid'
-                            )}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-text-primary">{version.name}</span>
-                                {version.base_model && (
-                                  <span className="text-xs text-text-muted px-2 py-0.5 bg-slate-mid rounded-lg">
-                                    {version.base_model}
-                                  </span>
-                                )}
-                                {idx === 0 && (
-                                  <span className="px-2 py-0.5 bg-synapse text-white text-xs rounded-lg font-medium">
-                                    Latest
-                                  </span>
-                                )}
-                              </div>
-                              {version.file_size && (
-                                <span className="text-sm text-text-muted">{formatSize(version.file_size)}</span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Actions - Fixed at bottom */}
-                <div className="flex gap-3 p-4 border-t border-slate-mid bg-slate-dark/95 backdrop-blur-xl flex-shrink-0">
-                  <Button
-                    onClick={() => handleImport(modelDetail.id)}
-                    disabled={importMutation.isPending}
-                    className="flex-1"
-                  >
-                    {importMutation.isPending ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Download className="w-5 h-5" />
+                  {/* Stats */}
+                  <div className="flex items-center gap-4 pt-4 border-t border-slate-mid text-sm text-text-muted">
+                    <span className="flex items-center gap-1">
+                      <Download className="w-4 h-4" />
+                      {formatNumber(modelDetail.download_count)} downloads
+                    </span>
+                    {modelDetail.rating != null && (
+                      <span className="flex items-center gap-1">
+                        <Heart className="w-4 h-4" />
+                        {modelDetail.rating.toFixed(1)} ({formatNumber(modelDetail.rating_count)} ratings)
+                      </span>
                     )}
-                    Import to Synapse
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => window.open(`https://civitai.com/models/${modelDetail.id}`, '_blank')}
-                  >
-                    <ExternalLink className="w-5 h-5" />
-                    View on Civitai
-                  </Button>
+                    <a
+                      href={`https://civitai.com/models/${modelDetail.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-synapse hover:underline ml-auto"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View on Civitai
+                    </a>
+                  </div>
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div className="p-6 text-center text-text-muted">
+                Model not found
+              </div>
+            )}
           </div>
         </div>
       )}

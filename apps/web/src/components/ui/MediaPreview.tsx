@@ -1,374 +1,437 @@
 /**
  * MediaPreview Component
  *
- * Unified component for displaying image or video previews.
+ * Unified preview for images and videos with Civitai URL transformation.
  *
- * Features:
- * - Auto-detection of media type from URL
- * - Auto-play for videos (first 5 seconds, looped)
- * - Full playback on hover
- * - NSFW blur support
- * - Fallback handling (video as image, etc.)
- * - Lazy loading with intersection observer
+ * Key insight from CivArchive:
+ * - Thumbnail: Use `anim=false` param → actual JPEG/WebP image
+ * - Video: Use `transcode=true` + `.mp4` → actual MP4 video
+ *
+ * This avoids Firefox issues with "fake JPEG" videos from Civitai API.
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { clsx } from 'clsx'
-import { Eye, EyeOff, AlertTriangle, Play, Volume2, VolumeX } from 'lucide-react'
+import { Volume2, VolumeX, Eye, EyeOff } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
-import {
-  detectMediaType,
-  PREVIEW_SETTINGS,
-} from '@/lib/media'
-import type { MediaType, MediaInfo } from '@/lib/media'
 
-export interface MediaPreviewProps {
-  /** Media URL */
-  src: string
-  /** Explicit media type (overrides detection) */
-  type?: MediaType
-  /** Thumbnail URL for video (first frame) */
-  thumbnailSrc?: string
-  /** Alt text */
-  alt?: string
-  /** NSFW content flag */
-  nsfw?: boolean
-  /** CSS class name */
-  className?: string
-  /** Aspect ratio */
-  aspectRatio?: 'square' | 'video' | 'portrait' | 'auto'
+// ============================================================================
+// URL Transformation Utilities
+// ============================================================================
 
-  // Video specific
-  /** Enable auto-play for videos (default: true) */
-  autoPlay?: boolean
-  /** Preview duration in ms before looping (default: 5000) */
-  previewDuration?: number
-  /** Play full video on hover (default: true) */
-  playFullOnHover?: boolean
-  /** Muted state (default: true for preview) */
-  muted?: boolean
-  /** Loop playback (default: true) */
-  loop?: boolean
-  /** Show audio indicator for videos with sound */
-  showAudioIndicator?: boolean
+/**
+ * Transform Civitai URL to get static thumbnail (first frame).
+ * Uses anim=false parameter which returns actual JPEG/WebP.
+ */
+function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
+  if (!url || !url.includes('civitai.com')) {
+    return url
+  }
 
-  // Callbacks
-  /** Click handler */
-  onClick?: () => void
-  /** Called when media loads successfully */
-  onMediaLoad?: (info: MediaInfo) => void
-  /** Called on load error */
-  onError?: (error: Error) => void
-  /** Called when media type is detected */
-  onTypeDetected?: (type: MediaType) => void
+  try {
+    // Parse URL and reconstruct with correct params
+    const urlObj = new URL(url)
+    const pathParts = urlObj.pathname.split('/')
+
+    // Find and replace params segment (contains = signs)
+    // Format: /{uuid}/{params}/{filename}
+    let paramsIndex = -1
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i].includes('=') || pathParts[i].startsWith('width')) {
+        paramsIndex = i
+        break
+      }
+    }
+
+    const newParams = `anim=false,transcode=true,width=${width},optimized=true`
+
+    if (paramsIndex >= 0) {
+      pathParts[paramsIndex] = newParams
+    } else if (pathParts.length >= 3) {
+      // Insert before filename
+      pathParts.splice(-1, 0, newParams)
+    }
+
+    urlObj.pathname = pathParts.join('/')
+    return urlObj.toString()
+  } catch {
+    return url
+  }
 }
 
-type LoadState = 'idle' | 'loading' | 'loaded' | 'error'
+/**
+ * Transform Civitai URL to get optimized video (MP4).
+ * Uses transcode=true parameter and .mp4 extension.
+ */
+function getCivitaiVideoUrl(url: string, width: number = 450): string {
+  if (!url || !url.includes('civitai.com')) {
+    return url
+  }
+
+  try {
+    const urlObj = new URL(url)
+    const pathParts = urlObj.pathname.split('/')
+
+    // Find params segment
+    let paramsIndex = -1
+    for (let i = 0; i < pathParts.length; i++) {
+      if (pathParts[i].includes('=') || pathParts[i].startsWith('width')) {
+        paramsIndex = i
+        break
+      }
+    }
+
+    const newParams = `transcode=true,width=${width},optimized=true`
+
+    if (paramsIndex >= 0) {
+      pathParts[paramsIndex] = newParams
+    } else if (pathParts.length >= 3) {
+      pathParts.splice(-1, 0, newParams)
+    }
+
+    // Ensure .mp4 extension on filename
+    const lastIndex = pathParts.length - 1
+    if (lastIndex >= 0) {
+      const filename = pathParts[lastIndex]
+      // Replace extension with .mp4
+      const baseName = filename.replace(/\.[^.]+$/, '')
+      pathParts[lastIndex] = `${baseName}.mp4`
+    }
+
+    urlObj.pathname = pathParts.join('/')
+    return urlObj.toString()
+  } catch {
+    return url
+  }
+}
+
+/**
+ * Detect if URL is likely a video based on patterns.
+ */
+function isLikelyVideo(url: string): boolean {
+  if (!url) return false
+
+  const lowerUrl = url.toLowerCase()
+
+  // Explicit video extensions
+  if (/\.(mp4|webm|mov|avi|mkv|gif)(\?|$)/i.test(url)) {
+    return true
+  }
+
+  // Civitai transcode pattern (without anim=false)
+  if (lowerUrl.includes('civitai.com') && lowerUrl.includes('transcode=true') && !lowerUrl.includes('anim=false')) {
+    return true
+  }
+
+  return false
+}
+
+// ============================================================================
+// Component Props
+// ============================================================================
+
+interface MediaPreviewProps {
+  /** Source URL (from Civitai API or direct) */
+  src: string
+
+  /** Media type hint from backend */
+  type?: 'image' | 'video' | 'unknown'
+
+  /** Pre-computed thumbnail URL (optional, will be generated if not provided) */
+  thumbnailSrc?: string
+
+  /** NSFW content - show blur overlay */
+  nsfw?: boolean
+
+  /** Aspect ratio */
+  aspectRatio?: 'square' | 'portrait' | 'landscape' | 'auto'
+
+  /** Additional CSS classes */
+  className?: string
+
+  /** Alt text for image */
+  alt?: string
+
+  /** Auto-play video when in viewport (default: false for stability) */
+  autoPlay?: boolean
+
+  /** Play full video on hover */
+  playFullOnHover?: boolean
+
+  /** Callback when clicked */
+  onClick?: () => void
+
+  /** Callback for image load */
+  onLoad?: () => void
+
+  /** Callback for load error */
+  onError?: () => void
+}
+
+// ============================================================================
+// Component
+// ============================================================================
 
 export function MediaPreview({
   src,
-  type: explicitType,
-  thumbnailSrc,
-  alt = 'Preview',
+  type,
+  thumbnailSrc: providedThumbnailSrc,
   nsfw = false,
+  aspectRatio = 'auto',
   className,
-  aspectRatio = 'square',
-  autoPlay = true,
-  previewDuration = PREVIEW_SETTINGS.PREVIEW_DURATION_MS,
+  alt = '',
+  autoPlay = false,
   playFullOnHover = true,
-  muted = true,
-  loop = true,
-  showAudioIndicator = true,
   onClick,
-  onMediaLoad,
+  onLoad,
   onError,
-  onTypeDetected,
 }: MediaPreviewProps) {
-  const { nsfwBlurEnabled } = useSettingsStore()
+  // Use selector to only re-render when nsfwBlurEnabled actually changes
+  // This is efficient - Zustand only triggers re-render if selected value changes
+  const nsfwBlurEnabled = useSettingsStore((state) => state.nsfwBlurEnabled)
 
   // State
-  const [mediaType, setMediaType] = useState<MediaType>(explicitType || 'unknown')
-  const [loadState, setLoadState] = useState<LoadState>('idle')
-  const [isRevealed, setIsRevealed] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
-  const [isMuted, setIsMuted] = useState(muted)
-  const [hasAudio, setHasAudio] = useState(false)
-  const [isInView, setIsInView] = useState(false)
-  const [fallbackToImage, setFallbackToImage] = useState(false)
+  const [isRevealed, setIsRevealed] = useState(false) // For NSFW reveal toggle
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  const [isMuted, setIsMuted] = useState(true)
+
+  // Computed: should we blur this content?
+  const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Computed
-  const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
-  const isVideo = mediaType === 'video' && !fallbackToImage
-  const showVideo = isVideo && isInView && !shouldBlur
+  // Determine if this is video content
+  const isVideo = useMemo(() => {
+    if (type === 'video') return true
+    if (type === 'image') return false
+    return isLikelyVideo(src)
+  }, [src, type])
 
-  // Detect media type on mount or src change
-  useEffect(() => {
-    if (explicitType && explicitType !== 'unknown') {
-      setMediaType(explicitType)
-      onTypeDetected?.(explicitType)
-      return
+  // Generate proper URLs
+  const thumbnailUrl = useMemo(() => {
+    if (providedThumbnailSrc) return providedThumbnailSrc
+    if (!src) return ''
+
+    // For Civitai, always get static thumbnail with anim=false
+    if (src.includes('civitai.com')) {
+      return getCivitaiThumbnailUrl(src)
     }
 
-    const detected = detectMediaType(src)
-    setMediaType(detected.type)
-    onTypeDetected?.(detected.type)
-  }, [src, explicitType, onTypeDetected])
+    return src
+  }, [src, providedThumbnailSrc])
 
-  // Intersection observer for lazy loading
-  useEffect(() => {
-    if (!containerRef.current) return
+  const videoUrl = useMemo(() => {
+    if (!src || !isVideo) return ''
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          setIsInView(entry.isIntersecting)
-        })
-      },
-      {
-        threshold: PREVIEW_SETTINGS.LAZY_LOAD_THRESHOLD,
-        rootMargin: PREVIEW_SETTINGS.LAZY_LOAD_MARGIN,
-      }
-    )
-
-    observer.observe(containerRef.current)
-
-    return () => observer.disconnect()
-  }, [])
-
-  // Handle video preview timing
-  useEffect(() => {
-    if (!showVideo || !videoRef.current || !autoPlay) return
-
-    const video = videoRef.current
-
-    const handleTimeUpdate = () => {
-      // If not hovering and past preview duration, restart
-      if (!isHovering && video.currentTime * 1000 >= previewDuration) {
-        video.currentTime = 0
-      }
+    // For Civitai, get proper MP4 URL
+    if (src.includes('civitai.com')) {
+      return getCivitaiVideoUrl(src)
     }
 
-    video.addEventListener('timeupdate', handleTimeUpdate)
+    return src
+  }, [src, isVideo])
 
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate)
-    }
-  }, [showVideo, autoPlay, isHovering, previewDuration])
+  // Should we show video element?
+  const showVideo = isVideo && (autoPlay || (playFullOnHover && isHovering)) && !videoError
 
-  // Play/pause video based on visibility and hover
-  useEffect(() => {
-    if (!videoRef.current || !isVideo) return
-
-    const video = videoRef.current
-
-    if (showVideo && (autoPlay || isHovering)) {
-      video.play().catch(() => {
-        // Autoplay blocked, that's okay
-      })
-    } else {
-      video.pause()
-    }
-  }, [showVideo, autoPlay, isHovering, isVideo])
-
-  // Handlers
-  const handleReveal = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsRevealed(!isRevealed)
-  }, [isRevealed])
-
+  // Handle hover
   const handleMouseEnter = useCallback(() => {
-    if (playFullOnHover) {
-      setIsHovering(true)
-      // Reset to beginning when starting hover playback
-      if (videoRef.current) {
-        videoRef.current.currentTime = 0
-      }
-    }
-  }, [playFullOnHover])
+    setIsHovering(true)
+  }, [])
 
   const handleMouseLeave = useCallback(() => {
     setIsHovering(false)
   }, [])
 
-  const handleVideoLoad = useCallback(() => {
-    setLoadState('loaded')
+  // Handle video play/pause based on hover
+  useEffect(() => {
+    if (!videoRef.current || !isVideo) return
 
-    if (videoRef.current) {
-      const video = videoRef.current
-      // Check if video has audio track
-      // @ts-ignore - audioTracks may not be available in all browsers
-      const audioTracks = video.audioTracks || video.mozAudioTracks || video.webkitAudioTracks
-      if (audioTracks && audioTracks.length > 0) {
-        setHasAudio(true)
-      }
+    const video = videoRef.current
 
-      onMediaLoad?.({
-        type: 'video',
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight,
-        hasAudio: hasAudio,
-      })
+    if (showVideo && imageLoaded) {
+      // Small delay to let video element mount
+      const playTimer = setTimeout(() => {
+        video.play().catch((err) => {
+          if (err.name !== 'AbortError') {
+            console.debug('Video play failed:', err.message)
+          }
+        })
+      }, 50)
+      return () => clearTimeout(playTimer)
+    } else {
+      video.pause()
+      video.currentTime = 0
     }
-  }, [onMediaLoad, hasAudio])
+  }, [showVideo, isVideo, imageLoaded])
 
-  const handleVideoError = useCallback(() => {
-    // Video failed to load - fall back to image
-    console.warn(`Video failed to load: ${src}, falling back to image`)
-    setFallbackToImage(true)
-    setMediaType('image')
-  }, [src])
-
+  // Handle image load
   const handleImageLoad = useCallback(() => {
-    setLoadState('loaded')
-    onMediaLoad?.({
-      type: 'image',
-    })
-  }, [onMediaLoad])
+    setImageLoaded(true)
+    setImageError(false)
+    onLoad?.()
+  }, [onLoad])
 
+  // Handle image error
   const handleImageError = useCallback(() => {
-    setLoadState('error')
-    onError?.(new Error(`Failed to load media: ${src}`))
-  }, [src, onError])
+    setImageError(true)
+    onError?.()
+  }, [onError])
 
-  const handleToggleMute = useCallback((e: React.MouseEvent) => {
+  // Handle video error - fallback to image only
+  const handleVideoError = useCallback(() => {
+    console.debug('Video failed to load, showing thumbnail only:', videoUrl)
+    setVideoError(true)
+  }, [videoUrl])
+
+  // Handle NSFW reveal toggle
+  const handleRevealToggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setIsMuted(!isMuted)
+    setIsRevealed((prev) => !prev)
+  }, [])
+
+  // Handle mute toggle
+  const handleMuteToggle = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsMuted((prev) => !prev)
     if (videoRef.current) {
       videoRef.current.muted = !isMuted
     }
   }, [isMuted])
 
-  // Render
+  // Aspect ratio classes
+  const aspectClasses = {
+    square: 'aspect-square',
+    portrait: 'aspect-[3/4]',
+    landscape: 'aspect-video',
+    auto: '',
+  }
+
   return (
     <div
       ref={containerRef}
       className={clsx(
-        'relative overflow-hidden rounded-xl bg-slate-mid/50 group',
-        aspectRatio === 'square' && 'aspect-square',
-        aspectRatio === 'video' && 'aspect-video',
-        aspectRatio === 'portrait' && 'aspect-[3/4]',
-        onClick && 'cursor-pointer',
+        'group relative overflow-hidden bg-slate-800',
+        aspectClasses[aspectRatio],
         className
       )}
-      onClick={onClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onClick={onClick}
     >
-      {/* Loading skeleton */}
-      {loadState === 'idle' || loadState === 'loading' && (
-        <div className="absolute inset-0 skeleton" />
-      )}
+      {/* Thumbnail Image - Always rendered for stability */}
+      <img
+        src={thumbnailUrl}
+        alt={alt}
+        className={clsx(
+          'absolute inset-0 w-full h-full object-cover transition-all duration-300',
+          showVideo && !videoError ? 'opacity-0' : 'opacity-100',
+          !showVideo && 'group-hover:scale-105',
+          shouldBlur && 'blur-xl scale-110'
+        )}
+        loading="lazy"
+        onLoad={handleImageLoad}
+        onError={handleImageError}
+      />
 
-      {/* Error state */}
-      {loadState === 'error' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-slate-deep/50">
-          <AlertTriangle className="w-8 h-8 text-text-muted" />
-        </div>
-      )}
-
-      {/* Video element */}
-      {isVideo && (
+      {/* Video Element - Only rendered when needed */}
+      {isVideo && !videoError && (
         <video
           ref={videoRef}
-          src={showVideo ? src : undefined}
-          poster={thumbnailSrc}
-          muted={isMuted}
-          loop={loop}
-          playsInline
-          preload="metadata"
+          src={showVideo ? videoUrl : undefined}
           className={clsx(
-            'w-full h-full object-cover transition-all duration-300',
-            loadState !== 'loaded' && 'opacity-0',
-            loadState === 'loaded' && 'opacity-100',
-            shouldBlur && 'blur-xl scale-110',
+            'absolute inset-0 w-full h-full object-cover transition-all duration-300',
+            showVideo ? 'opacity-100' : 'opacity-0',
+            shouldBlur && 'blur-xl scale-110'
           )}
-          onLoadedData={handleVideoLoad}
+          loop
+          muted={isMuted}
+          playsInline
+          preload="none"
           onError={handleVideoError}
         />
       )}
 
-      {/* Image element (for images or video fallback) */}
-      {(!isVideo || !showVideo) && (
-        <img
-          src={thumbnailSrc || src}
-          alt={alt}
-          className={clsx(
-            'w-full h-full object-cover transition-all duration-300',
-            loadState !== 'loaded' && !isVideo && 'opacity-0',
-            loadState === 'loaded' && 'opacity-100',
-            isVideo && showVideo && 'hidden', // Hide when video is playing
-            shouldBlur && 'blur-xl scale-110',
-          )}
-          onLoad={handleImageLoad}
-          onError={handleImageError}
-        />
+      {/* Loading placeholder */}
+      {!imageLoaded && !imageError && (
+        <div className="absolute inset-0 bg-slate-700 animate-pulse" />
       )}
 
-      {/* Video indicator icon */}
-      {isVideo && !isHovering && loadState === 'loaded' && !shouldBlur && (
-        <div className="absolute bottom-2 left-2 p-1.5 rounded-lg bg-black/60 backdrop-blur-sm">
-          <Play className="w-4 h-4 text-white fill-white" />
+      {/* Error state */}
+      {imageError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-500">
+          <span className="text-sm">Failed to load</span>
         </div>
       )}
 
-      {/* Audio indicator */}
-      {isVideo && hasAudio && showAudioIndicator && loadState === 'loaded' && !shouldBlur && (
-        <button
-          onClick={handleToggleMute}
-          className={clsx(
-            'absolute bottom-2 right-2 p-1.5 rounded-lg',
-            'bg-black/60 backdrop-blur-sm',
-            'text-white hover:bg-black/80',
-            'transition-all duration-200',
-            'opacity-0 group-hover:opacity-100',
-          )}
-        >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4" />
-          ) : (
-            <Volume2 className="w-4 h-4" />
-          )}
-        </button>
-      )}
-
-      {/* NSFW overlay */}
-      {nsfw && nsfwBlurEnabled && (
+      {/* NSFW Blur Overlay - centered indicator (no backdrop-blur to prevent flickering) */}
+      {nsfw && nsfwBlurEnabled && !isRevealed && (
         <div
           className={clsx(
             'absolute inset-0 flex flex-col items-center justify-center',
-            'transition-opacity duration-300',
-            isRevealed ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            'transition-opacity duration-300 pointer-events-none'
           )}
         >
-          <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
-            <EyeOff className="w-6 h-6 text-text-muted mx-auto mb-1" />
-            <span className="text-xs text-text-muted">NSFW</span>
+          <div className="bg-slate-900/90 p-3 rounded-xl text-center shadow-lg">
+            <EyeOff className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+            <span className="text-xs text-slate-400">NSFW</span>
           </div>
         </div>
       )}
 
-      {/* NSFW toggle button */}
-      {nsfw && nsfwBlurEnabled && (
+      {/* NSFW Toggle Button - ONLY visible when card is revealed (to hide it back) */}
+      {/* When blur is ON and NOT revealed, the overlay itself is clickable */}
+      {nsfw && nsfwBlurEnabled && isRevealed && (
         <button
-          onClick={handleReveal}
+          onClick={handleRevealToggle}
           className={clsx(
-            'absolute top-2 right-2 p-1.5 rounded-lg',
-            'bg-slate-deep/80 backdrop-blur-sm',
-            'text-text-secondary hover:text-text-primary',
-            'transition-colors duration-200',
-            'z-10',
+            'absolute top-2 right-2 p-1.5 rounded-lg z-20',
+            'bg-slate-900/90',
+            'text-slate-400 hover:text-white',
+            'transition-colors duration-200'
           )}
+          title="Hide content"
         >
-          {isRevealed ? (
-            <EyeOff className="w-4 h-4" />
-          ) : (
-            <Eye className="w-4 h-4" />
-          )}
+          <EyeOff className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* Clickable reveal area when blurred - clicking anywhere reveals */}
+      {nsfw && nsfwBlurEnabled && !isRevealed && (
+        <button
+          onClick={handleRevealToggle}
+          className="absolute inset-0 z-10 cursor-pointer"
+          title="Click to reveal"
+        />
+      )}
+
+      {/* NSFW Badge - shown when blur is disabled globally */}
+      {nsfw && !nsfwBlurEnabled && (
+        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-500/80 text-white text-xs font-medium z-20">
+          NSFW
+        </div>
+      )}
+
+      {/* Video indicator badge - bottom left (to not conflict with NSFW badge) */}
+      {isVideo && !showVideo && !videoError && (
+        <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10">
+          VIDEO
+        </div>
+      )}
+
+      {/* Audio control for videos */}
+      {isVideo && showVideo && !videoError && (
+        <button
+          className="absolute bottom-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
+          onClick={handleMuteToggle}
+          title={isMuted ? 'Unmute' : 'Mute'}
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>
       )}
     </div>

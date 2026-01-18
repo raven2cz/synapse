@@ -2,6 +2,8 @@
  * Media Constants
  *
  * Shared constants for media type detection and video playback.
+ * 
+ * @version 2.1.0 - Updated for Firefox video stability
  */
 
 /** Video file extensions (lowercase, with dot) */
@@ -59,7 +61,7 @@ export const IMAGE_MIME_TYPES = new Set([
 
 /** Preview playback settings */
 export const PREVIEW_SETTINGS = {
-  /** Duration of auto-play preview in milliseconds */
+  /** Duration of auto-play preview in milliseconds (0 = infinite) */
   PREVIEW_DURATION_MS: 5000,
 
   /** Whether to loop preview playback */
@@ -74,8 +76,8 @@ export const PREVIEW_SETTINGS = {
   /** Intersection observer threshold for lazy loading */
   LAZY_LOAD_THRESHOLD: 0.1,
 
-  /** Intersection observer root margin */
-  LAZY_LOAD_MARGIN: '100px',
+  /** Intersection observer root margin (start loading before visible) */
+  LAZY_LOAD_MARGIN: '200px',
 } as const
 
 /** Video player settings */
