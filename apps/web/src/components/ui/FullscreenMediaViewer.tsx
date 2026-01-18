@@ -27,6 +27,19 @@ type VideoFit = 'fit' | 'fill' | 'original'
 const QUALITY_WIDTHS: Record<VideoQuality, number> = { sd: 450, hd: 720, fhd: 1080 }
 const FIT_LABELS: Record<VideoFit, string> = { fit: 'FIT', fill: 'FILL', original: 'ORIG' }
 
+export const QUALITY_LABELS: Record<VideoQuality, string> = {
+  sd: 'SD',
+  hd: 'HD',
+  fhd: 'FHD',
+}
+
+export function getQualityBadge(q: VideoQuality): string | null {
+  if (q === 'sd') return 'Fast'
+  if (q === 'hd') return 'Standard'
+  if (q === 'fhd') return 'Best'
+  return null
+}
+
 export interface MediaItem {
   url: string
   type?: 'image' | 'video' | 'unknown'
@@ -120,6 +133,7 @@ export function FullscreenMediaViewer({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 
   const [showControls, setShowControls] = useState(true)
+  const [showQualityMenu, setShowQualityMenu] = useState(false)
 
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -423,8 +437,8 @@ export function FullscreenMediaViewer({
         // Inactive slides just show audio/play placeholder or poster
         return (
           <div className="relative w-full h-full flex items-center justify-center select-none">
-            {/* If we have a thumbnail, show it */}
-            <img src={thumb} alt="" className="max-w-full max-h-full object-contain" />
+            {/* If we have a thumbnail, show it with correct sizing */}
+            <img src={thumb} alt="" className={clsx('transition-all duration-300', getVideoClass())} />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-16 h-16 rounded-full bg-black/40 flex items-center justify-center">
                 <Play className="w-8 h-8 text-white fill-white ml-1" />
@@ -594,18 +608,56 @@ export function FullscreenMediaViewer({
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white">{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-white" />}</button>
-                <button onClick={() => skip(-10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"><SkipBack className="w-5 h-5" /></button>
-                <button onClick={() => skip(10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white"><SkipForward className="w-5 h-5" /></button>
+                <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white" title={isPlaying ? 'Pause (K/Space)' : 'Play (K/Space)'}>{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-white" />}</button>
+                <button onClick={() => skip(-10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title="Back 10s (J)"><SkipBack className="w-5 h-5" /></button>
+                <button onClick={() => skip(10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title="Forward 10s (;)"><SkipForward className="w-5 h-5" /></button>
                 <div className="flex items-center gap-2 group/vol">
-                  <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white">{isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>
+                  <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title={isMuted ? 'Unmute (M)' : 'Mute (M)'}>{isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>
                   <input type="range" min="0" max="1" step="0.05" value={volume} onChange={handleVolumeChange} className="w-0 group-hover/vol:w-20 transition-all accent-indigo-500 opacity-0 group-hover/vol:opacity-100" />
                 </div>
                 <span className="text-white/70 text-sm font-mono ml-2">{formatTime(currentTime)} / {formatTime(duration)}</span>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={cycleVideoFit} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40">{FIT_LABELS[videoFit]}</button>
-                <span className={clsx('px-2 py-1 rounded text-xs font-medium cursor-pointer', isLooping ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/50')} onClick={() => setIsLooping(l => !l)}>{isLooping ? 'LOOP' : 'ONCE'}</span>
+                {/* Quality Selector */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowQualityMenu(!showQualityMenu)}
+                    className={clsx(
+                      'px-2.5 py-1 rounded-lg text-xs font-bold transition-all uppercase',
+                      videoQuality !== 'sd'
+                        ? 'bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40'
+                        : 'bg-white/10 text-white/80 hover:bg-white/20'
+                    )}
+                    title="Video quality"
+                  >
+                    {QUALITY_LABELS[videoQuality]}
+                  </button>
+                  {showQualityMenu && (
+                    <div className="absolute bottom-full right-0 mb-2 p-1 bg-black/90 backdrop-blur-xl rounded-xl min-w-[120px] shadow-xl border border-white/10">
+                      {(['sd', 'hd', 'fhd'] as const).map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => {
+                            setVideoQuality(q)
+                            setShowQualityMenu(false)
+                          }}
+                          className={clsx(
+                            'w-full px-3 py-2 text-left text-sm rounded-lg transition-colors flex items-center justify-between',
+                            videoQuality === q
+                              ? 'bg-indigo-500/30 text-indigo-300'
+                              : 'text-white/80 hover:bg-white/10'
+                          )}
+                        >
+                          <span>{QUALITY_LABELS[q]}</span>
+                          {getQualityBadge(q) && <span className="text-xs text-white/40">{getQualityBadge(q)}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button onClick={cycleVideoFit} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40" title={videoFit === 'fit' ? 'Fit to screen' : videoFit === 'fill' ? 'Fill screen' : 'Original size'}>{FIT_LABELS[videoFit]}</button>
+                <span className={clsx('px-2 py-1 rounded text-xs font-medium cursor-pointer', isLooping ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/50')} onClick={() => setIsLooping(l => !l)} title="Toggle loop (L)">{isLooping ? 'LOOP' : 'ONCE'}</span>
               </div>
             </div>
           </div>

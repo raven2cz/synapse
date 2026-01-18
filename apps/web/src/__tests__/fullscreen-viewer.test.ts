@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { QUALITY_LABELS, getQualityBadge } from '../components/ui/FullscreenMediaViewer'
 
 // ============================================================================
 // Quality Selector Tests
@@ -21,12 +22,6 @@ const QUALITY_WIDTHS: Record<VideoQuality, number> = {
   sd: 450,
   hd: 720,
   fhd: 1080,
-}
-
-const QUALITY_LABELS: Record<VideoQuality, string> = {
-  sd: 'SD',
-  hd: 'HD',
-  fhd: 'FHD',
 }
 
 describe('Quality Selector', () => {
@@ -86,16 +81,25 @@ describe('Quality Selector', () => {
       }
 
       selectQuality('hd')
+
       expect(videoQuality).toBe('hd')
       expect(showQualityMenu).toBe(false)
     })
 
     it('should have all quality options available', () => {
-      const availableQualities: VideoQuality[] = ['sd', 'hd', 'fhd']
+      // Test the keys of the IMPORTED constant
+      const availableQualities = Object.keys(QUALITY_LABELS)
       expect(availableQualities).toHaveLength(3)
       expect(availableQualities).toContain('sd')
       expect(availableQualities).toContain('hd')
       expect(availableQualities).toContain('fhd')
+    })
+
+    it('should show extra info labels for specific qualities', () => {
+      // Test the IMPORTED helper function directly
+      expect(getQualityBadge('sd')).toBe('Fast')
+      expect(getQualityBadge('hd')).toBe('Standard')
+      expect(getQualityBadge('fhd')).toBe('Best')
     })
   })
 })
