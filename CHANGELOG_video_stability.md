@@ -1,3 +1,154 @@
+## [2.5.1] - 2025-01-18 (Quality Selector + Autoplay + Fit Mode)
+
+### New Features
+
+**🎬 Video Autoplay**
+- Videos now automatically start playing when fullscreen opens
+- No more waiting or clicking play button
+
+**📺 Quality Selector**
+- `SD` (450p) - Fast, instant playback (same as preview)
+- `HD` (720p) - Higher quality
+- `FHD` (1080p) - Full HD quality
+- Click quality badge to switch
+- Highlighted when using higher quality
+
+**🖼️ Fit Mode Toggle**
+- `Contain` - Fit video to screen with letterboxing (default)
+- `Cover` - Fill entire screen, may crop edges
+- Click maximize/minimize icon to toggle
+
+### UI Improvements
+- Quality menu with "Fast" and "Best" hints
+- Loop indicator is now clickable (toggles loop)
+- Better control button styling
+
+---
+
+## [2.5.0] - 2025-01-18 (Professional Fullscreen Viewer)
+
+### Major Redesign: FullscreenMediaViewer
+
+**🚀 Fast Video Loading**
+- Now uses SAME quality (width=450) as preview thumbnails
+- Video starts INSTANTLY - no re-downloading when opening fullscreen
+- Previously used width=1080 which caused 20+ second delays
+
+**🎬 Professional Video Controls (YouTube/Vimeo style)**
+- Smooth progress bar with:
+  - Hover time preview
+  - Buffered indicator
+  - Animated thumb on hover
+- Skip back/forward 10 seconds buttons
+- Volume slider (appears on hover)
+- Playback speed selector (0.25x - 2x)
+- Loop toggle with visual indicator
+- Play/Pause overlay icon
+- Buffering spinner
+- Time display (current / total)
+
+**🖼️ Advanced Image Viewer**
+- Wheel zoom (smooth, up to 5x)
+- Double-click to toggle zoom (1x ↔ 2.5x)
+- Pan/drag when zoomed (cursor changes to grab)
+- Reset view button
+- Zoom percentage display
+
+**⌨️ Complete Keyboard Shortcuts**
+| Key | Action |
+|-----|--------|
+| Space | Play/Pause |
+| M | Mute/Unmute |
+| L | Toggle Loop |
+| F | Fullscreen |
+| ←/→ | Previous/Next |
+| Shift+←/→ | Seek ±10s |
+| ↑/↓ | Volume ±10% |
+| ,/. | Frame step (±1/30s) |
+| +/- | Zoom in/out |
+| 0 | Reset zoom |
+| Esc | Close |
+
+**🎨 Modern UI**
+- Gradient overlays (top/bottom)
+- Auto-hide controls after 3s
+- Smooth hover animations
+- Backdrop blur effects
+- Color-coded states (indigo for active, red for NSFW)
+- Professional button styling
+- Keyboard shortcuts help text
+
+---
+
+## [2.5.0] - 2025-01-18 (Professional Fullscreen Viewer)
+
+### ⚡ INSTANT Video Loading in Fullscreen
+
+**Problem:** Video took 20+ seconds to load in fullscreen because it was downloading a higher resolution version (width=1080).
+
+**Solution:** Now uses the SAME resolution as preview (width=450), so video starts INSTANTLY because it's already cached.
+
+```diff
+- getCivitaiVideoUrl(url, 1080)  // Downloads new HQ video
++ getCivitaiVideoUrl(url, 450)   // Uses cached preview video
+```
+
+### 🎬 Netflix-Style Video Controls
+
+- **Progress bar** with gradient and hover thumb indicator
+- **Skip ±10s buttons** (J/;) for quick navigation
+- **Volume slider** - appears on hover
+- **Loop indicator** (LOOP/ONCE) with toggle
+- **Buffering spinner** while loading
+- **Big center play button** when paused
+- **Auto-hide controls** after 3 seconds
+
+### 🖼️ PhotoSwipe-Style Image Viewer
+
+- **Mouse wheel zoom** - smooth zoom in/out
+- **Double-click zoom** - toggle between 1x and 2x
+- **Drag to pan** - when zoomed in
+- **Reset zoom button** - back to 1x
+- **Zoom percentage display** in header
+
+### 📸 Thumbnail Strip
+
+- Shows all media items at bottom
+- Click to navigate directly
+- Current item highlighted with indigo ring
+- Videos marked with play icon
+- NSFW items blurred if enabled
+
+### ⌨️ Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| Space/K | Play/Pause |
+| J | Skip back 10s |
+| ; | Skip forward 10s |
+| M | Mute/Unmute |
+| L | Toggle loop |
+| +/- | Zoom in/out (images) |
+| 0 | Reset zoom |
+| F | Native fullscreen |
+| ←/→ | Previous/Next |
+| Esc | Close |
+| ↑/↓ | Volume up/down |
+
+### 💾 Download
+
+- Download button fetches HQ version (1080p for video)
+- Proper filename: `synapse_1.mp4` or `synapse_1.jpg`
+
+### 🎨 Visual Design
+
+- **Glassmorphism** - translucent controls with blur
+- **Gradient progress bar** - indigo to purple
+- **Smooth transitions** - controls fade in/out
+- **Dark background** - pure black for maximum contrast
+
+---
+
 ## [2.4.2] - 2025-01-18 (Final NSFW + Z-index Fix)
 
 ### Critical Fixes
