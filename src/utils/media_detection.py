@@ -9,12 +9,16 @@ Detection strategy (in order):
 2. URL pattern check (known video CDN patterns)
 3. Content-Type header check (HEAD request)
 4. Fallback to 'unknown' for frontend to handle
+
+Civitai URL Transformations:
+- Thumbnail (static): anim=false,transcode=true,width=450,optimized=true
+- Video (animated):   transcode=true,width=450,optimized=true
 """
 
 import re
 import logging
-from typing import Optional, Tuple, Literal
-from urllib.parse import urlparse, parse_qs
+from typing import Optional, Tuple
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 from enum import Enum
 from dataclasses import dataclass
 
@@ -66,6 +70,8 @@ VIDEO_URL_PATTERNS = [
     r'civitai\.com.*video',
     r'civitai\.com.*\.mp4',
     r'civitai\.com.*\.webm',
+    # Civitai transcode pattern (indicates video)
+    r'civitai\.com.*transcode=true',
     # Generic video hosting
     r'\.mp4(\?|$)',
     r'\.webm(\?|$)',
@@ -126,13 +132,13 @@ def get_url_extension(url: str) -> Optional[str]:
 
 def detect_by_extension(url: str) -> MediaType:
     """
-    Detect media type by URL file extension.
+    Detect media type by file extension in URL.
     
     Args:
         url: The URL to check
         
     Returns:
-        MediaType.VIDEO, MediaType.IMAGE, or MediaType.UNKNOWN
+        MediaType enum value
     """
     ext = get_url_extension(url)
     
@@ -152,61 +158,50 @@ def detect_by_url_pattern(url: str) -> MediaType:
         url: The URL to check
         
     Returns:
-        MediaType.VIDEO or MediaType.UNKNOWN (never IMAGE)
+        MediaType enum value (VIDEO or UNKNOWN, never IMAGE)
     """
     if not url:
         return MediaType.UNKNOWN
     
-    for regex in _VIDEO_URL_REGEXES:
-        if regex.search(url):
+    for pattern in _VIDEO_URL_REGEXES:
+        if pattern.search(url):
             return MediaType.VIDEO
     
     return MediaType.UNKNOWN
 
 
 def detect_by_content_type(
-    url: str, 
+    url: str,
     timeout: float = 5.0,
     api_key: Optional[str] = None,
 ) -> Tuple[MediaType, Optional[str]]:
     """
-    Detect media type by making a HEAD request to check Content-Type.
-    
-    This is the most reliable method but requires a network request.
+    Detect media type via HEAD request Content-Type header.
     
     Args:
         url: The URL to check
         timeout: Request timeout in seconds
-        api_key: Optional API key for authenticated requests (Civitai)
+        api_key: Optional API key for authenticated requests
         
     Returns:
-        Tuple of (MediaType, mime_type_string or None)
+        Tuple of (MediaType, mime_type string or None)
     """
     if not HAS_REQUESTS:
-        logger.warning("requests library not available, cannot check Content-Type")
-        return MediaType.UNKNOWN, None
-    
-    if not url:
         return MediaType.UNKNOWN, None
     
     try:
-        headers = {
-            'User-Agent': 'Synapse/2.2 (Media Detection)',
-        }
+        headers = {}
         if api_key:
             headers['Authorization'] = f'Bearer {api_key}'
         
-        response = requests.head(
-            url, 
-            timeout=timeout, 
-            allow_redirects=True,
-            headers=headers,
-        )
+        response = requests.head(url, timeout=timeout, headers=headers, allow_redirects=True)
+        content_type = response.headers.get('Content-Type', '')
         
-        content_type = response.headers.get('Content-Type', '').lower()
+        if not content_type:
+            return MediaType.UNKNOWN, None
         
-        # Extract MIME type (ignore charset etc.)
-        mime_type = content_type.split(';')[0].strip()
+        # Parse MIME type (ignore charset and other params)
+        mime_type = content_type.split(';')[0].strip().lower()
         
         if mime_type in VIDEO_MIME_TYPES:
             return MediaType.VIDEO, mime_type
@@ -219,8 +214,6 @@ def detect_by_content_type(
         elif mime_type.startswith('image/'):
             # Special case: image/gif and image/webp can be animated
             if mime_type in ('image/gif', 'image/webp'):
-                # We can't know if it's animated without downloading
-                # Return as unknown so frontend can handle it
                 return MediaType.UNKNOWN, mime_type
             return MediaType.IMAGE, mime_type
         
@@ -271,8 +264,6 @@ def detect_media_type(
                 mime_type=mime_type,
                 detection_method="content_type",
             )
-        # Even if type is unknown, if we got mime_type, we might want to return it? 
-        # But let's fall through to other methods if HEAD was inconclusive (e.g. timeout or unknown mime)
 
     # Strategy 2: Extension check
     ext_type = detect_by_extension(url)
@@ -290,7 +281,6 @@ def detect_media_type(
             detection_method="url_pattern",
         )
 
-    
     # Fallback: unknown
     return MediaInfo(
         type=MediaType.UNKNOWN,
@@ -329,14 +319,59 @@ def is_likely_animated(url: str) -> bool:
     return ext in {'.gif', '.webp'}
 
 
-def get_video_thumbnail_url(video_url: str) -> Optional[str]:
+def transform_civitai_url(url: str, params: dict) -> str:
     """
-    Try to derive a thumbnail URL from a video URL.
+    Transform a Civitai image URL with new parameters.
     
-    Some CDNs provide thumbnail URLs in predictable formats.
+    Civitai uses a specific URL format:
+    https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/{uuid}/{params}/{filename}
+    
+    Args:
+        url: Original Civitai URL
+        params: Dict of params like {'anim': 'false', 'transcode': 'true', 'width': '450'}
+        
+    Returns:
+        Transformed URL
+    """
+    if not url or 'civitai.com' not in url:
+        return url
+    
+    try:
+        # Parse URL
+        parsed = urlparse(url)
+        path_parts = parsed.path.split('/')
+        
+        # Find the params segment (contains = signs like width=450)
+        # Format: /{uuid}/{params}/{filename}
+        for i, part in enumerate(path_parts):
+            if '=' in part or part.startswith('width'):
+                # Replace params segment
+                param_str = ','.join(f"{k}={v}" for k, v in params.items())
+                path_parts[i] = param_str
+                break
+        else:
+            # No params found, insert before filename
+            if len(path_parts) >= 2:
+                param_str = ','.join(f"{k}={v}" for k, v in params.items())
+                path_parts.insert(-1, param_str)
+        
+        new_path = '/'.join(path_parts)
+        return urlunparse((parsed.scheme, parsed.netloc, new_path, '', '', ''))
+        
+    except Exception as e:
+        logger.debug(f"Failed to transform Civitai URL {url}: {e}")
+        return url
+
+
+def get_video_thumbnail_url(video_url: str, width: int = 450) -> Optional[str]:
+    """
+    Get a static thumbnail URL from a video URL.
+    
+    For Civitai, uses anim=false parameter to get static frame.
     
     Args:
         video_url: The video URL
+        width: Desired thumbnail width
         
     Returns:
         Thumbnail URL if derivable, None otherwise
@@ -344,17 +379,43 @@ def get_video_thumbnail_url(video_url: str) -> Optional[str]:
     if not video_url:
         return None
     
-    # Civitai: Replace /video/ with /image/ or append thumbnail param
-    if 'civitai.com' in video_url:
-        # Try common patterns
-        if '/video/' in video_url:
-            return video_url.replace('/video/', '/image/')
-        # Some Civitai URLs support ?thumbnail=true
-        if '?' in video_url:
-            return video_url + '&thumbnail=true'
-        return video_url + '?thumbnail=true'
+    # Civitai: Use anim=false to get static thumbnail
+    if 'civitai.com' in video_url or 'image.civitai.com' in video_url:
+        return transform_civitai_url(video_url, {
+            'anim': 'false',
+            'transcode': 'true', 
+            'width': str(width),
+            'optimized': 'true',
+        })
     
     return None
+
+
+def get_optimized_video_url(url: str, width: int = 450) -> str:
+    """
+    Get an optimized video URL with transcoding.
+    
+    For Civitai, uses transcode=true to get WebP/MP4 optimized version.
+    
+    Args:
+        url: The original URL
+        width: Desired video width
+        
+    Returns:
+        Optimized video URL
+    """
+    if not url:
+        return url
+    
+    # Civitai: Use transcode=true for optimized video
+    if 'civitai.com' in url or 'image.civitai.com' in url:
+        return transform_civitai_url(url, {
+            'transcode': 'true',
+            'width': str(width),
+            'optimized': 'true',
+        })
+    
+    return url
 
 
 # Export commonly used items
@@ -368,6 +429,8 @@ __all__ = [
     'is_video_url',
     'is_likely_animated',
     'get_video_thumbnail_url',
+    'get_optimized_video_url',
+    'transform_civitai_url',
     'get_url_extension',
     'VIDEO_EXTENSIONS',
     'IMAGE_EXTENSIONS',

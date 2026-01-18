@@ -1,12 +1,34 @@
 /**
- * Media Library - Index
+ * Media Library
  *
- * Re-exports all media utilities for convenient imports.
- *
- * @example
- * import { detectMediaType, PREVIEW_SETTINGS } from '@/lib/media'
+ * Utilities for media type detection and video playback.
  */
 
-export * from './detection'
-export * from './constants'
+// Detection utilities
+export {
+  detectMediaType,
+  detectByExtension,
+  detectByUrlPattern,
+  detectFromApiResponse,
+  isVideoUrl,
+  isLikelyAnimated,
+  getVideoThumbnailUrl,
+  getUrlExtension,
+  canPlayVideoType,
+  getBestVideoUrl,
+  probeMediaType,
+} from './detection'
+
 export type { MediaType, MediaInfo } from './detection'
+
+// Constants
+export {
+  VIDEO_EXTENSIONS,
+  IMAGE_EXTENSIONS,
+  VIDEO_MIME_TYPES,
+  IMAGE_MIME_TYPES,
+  PREVIEW_SETTINGS,
+  PLAYER_SETTINGS,
+  SUPPORTED_VIDEO_FORMATS,
+  STORAGE_KEYS,
+} from './constants'
