@@ -1,8 +1,8 @@
 /**
- * FullscreenMediaViewer Component - v3.0.0
+ * FullscreenMediaViewer Component - v4.0.0
  * 
- * FIXED: Animation uses direct CSS classes (no CSS variables)
- * FIXED: Image error handling with fallback
+ * NEW: Google Photos-style sliding transition
+ * FIXED: Thumbnail scroll sensitivity
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
@@ -17,7 +17,9 @@ import { useSettingsStore } from '@/stores/settingsStore'
 // ============================================================================
 // Types & Constants
 // ============================================================================
-const SLIDE_DURATION = 300
+const SLIDE_DURATION = 300 // ms
+// Easing derived from standard material/iOS curves for smooth sliding
+const SLIDE_EASING = 'cubic-bezier(0.2, 0.0, 0.0, 1.0)'
 
 type VideoQuality = 'sd' | 'hd' | 'fhd'
 type VideoFit = 'fit' | 'fill' | 'original'
@@ -56,7 +58,7 @@ function getCivitaiVideoUrl(url: string, quality: VideoQuality = 'sd'): string {
     if (idx >= 0) parts[idx] = params
     else if (parts.length >= 3) parts.splice(-1, 0, params)
     const lastIdx = parts.length - 1
-    if (lastIdx >= 0) parts[lastIdx] = parts[lastIdx].replace(/\.[^.]+$/, '') + '.mp4'
+    if (lastIdx >= 0) parts.splice(lastIdx, 1, parts[lastIdx].replace(/\.[^.]+$/, '') + '.mp4')
     urlObj.pathname = parts.join('/')
     return urlObj.toString()
   } catch { return url }
@@ -84,40 +86,6 @@ function isLikelyVideo(url: string): boolean {
 }
 
 // ============================================================================
-// CSS Animation Styles - embedded directly to ensure they work
-// ============================================================================
-const ANIMATION_STYLES = `
-  .fmv-enter-from-right {
-    animation: fmvEnterFromRight ${SLIDE_DURATION}ms ease-out forwards;
-  }
-  .fmv-enter-from-left {
-    animation: fmvEnterFromLeft ${SLIDE_DURATION}ms ease-out forwards;
-  }
-  .fmv-exit-to-left {
-    animation: fmvExitToLeft ${SLIDE_DURATION}ms ease-out forwards;
-  }
-  .fmv-exit-to-right {
-    animation: fmvExitToRight ${SLIDE_DURATION}ms ease-out forwards;
-  }
-  @keyframes fmvEnterFromRight {
-    0% { transform: translateX(100%); }
-    100% { transform: translateX(0%); }
-  }
-  @keyframes fmvEnterFromLeft {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(0%); }
-  }
-  @keyframes fmvExitToLeft {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(-100%); }
-  }
-  @keyframes fmvExitToRight {
-    0% { transform: translateX(0%); }
-    100% { transform: translateX(100%); }
-  }
-`
-
-// ============================================================================
 // Component
 // ============================================================================
 export function FullscreenMediaViewer({
@@ -127,13 +95,11 @@ export function FullscreenMediaViewer({
 
   // Navigation & animation state
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [displayIndex, setDisplayIndex] = useState(initialIndex) // What's actually shown
-  const [animationState, setAnimationState] = useState<{
-    isAnimating: boolean
-    direction: 'left' | 'right' | null
-    fromIndex: number | null
-  }>({ isAnimating: false, direction: null, fromIndex: null })
-  
+  // Animation offset: 0 = center, -1 = showing next (partial), 1 = showing prev (partial)
+  // We use translateX pixels/percent for the container
+  const [slideOffset, setSlideOffset] = useState(0)
+  const [isAnimating, setIsAnimating] = useState(false)
+
   const [isRevealed, setIsRevealed] = useState(false)
 
   // Video state
@@ -164,9 +130,13 @@ export function FullscreenMediaViewer({
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 
   // Derived
-  const currentItem = items[displayIndex]
+  const currentItem = items[currentIndex]
   const isVideo = currentItem?.type === 'video' || isLikelyVideo(currentItem?.url || '')
   const shouldBlur = currentItem?.nsfw && nsfwBlurEnabled && !isRevealed
+
+  // Pre-calculate adjacent indices for the sliding window
+  const prevIndex = currentIndex > 0 ? currentIndex - 1 : null
+  const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : null
 
   const videoUrl = useMemo(() => {
     if (!currentItem?.url || !isVideo) return ''
@@ -204,8 +174,8 @@ export function FullscreenMediaViewer({
   useEffect(() => {
     if (isOpen) {
       setCurrentIndex(initialIndex)
-      setDisplayIndex(initialIndex)
-      setAnimationState({ isAnimating: false, direction: null, fromIndex: null })
+      setSlideOffset(0)
+      setIsAnimating(false)
       setIsRevealed(false)
       setImageZoom(1)
       setImagePosition({ x: 0, y: 0 })
@@ -219,67 +189,86 @@ export function FullscreenMediaViewer({
     }
   }, [isOpen, initialIndex, scrollToThumb])
 
-  // Reset media on display index change (when not animating)
+  // Reset media state when index changes (but not during animation start, only after)
+  // Actually we handle this naturally because the "Active" slide changes
   useEffect(() => {
-    if (!animationState.isAnimating) {
-      setIsRevealed(false)
-      setImageZoom(1)
-      setImagePosition({ x: 0, y: 0 })
-      setIsPlaying(false)
-      setCurrentTime(0)
-      setDuration(0)
-    }
-  }, [displayIndex, animationState.isAnimating])
+    // When the index settles, reset image zoom if we changed items
+    setImageZoom(1)
+    setImagePosition({ x: 0, y: 0 })
+  }, [currentIndex])
 
   // Autoplay
   useEffect(() => {
-    if (!isOpen || !isVideo || shouldBlur || animationState.isAnimating) return
+    if (!isOpen || !isVideo || shouldBlur || isAnimating) return
     const v = videoRef.current
     if (!v) return
-    const t = setTimeout(() => v.play().catch(() => {}), 100)
+    // Small timeout to ensure DOM is ready
+    const t = setTimeout(() => {
+      if (v.paused) v.play().catch(() => { })
+    }, 100)
     return () => clearTimeout(t)
-  }, [isOpen, isVideo, shouldBlur, displayIndex, videoUrl, animationState.isAnimating])
+  }, [isOpen, isVideo, shouldBlur, currentIndex, videoUrl, isAnimating])
 
   // Auto-hide controls
   const resetControlsTimeout = useCallback(() => {
     if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current)
     setShowControls(true)
-    controlsTimeoutRef.current = setTimeout(() => { if (isPlaying) setShowControls(false) }, 3000)
+    if (isPlaying) {
+      controlsTimeoutRef.current = setTimeout(() => setShowControls(false), 3000)
+    }
   }, [isPlaying])
 
-  useEffect(() => () => { if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current) }, [])
+  useEffect(() => {
+    if (isPlaying) resetControlsTimeout()
+    return () => { if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current) }
+  }, [isPlaying, resetControlsTimeout])
+
 
   // ============================================================================
-  // NAVIGATION - Fixed animation logic
+  // NAVIGATION - Google Photos Style
   // ============================================================================
   const navigateTo = useCallback((newIdx: number) => {
-    if (newIdx < 0 || newIdx >= items.length || newIdx === currentIndex || animationState.isAnimating) return
-    
-    const goingNext = newIdx > currentIndex
-    const direction = goingNext ? 'left' : 'right'
-    
-    // Start animation - keep showing old content, prepare new
-    setAnimationState({
-      isAnimating: true,
-      direction,
-      fromIndex: currentIndex,
-    })
-    setCurrentIndex(newIdx)
-    
-    // Immediately update display to new index (for entering slide)
-    // The exiting slide shows fromIndex
-    setDisplayIndex(newIdx)
-    onIndexChange?.(newIdx)
+    if (newIdx < 0 || newIdx >= items.length || newIdx === currentIndex || isAnimating) return
 
-    // After animation, clean up
-    setTimeout(() => {
-      setAnimationState({ isAnimating: false, direction: null, fromIndex: null })
+    const direction = newIdx > currentIndex ? 'next' : 'prev'
+    const diff = newIdx - currentIndex
+
+    // For immediate neighbors, we slide. For jumps, we might just cut or fast slide?
+    // Let's implement smooth sliding for neighbors, and maybe fast slide for jumps.
+    // Simpler: Just handle neighbors strictly for the "slide" effect.
+    // If jumping far, we can just switch instantly or do a fade.
+    // But the user asked for "animace pro prechod", implying next/prev usually.
+
+    if (Math.abs(diff) === 1) {
+      setIsAnimating(true)
+      // If going NEXT, we want to slide everything to LEFT (-100%)
+      // If going PREV, we want to slide everything to RIGHT (+100%)
+      setSlideOffset(direction === 'next' ? -100 : 100)
+
+      // Wait for animation, then reset
+      setTimeout(() => {
+        setIsAnimating(false)
+        setCurrentIndex(newIdx)
+        setSlideOffset(0)
+        onIndexChange?.(newIdx)
+        scrollToThumb(newIdx)
+      }, SLIDE_DURATION)
+    } else {
+      // Jump
+      setCurrentIndex(newIdx)
+      onIndexChange?.(newIdx)
       scrollToThumb(newIdx)
-    }, SLIDE_DURATION)
-  }, [currentIndex, items.length, onIndexChange, animationState.isAnimating, scrollToThumb])
+    }
 
-  const goToPrevious = useCallback(() => { if (currentIndex > 0) navigateTo(currentIndex - 1) }, [currentIndex, navigateTo])
-  const goToNext = useCallback(() => { if (currentIndex < items.length - 1) navigateTo(currentIndex + 1) }, [currentIndex, items.length, navigateTo])
+  }, [currentIndex, items.length, onIndexChange, isAnimating, scrollToThumb])
+
+  const goToPrevious = useCallback(() => {
+    if (currentIndex > 0) navigateTo(currentIndex - 1)
+  }, [currentIndex, navigateTo])
+
+  const goToNext = useCallback(() => {
+    if (currentIndex < items.length - 1) navigateTo(currentIndex + 1)
+  }, [currentIndex, items.length, navigateTo])
 
   // Video controls
   const togglePlay = useCallback(() => { if (videoRef.current) isPlaying ? videoRef.current.pause() : videoRef.current.play() }, [isPlaying])
@@ -353,7 +342,8 @@ export function FullscreenMediaViewer({
 
   const handleThumbWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
-    if (thumbnailsRef.current) thumbnailsRef.current.scrollLeft += e.deltaY
+    // INCREASED SENSITIVITY: Multiplier added here
+    if (thumbnailsRef.current) thumbnailsRef.current.scrollLeft += (e.deltaY * 3.0)
   }, [])
 
   // Download
@@ -364,11 +354,11 @@ export function FullscreenMediaViewer({
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `synapse_${displayIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
+      a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
       a.click()
       URL.revokeObjectURL(url)
     } catch { window.open(downloadUrl, '_blank') }
-  }, [downloadUrl, isVideo, displayIndex])
+  }, [downloadUrl, isVideo, currentIndex])
 
   const handleOpenExternal = useCallback(() => { if (currentItem?.url) window.open(currentItem.url, '_blank') }, [currentItem])
 
@@ -403,23 +393,22 @@ export function FullscreenMediaViewer({
   const formatTime = (s: number) => !isFinite(s) ? '0:00' : `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`
 
   // ============================================================================
-  // Render slide content
+  // Render slide content helper
   // ============================================================================
-  const renderSlide = useCallback((item: MediaItem, isExitingSlide: boolean) => {
+  const renderSlideContent = useCallback((item: MediaItem, isActive: boolean) => {
     const itemIsVideo = item.type === 'video' || isLikelyVideo(item.url)
     const itemBlur = item.nsfw && nsfwBlurEnabled && !isRevealed
     const thumb = getThumbUrl(item)
-    const useThumb = isExitingSlide || animationState.isAnimating
 
     if (itemBlur) {
       return (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full h-full flex items-center justify-center select-none">
           <div className="text-center">
             <div className="w-24 h-24 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-6">
               <EyeOff className="w-12 h-12 text-white/60" />
             </div>
             <p className="text-white/80 text-xl mb-6">NSFW Content</p>
-            {!isExitingSlide && !animationState.isAnimating && (
+            {isActive && (
               <button onClick={() => setIsRevealed(true)} className="px-8 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition-colors">
                 Click to reveal
               </button>
@@ -430,10 +419,12 @@ export function FullscreenMediaViewer({
     }
 
     if (itemIsVideo) {
-      if (useThumb) {
+      if (!isActive) {
+        // Inactive slides just show audio/play placeholder or poster
         return (
-          <div className="relative w-full h-full flex items-center justify-center">
-            <img src={thumb} alt="" className="max-w-full max-h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+          <div className="relative w-full h-full flex items-center justify-center select-none">
+            {/* If we have a thumbnail, show it */}
+            <img src={thumb} alt="" className="max-w-full max-h-full object-contain" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-16 h-16 rounded-full bg-black/40 flex items-center justify-center">
                 <Play className="w-8 h-8 text-white fill-white ml-1" />
@@ -442,9 +433,10 @@ export function FullscreenMediaViewer({
           </div>
         )
       }
+
       const vUrl = item.url.includes('civitai.com') ? getCivitaiVideoUrl(item.url, videoQuality) : item.url
       return (
-        <div className="relative w-full h-full flex items-center justify-center">
+        <div className="relative w-full h-full flex items-center justify-center select-none">
           <video ref={videoRef} src={vUrl} poster={thumb} loop={isLooping} muted={isMuted} playsInline
             className={clsx('transition-all duration-300', getVideoClass())} onClick={togglePlay}
             onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)}
@@ -452,62 +444,51 @@ export function FullscreenMediaViewer({
             onDurationChange={(e) => setDuration(e.currentTarget.duration)}
             onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onLoadedData={() => setIsBuffering(false)} />
           {isBuffering && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Loader2 className="w-12 h-12 text-white animate-spin" /></div>}
-          {!isPlaying && !isBuffering && (
-            <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center group">
-              <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center transition-all group-hover:bg-white/30 group-hover:scale-110">
-                <Play className="w-10 h-10 text-white fill-white ml-1" />
-              </div>
-            </button>
-          )}
         </div>
       )
     }
 
     // Image
-    const imgSrc = useThumb ? thumb : item.url
+    // Only apply zoom transforms if active
+    const style = isActive ? {
+      transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`,
+      cursor: isDragging ? 'grabbing' : 'grab'
+    } : undefined
+
+    // Only apply transition if NOT dragging (for smooth zoom/reset) and is active
+    const classes = clsx(
+      'max-w-full max-h-full object-contain select-none',
+      isActive && !isDragging && 'transition-transform duration-150 ease-out'
+    )
+
     return (
-      <img src={imgSrc} alt=""
-        className={clsx('max-w-full max-h-full object-contain select-none', !isExitingSlide && !animationState.isAnimating && !isDragging && 'transition-transform duration-150 ease-out')}
-        style={!isExitingSlide && !animationState.isAnimating ? { transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`, cursor: isDragging ? 'grabbing' : 'grab' } : undefined}
+      <img src={item.url} alt=""
+        className={classes}
+        style={style}
         draggable={false}
-        onError={(e) => { 
+        onError={(e) => {
           const img = e.target as HTMLImageElement
-          if (img.src !== item.url) img.src = item.url 
+          if (img.src !== item.url) img.src = item.url
+          else if (item.thumbnailUrl && img.src !== item.thumbnailUrl) img.src = item.thumbnailUrl
         }}
       />
     )
-  }, [nsfwBlurEnabled, isRevealed, animationState.isAnimating, videoQuality, isLooping, isMuted, getVideoClass, togglePlay, isBuffering, isPlaying, imageZoom, imagePosition, isDragging, getThumbUrl])
+  }, [nsfwBlurEnabled, isRevealed, videoQuality, isLooping, isMuted, getThumbUrl, getVideoClass, togglePlay, isBuffering, imageZoom, imagePosition, isDragging])
+
 
   if (!isOpen || !currentItem) return null
-
-  // Determine animation classes
-  const { isAnimating, direction, fromIndex } = animationState
-  const exitingItem = fromIndex !== null ? items[fromIndex] : null
-
-  // Animation classes based on direction
-  let enterClass = ''
-  let exitClass = ''
-  if (isAnimating && direction) {
-    // Going left (next): enter from right, exit to left
-    // Going right (prev): enter from left, exit to right
-    enterClass = direction === 'left' ? 'fmv-enter-from-right' : 'fmv-enter-from-left'
-    exitClass = direction === 'left' ? 'fmv-exit-to-left' : 'fmv-exit-to-right'
-  }
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-[100] bg-black flex flex-col overflow-hidden"
       onClick={onClose} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-      
-      {/* Embedded CSS for animations */}
-      <style dangerouslySetInnerHTML={{ __html: ANIMATION_STYLES }} />
 
       {/* Top bar */}
       <div className={clsx('absolute top-0 left-0 right-0 z-30 transition-all duration-300', showControls ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-full')} onClick={e => e.stopPropagation()}>
         <div className="p-4 bg-gradient-to-b from-black/80 to-transparent">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <span className="text-white/80 font-medium px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">{displayIndex + 1} / {items.length}</span>
-              {isVideo && !isAnimating && <span className="text-white/60 text-sm px-2 py-1 rounded bg-indigo-500/30 text-indigo-300">{FIT_LABELS[videoFit]}</span>}
+              <span className="text-white/80 font-medium px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">{currentIndex + 1} / {items.length}</span>
+              {isVideo && <span className="text-white/60 text-sm px-2 py-1 rounded bg-indigo-500/30 text-indigo-300">{FIT_LABELS[videoFit]}</span>}
             </div>
             <div className="flex items-center gap-2">
               {currentItem.nsfw && nsfwBlurEnabled && (
@@ -516,13 +497,13 @@ export function FullscreenMediaViewer({
                   {isRevealed ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               )}
-              {isVideo && !isAnimating && (
+              {isVideo && (
                 <button onClick={e => { e.stopPropagation(); toggleLoop() }}
                   className={clsx('p-2.5 rounded-xl backdrop-blur-sm transition-all', isLooping ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/60')}>
                   <Repeat className="w-5 h-5" />
                 </button>
               )}
-              {!isVideo && !isAnimating && (
+              {!isVideo && (
                 <>
                   <button onClick={e => { e.stopPropagation(); zoomOut() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ZoomOut className="w-5 h-5" /></button>
                   <span className="text-white/80 text-sm min-w-[4rem] text-center font-medium">{Math.round(imageZoom * 100)}%</span>
@@ -556,34 +537,61 @@ export function FullscreenMediaViewer({
         </>
       )}
 
-      {/* Main content area */}
-      <div ref={contentRef} className="absolute inset-0 overflow-hidden" style={{ paddingTop: '64px', paddingBottom: '160px' }}
-        onClick={e => e.stopPropagation()} onMouseDown={!isAnimating ? handleMouseDown : undefined}
-        onDoubleClick={!isAnimating ? handleDoubleClick : undefined} onWheel={!isAnimating ? handleWheel : undefined}>
-        
-        {/* EXITING slide (old) - only during animation */}
-        {isAnimating && exitingItem && (
-          <div className={clsx('absolute inset-0 flex items-center justify-center px-4', exitClass)}>
-            {renderSlide(exitingItem, true)}
-          </div>
-        )}
+      {/* Main content area - Sliding Window */}
+      <div className="absolute inset-0 overflow-hidden" style={{ paddingTop: '64px', paddingBottom: '160px' }}>
+        <div ref={contentRef}
+          className="relative w-full h-full"
+          style={{
+            transform: `translateX(${slideOffset}%)`,
+            transition: isAnimating ? `transform ${SLIDE_DURATION}ms ${SLIDE_EASING}` : 'none'
+          }}
+          onClick={e => e.stopPropagation()}
+          onMouseDown={handleMouseDown}
+          onDoubleClick={handleDoubleClick}
+          onWheel={handleWheel}
+        >
+          {/* PREVIOUS SLIDE */}
+          {prevIndex !== null && (
+            <div key={`slide-${prevIndex}`} className="absolute inset-y-0 w-full flex items-center justify-center px-4" style={{ left: '-100%' }}>
+              {renderSlideContent(items[prevIndex], false)}
+            </div>
+          )}
 
-        {/* CURRENT slide (new/active) */}
-        <div className={clsx('absolute inset-0 flex items-center justify-center px-4', isAnimating ? enterClass : '')}>
-          {renderSlide(currentItem, false)}
+          {/* CURRENT SLIDE */}
+          <div key={`slide-${currentIndex}`} className="absolute inset-y-0 w-full flex items-center justify-center px-4" style={{ left: '0' }}>
+            {renderSlideContent(currentItem, true)}
+
+            {/* Big Play Button Overlay (when paused and controls visible) */}
+            {isVideo && !isPlaying && !isBuffering && showControls && !shouldBlur && (
+              <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center group z-10">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center transition-all group-hover:bg-white/30 group-hover:scale-110">
+                  <Play className="w-10 h-10 text-white fill-white ml-1" />
+                </div>
+              </button>
+            )}
+          </div>
+
+          {/* NEXT SLIDE */}
+          {nextIndex !== null && (
+            <div key={`slide-${nextIndex}`} className="absolute inset-y-0 w-full flex items-center justify-center px-4" style={{ left: '100%' }}>
+              {renderSlideContent(items[nextIndex], false)}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Video controls */}
-      {isVideo && !shouldBlur && !isAnimating && (
+      {isVideo && !shouldBlur && (
         <div className={clsx('absolute left-0 right-0 bottom-[160px] z-30 transition-all duration-300', showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full')} onClick={e => e.stopPropagation()}>
           <div className="px-6 py-4 bg-gradient-to-t from-black/80 to-transparent">
+            {/* Seek Bar */}
             <div className="group mb-4">
               <div className="h-1.5 bg-white/20 rounded-full cursor-pointer relative group-hover:h-2.5 transition-all" onClick={handleProgressClick}>
                 <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full" style={{ width: `${progress}%` }} />
                 <div className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: `calc(${progress}% - 8px)` }} />
               </div>
             </div>
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white">{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-white" />}</button>
@@ -608,7 +616,8 @@ export function FullscreenMediaViewer({
       {items.length > 1 && (
         <div className={clsx('absolute bottom-0 left-0 right-0 z-20 transition-all duration-300', showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-full')} onClick={e => e.stopPropagation()}>
           <div className="bg-gradient-to-t from-black/90 via-black/70 to-transparent">
-            <div ref={thumbnailsRef} className="flex gap-3 px-4 overflow-x-auto scrollbar-thin scrollbar-thumb-white/20" onWheel={handleThumbWheel} style={{ paddingTop: 20, paddingBottom: 16, scrollBehavior: 'smooth' }}>
+            {/* Added scroll sensitivity in handleThumbWheel */}
+            <div ref={thumbnailsRef} className="flex gap-3 px-4 overflow-x-auto scrollbar-thin scrollbar-thumb-white/20 scroll-smooth" onWheel={handleThumbWheel} style={{ paddingTop: 20, paddingBottom: 16 }}>
               {items.map((item, idx) => {
                 const itemIsVideo = item.type === 'video' || isLikelyVideo(item.url)
                 const thumb = getThumbUrl(item)
@@ -619,10 +628,10 @@ export function FullscreenMediaViewer({
                       idx === currentIndex ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-black scale-110' : 'opacity-60 hover:opacity-100 hover:scale-105',
                       isAnimating && 'pointer-events-none')}>
                     <img src={thumb} alt="" className={clsx('w-full h-full object-cover', item.nsfw && nsfwBlurEnabled && 'blur-md')}
-                      onError={(e) => { 
+                      onError={(e) => {
                         const img = e.target as HTMLImageElement
-                        if (img.src !== item.url) img.src = item.url 
-                      }} 
+                        if (img.src !== item.url) img.src = item.url
+                      }}
                     />
                     {itemIsVideo && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Play className="w-5 h-5 text-white fill-white" /></div>}
                     <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white/80 text-xs font-medium">{idx + 1}</div>
