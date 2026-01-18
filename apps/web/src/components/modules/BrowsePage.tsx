@@ -668,6 +668,7 @@ export function BrowsePage() {
                           aspectRatio="portrait"
                           className="cursor-pointer hover:ring-2 ring-synapse"
                           autoPlay={true}
+                          onClick={() => setFullscreenIndex(idx)}
                         />
                       ))}
                     </div>
