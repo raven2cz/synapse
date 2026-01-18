@@ -200,11 +200,9 @@ export function BrowsePage() {
                 download_url: r.download_url,
               }] : [],
             }],
-            previews: r.preview_url ? [{
-              url: r.preview_url,
-              nsfw: r.nsfw || false,
-              media_type: r.preview_type || 'image',
-            }] : [],
+            // CHANGED: Use previews array directly from backend
+            // This preserves media_type, thumbnail_url, and other fields for video support
+            previews: r.previews || [],
           }))
 
           return {
@@ -545,7 +543,6 @@ export function BrowsePage() {
                 aspectRatio="portrait"
                 className="w-full h-full"
                 autoPlay={true}
-                previewDuration={0}
               />
 
               {/* Gradient overlay */}
@@ -670,9 +667,7 @@ export function BrowsePage() {
                           nsfw={preview.nsfw}
                           aspectRatio="portrait"
                           className="cursor-pointer hover:ring-2 ring-synapse"
-                          onClick={() => setFullscreenIndex(idx)}
                           autoPlay={true}
-                          previewDuration={0}
                         />
                       ))}
                     </div>

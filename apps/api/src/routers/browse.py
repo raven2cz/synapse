@@ -1087,8 +1087,10 @@ class CivArchiveResult(BaseModel):
     creator: Optional[str] = None
     download_count: Optional[int] = None
     rating: Optional[float] = None
-    preview_url: Optional[str] = None  # Preview image
     nsfw: bool = False
+    # CHANGED: Use List[ModelPreview] instead of preview_url: str
+    # This matches the format of normal Civitai search results
+    previews: List[ModelPreview] = []
 
 
 class CivArchiveSearchResponse(BaseModel):
@@ -1104,46 +1106,59 @@ def _search_civarchive(query: str, limit: int = 20) -> List[str]:
     """Search CivArchive.com and return list of model URLs."""
     import requests
     from urllib.parse import urljoin
+    import concurrent.futures
     
-    search_url = f"https://civarchive.com/search?q={query.replace(' ', '+')}&rating=all"
+    # Fetch first 3 pages to ensure enough unique models are found
+    # (CivArchive often returns many versions of the same model)
+    pages_to_fetch = [1, 2, 3]
     
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
     
-    logger.info(f"[civarchive] Searching: {search_url}")
-    print(f"[civarchive] Searching: {search_url}")
+    def fetch_page(page_num: int) -> List[str]:
+        search_url = f"https://civarchive.com/search?q={query.replace(' ', '+')}&rating=all&page={page_num}"
+        logger.info(f"[civarchive] Searching page {page_num}: {search_url}")
+        print(f"[civarchive] Searching page {page_num}: {search_url}")
+        
+        try:
+            resp = requests.get(search_url, headers=headers, timeout=30)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.error(f"[civarchive] Search failed page {page_num}: {e}")
+            print(f"[civarchive] Search failed page {page_num}: {e}")
+            return []
+        
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
+            return []
+        
+        soup = BeautifulSoup(resp.text, "html.parser")
+        
+        # Find all model links
+        page_links: List[str] = []
+        for a in soup.select('a[href^="/models/"]'):
+            href = a.get("href") or ""
+            if not re.match(r"^/models/[0-9]+", href):
+                continue
+            full_url = urljoin("https://civarchive.com", href)
+            if full_url not in page_links:
+                page_links.append(full_url)
+        return page_links
+
+    all_links: List[str] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        results = executor.map(fetch_page, pages_to_fetch)
+        for res in results:
+            for link in res:
+                if link not in all_links:
+                    all_links.append(link)
     
-    try:
-        resp = requests.get(search_url, headers=headers, timeout=30)
-        resp.raise_for_status()
-    except Exception as e:
-        logger.error(f"[civarchive] Search failed: {e}")
-        print(f"[civarchive] Search failed: {e}")
-        return []
-    
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        logger.error("[civarchive] beautifulsoup4 not installed")
-        print("[civarchive] beautifulsoup4 not installed - pip install beautifulsoup4")
-        return []
-    
-    soup = BeautifulSoup(resp.text, "html.parser")
-    
-    # Find all model links
-    links: List[str] = []
-    for a in soup.select('a[href^="/models/"]'):
-        href = a.get("href") or ""
-        if not re.match(r"^/models/[0-9]+", href):
-            continue
-        full_url = urljoin("https://civarchive.com", href)
-        if full_url not in links:
-            links.append(full_url)
-    
-    print(f"[civarchive] Found {len(links)} model links")
-    return links[:limit]
+    print(f"[civarchive] Found {len(all_links)} total model links from {len(pages_to_fetch)} pages")
+    # Return more candidates than requested limit since many will resolve to same model ID
+    return all_links[:limit * 5]
 
 
 def _extract_civitai_id_from_civarchive(civarchive_url: str) -> Optional[int]:
@@ -1175,8 +1190,14 @@ def _extract_civitai_id_from_civarchive(civarchive_url: str) -> Optional[int]:
     if next_data_tag and next_data_tag.string:
         try:
             data = json.loads(next_data_tag.string)
+            # Primary path
             version = data.get("props", {}).get("pageProps", {}).get("model", {}).get("version", {})
             model_id = version.get("civitai_model_id")
+            if model_id:
+                return int(model_id)
+            # Fallback path
+            model = data.get("props", {}).get("pageProps", {}).get("model", {})
+            model_id = model.get("civitai_model_id")
             if model_id:
                 return int(model_id)
         except Exception:
@@ -1199,7 +1220,12 @@ def _extract_civitai_id_from_civarchive(civarchive_url: str) -> Optional[int]:
 
 
 def _fetch_civitai_model_for_civarchive(model_id: int, civarchive_url: str, client: CivitaiClient) -> Optional[CivArchiveResult]:
-    """Fetch model data from Civitai API for CivArchive result."""
+    """
+    Fetch model data from Civitai API for CivArchive result.
+    
+    IMPORTANT: Uses create_model_preview() to properly detect media type (image vs video).
+    This ensures consistency with normal Civitai search results.
+    """
     try:
         model_data = client.get_model(model_id)
         if not model_data:
@@ -1225,13 +1251,12 @@ def _fetch_civitai_model_for_civarchive(model_id: int, civarchive_url: str, clie
             if size_kb:
                 file_size = int(float(size_kb) * 1024)
         
-        # Get preview image
-        images = version.get("images") or []
-        preview_url = None
-        for img in images:
-            if img.get("url"):
-                preview_url = img.get("url")
-                break
+        # CHANGED: Use create_model_preview() for proper media type detection
+        # This is the same approach as _convert_model_to_result() for normal search
+        previews = []
+        first_version_images = version.get("images") or []
+        for img in first_version_images[:8]:  # Max 8 previews, same as normal search
+            previews.append(create_model_preview(img))
         
         stats = model_data.get("stats") or {}
         
@@ -1250,8 +1275,9 @@ def _fetch_civitai_model_for_civarchive(model_id: int, civarchive_url: str, clie
             creator=(model_data.get("creator") or {}).get("username"),
             download_count=stats.get("downloadCount"),
             rating=stats.get("rating"),
-            preview_url=preview_url,
             nsfw=model_data.get("nsfw", False),
+            # CHANGED: Pass previews list instead of single preview_url
+            previews=previews,
         )
         
     except Exception as e:
@@ -1269,6 +1295,8 @@ async def search_via_civarchive(
     
     CivArchive indexes Civitai descriptions and provides better full-text search.
     Uses parallel processing for faster results.
+    
+    Returns results with full preview information including video detection.
     """
     import concurrent.futures
     
@@ -1278,8 +1306,8 @@ async def search_via_civarchive(
     config = get_config()
     client = CivitaiClient(api_key=config.api.civitai_token)
     
-    # Step 1: Search CivArchive
-    civarchive_urls = _search_civarchive(query, limit=limit * 2)
+    # Step 1: Search CivArchive (fetch many candidates to handle version deduplication)
+    civarchive_urls = _search_civarchive(query, limit=limit * 10)
     
     if not civarchive_urls:
         return CivArchiveSearchResponse(results=[], total_found=0, query=query)
