@@ -1,3 +1,68 @@
+## [2.5.2] - 2025-01-18 (Unit Tests)
+
+### Added: Comprehensive Test Suite
+
+**Frontend Tests (Vitest)**
+- `civitai-url-utils.test.ts` - URL transformation tests
+  - getCivitaiThumbnailUrl (anim=false, width params)
+  - getCivitaiVideoUrl (quality levels, mp4 conversion)
+  - isLikelyVideo detection
+  - Edge cases (malformed URLs, special chars)
+
+- `media-preview-nsfw.test.ts` - NSFW blur logic tests
+  - shouldBlur calculation
+  - Eye icon visibility rules
+  - NSFW badge visibility rules
+  - State transitions (reveal/hide)
+  - CSS class application
+
+- `fullscreen-viewer.test.ts` - Fullscreen viewer tests
+  - Quality selector (SD/HD/FHD)
+  - Video fit mode (contain/cover)
+  - Autoplay conditions
+  - Navigation (next/prev/goToIndex)
+  - Keyboard shortcuts mapping
+  - Time formatting
+  - Progress bar calculation
+
+- `settings-store.test.ts` - Settings store tests
+  - NSFW blur toggle
+  - Zustand selector pattern
+  - Global toggle effect on cards
+
+**Backend Tests (Pytest)**
+- `test_media_detection.py` - Media detection utility tests
+  - MediaType enum values
+  - URL extension detection
+  - URL pattern detection
+  - detect_media_type function
+  - is_video_url function
+  - is_likely_animated function
+  - get_video_thumbnail_url
+  - get_optimized_video_url
+  - transform_civitai_url
+  - MediaInfo dataclass
+  - Edge cases handling
+
+**Test Configuration**
+- Added vitest.config.ts with jsdom environment
+- Added test setup with mocks (IntersectionObserver, ResizeObserver, HTMLMediaElement)
+- Updated package.json with test scripts and dependencies
+
+**Run Tests**
+```bash
+# Frontend
+cd apps/web
+npm install
+npm run test
+
+# Backend
+cd synapse
+python -m pytest tests/unit/test_media_detection.py -v
+```
+
+---
+
 ## [2.5.1] - 2025-01-18 (Quality Selector + Autoplay + Fit Mode)
 
 ### New Features
