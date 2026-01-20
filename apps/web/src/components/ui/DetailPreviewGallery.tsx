@@ -13,7 +13,7 @@
  * @author Synapse Team
  */
 
-import { memo, useCallback, useState } from 'react'
+import { memo } from 'react'
 import { clsx } from 'clsx'
 import { MediaPreview } from './MediaPreview'
 import type { MediaType } from '@/lib/media'

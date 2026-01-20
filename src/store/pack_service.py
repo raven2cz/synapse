@@ -4,19 +4,34 @@ Synapse Store v2 - Pack Service
 Manages packs: creation, resolution, installation.
 
 Features:
-- Import from Civitai URL
+- Import from Civitai URL with video support
 - Resolve dependencies (create lock from pack.json)
 - Install blobs from lock
+- Full video preview support with progress tracking
+
+Enhanced Features (v2.6.0):
+- Full video preview support with proper extensions
+- Configurable media type filters
+- NSFW content filtering
+- Progress tracking for large downloads
+- Optimized video URLs
+
+Author: Synapse Team
+License: MIT
 """
 
 from __future__ import annotations
 
-import re
 import json
+import logging
+import re
+import requests
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
+
+from pydantic import BaseModel
 
 from .blob_store import BlobStore
 from .layout import PackNotFoundError, StoreLayout
@@ -33,6 +48,7 @@ from .models import (
     PackLock,
     PackResources,
     PackSource,
+    PreviewInfo,
     ProviderName,
     ResolvedArtifact,
     ResolvedDependency,
@@ -43,16 +59,85 @@ from .models import (
     UpdatePolicyMode,
 )
 
+logger = logging.getLogger(__name__)
 
-# Progress callback type: (dependency_id, status_message)
+
+# =============================================================================
+# Pydantic Models for Video Support
+# =============================================================================
+
+class PreviewDownloadConfig(BaseModel):
+    """
+    Configuration for preview download operations.
+
+    Provides fine-grained control over what types of preview content
+    to download during pack import operations.
+
+    Attributes:
+        download_images: Whether to download image previews
+        download_videos: Whether to download video previews
+        include_nsfw: Whether to include NSFW content
+        video_quality: Target video width for optimization
+        download_from_all_versions: Whether to download from all versions or just selected
+    """
+    download_images: bool = True
+    download_videos: bool = True
+    include_nsfw: bool = True
+    video_quality: int = 1080
+    download_from_all_versions: bool = True
+
+
+class DownloadProgressInfo(BaseModel):
+    """
+    Progress information for download operations.
+
+    Used to track and report download progress through callbacks.
+
+    Attributes:
+        index: Current item index (0-based)
+        total: Total number of items
+        filename: Current filename
+        media_type: Type of media being downloaded
+        bytes_downloaded: Bytes downloaded so far
+        total_bytes: Total bytes (if known)
+        status: Current status
+        error: Error message if failed
+    """
+    index: int
+    total: int
+    filename: str
+    media_type: str
+    bytes_downloaded: int = 0
+    total_bytes: Optional[int] = None
+    status: Literal['downloading', 'completed', 'skipped', 'failed'] = 'downloading'
+    error: Optional[str] = None
+
+
+# Type aliases for progress callbacks
+ProgressCallback = Callable[[DownloadProgressInfo], None]
 ResolveProgressCallback = Callable[[str, str], None]
 
+
+# =============================================================================
+# Pack Service Class
+# =============================================================================
 
 class PackService:
     """
     Service for managing packs.
+
+    Provides methods for importing, managing, and resolving packs
+    with full support for video previews and configurable options.
+
+    Features:
+        - Civitai model import with video support
+        - Configurable preview downloads (images/videos/NSFW)
+        - Progress tracking for large operations
+        - Metadata enrichment and merging
+        - Dependency resolution
+        - Pack installation
     """
-    
+
     # Mapping Civitai model types to AssetKind
     CIVITAI_TYPE_MAP = {
         "Checkpoint": AssetKind.CHECKPOINT,
@@ -64,7 +149,7 @@ class PackService:
         "LoCon": AssetKind.LORA,
         "DoRA": AssetKind.LORA,
     }
-    
+
     def __init__(
         self,
         layout: StoreLayout,
@@ -74,7 +159,7 @@ class PackService:
     ):
         """
         Initialize pack service.
-        
+
         Args:
             layout: Store layout manager
             blob_store: Blob store
@@ -85,7 +170,7 @@ class PackService:
         self.blob_store = blob_store
         self._civitai = civitai_client
         self._huggingface = huggingface_client
-    
+
     @property
     def civitai(self):
         """Lazy-load Civitai client."""
@@ -93,7 +178,7 @@ class PackService:
             from ..clients.civitai_client import CivitaiClient
             self._civitai = CivitaiClient()
         return self._civitai
-    
+
     @property
     def huggingface(self):
         """Lazy-load HuggingFace client."""
@@ -101,91 +186,159 @@ class PackService:
             from ..clients.huggingface_client import HuggingFaceClient
             self._huggingface = HuggingFaceClient()
         return self._huggingface
-    
+
     # =========================================================================
     # Pack CRUD
     # =========================================================================
-    
+
     def list_packs(self) -> List[str]:
         """List all pack names."""
         return self.layout.list_packs()
-    
+
     def load_pack(self, pack_name: str) -> Pack:
         """Load a pack by name."""
         return self.layout.load_pack(pack_name)
-    
+
     def save_pack(self, pack: Pack) -> None:
         """Save a pack."""
         self.layout.save_pack(pack)
-    
+
     def delete_pack(self, pack_name: str) -> bool:
         """Delete a pack."""
         return self.layout.delete_pack(pack_name)
-    
+
     def pack_exists(self, pack_name: str) -> bool:
         """Check if pack exists."""
         return self.layout.pack_exists(pack_name)
-    
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    def _determine_nsfw_status(self, img_data: Dict[str, Any]) -> bool:
+        """
+        Determine NSFW status from Civitai image data.
+
+        Handles multiple field formats used by Civitai API:
+        - nsfw: boolean or string
+        - nsfwLevel: numeric level (1=Safe, 2=Soft, 3+=Explicit)
+        """
+        nsfw_val = img_data.get("nsfw")
+        if nsfw_val is True:
+            return True
+        if isinstance(nsfw_val, str) and nsfw_val.lower() not in ["none", "false", "safe"]:
+            return True
+
+        nsfw_level = img_data.get("nsfwLevel", 0)
+        if isinstance(nsfw_level, (int, float)) and nsfw_level > 1:
+            return True
+
+        return False
+
+    def _extract_meta_safely(self, img_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Safely extract generation metadata from image data.
+
+        Handles various API response formats where meta might be:
+        - Directly in 'meta' key
+        - In 'metadata' key
+        - Nested as meta.meta (API quirk)
+        """
+        meta = img_data.get("meta")
+
+        if not meta:
+            meta = img_data.get("metadata")
+
+        if isinstance(meta, dict) and "meta" in meta and isinstance(meta["meta"], dict):
+            meta = meta["meta"]
+
+        return meta if isinstance(meta, dict) else None
+
+    def _sanitize_pack_name(self, name: str) -> str:
+        """Sanitize a name for use as pack name."""
+        sanitized = re.sub(r'[/\\:*?"<>|]', '_', name)
+        sanitized = re.sub(r'\s+', '_', sanitized)
+        sanitized = re.sub(r'_+', '_', sanitized)
+        sanitized = sanitized.strip('_')
+
+        if len(sanitized) > 100:
+            sanitized = sanitized[:100]
+
+        return sanitized or "unnamed_pack"
+
     # =========================================================================
     # Import from Civitai
     # =========================================================================
-    
+
     def parse_civitai_url(self, url: str) -> Tuple[int, Optional[int]]:
         """
         Parse Civitai URL to extract model ID and optional version ID.
-        
+
         Supports:
         - https://civitai.com/models/12345
         - https://civitai.com/models/12345/model-name
         - https://civitai.com/models/12345?modelVersionId=67890
         """
         parsed = urlparse(url)
-        
-        # Extract model ID from path
+
         path_match = re.match(r'/models/(\d+)', parsed.path)
         if not path_match:
             raise ValueError(f"Invalid Civitai URL: {url}")
-        
+
         model_id = int(path_match.group(1))
-        
-        # Check for version ID in query params
+
         query_params = parse_qs(parsed.query)
         version_id = None
         if "modelVersionId" in query_params:
             version_id = int(query_params["modelVersionId"][0])
-        
+
         return model_id, version_id
-    
+
     def import_from_civitai(
         self,
         url: str,
         download_previews: bool = True,
         max_previews: int = 100,
+        pack_name: Optional[str] = None,
+        download_config: Optional[PreviewDownloadConfig] = None,
+        progress_callback: Optional[ProgressCallback] = None,
+        cover_url: Optional[str] = None,
+        selected_version_ids: Optional[List[int]] = None,
     ) -> Pack:
         """
         Import a pack from Civitai URL.
-        
+
         Creates pack.json with:
-        - Main asset as primary dependency
+        - One dependency per selected version (multi-version support)
         - Base model as dependency (if detectable)
         - Preview images downloaded with full metadata
         - Model info extracted from Civitai
-        
+
         Args:
             url: Civitai model URL
             download_previews: If True, download preview images
             max_previews: Max number of previews to download
-        
+            pack_name: Optional custom pack name
+            download_config: Preview download configuration
+            progress_callback: Optional progress callback
+            cover_url: User-selected thumbnail URL
+            selected_version_ids: List of version IDs to import (creates one dependency per version)
+
         Returns:
             Created Pack
         """
         from .models import ModelInfo
-        
+
+        if download_config is None:
+            download_config = PreviewDownloadConfig()
+
+        logger.info(f"[PackService] Importing from: {url}")
+
         model_id, version_id = self.parse_civitai_url(url)
-        
+
         # Fetch model data
         model_data = self.civitai.get_model(model_id)
-        
+
         # Get specific version or latest
         if version_id:
             version_data = self.civitai.get_model_version(version_id)
@@ -195,88 +348,153 @@ class PackService:
                 raise ValueError(f"No versions found for model {model_id}")
             version_data = versions[0]
             version_id = version_data["id"]
-        
-        # CRITICAL: Always fetch detailed version data for images with meta
-        # The summary version_data may have limited image info
-        detailed_version_images = []
-        try:
-            detailed_version = self.civitai.get_model_version(version_id)
-            detailed_version_images = detailed_version.get("images", [])
-        except Exception:
-            # Non-fatal, continue with basic info
-            pass
-        
+
+        # Collect images for preview download
+        # If download_from_all_versions is True, collect from ALL versions
+        # Otherwise, only use images from the selected version
+        detailed_version_images: List[Dict[str, Any]] = []
+        all_versions = model_data.get("modelVersions", [])
+
+        if download_config.download_from_all_versions:
+            try:
+                # Fetch detailed data for ALL versions to get complete image metadata
+                seen_urls: set = set()
+                for ver in all_versions:
+                    ver_id = ver.get("id")
+                    if ver_id:
+                        try:
+                            detailed_ver = self.civitai.get_model_version(ver_id)
+                            for img in detailed_ver.get("images", []):
+                                img_url = img.get("url")
+                                if img_url and img_url not in seen_urls:
+                                    seen_urls.add(img_url)
+                                    detailed_version_images.append(img)
+                        except Exception as ver_err:
+                            logger.debug(f"[PackService] Failed to fetch version {ver_id}: {ver_err}")
+                logger.info(f"[PackService] Collected {len(detailed_version_images)} unique previews from {len(all_versions)} versions")
+            except Exception as e:
+                logger.warning(f"[PackService] Failed to fetch detailed versions: {e}")
+        else:
+            # Only use images from selected version
+            logger.info(f"[PackService] Collecting previews only from selected version {version_id}")
+            # We already have version_data, use its images (but need to fetch detailed version for full metadata)
+            try:
+                detailed_ver = self.civitai.get_model_version(version_id)
+                detailed_version_images = detailed_ver.get("images", [])
+                logger.info(f"[PackService] Collected {len(detailed_version_images)} previews from version {version_id}")
+            except Exception as e:
+                logger.warning(f"[PackService] Failed to fetch detailed version {version_id}: {e}")
+                detailed_version_images = version_data.get("images", [])
+
         # Determine asset type
         civitai_type = model_data.get("type", "LORA")
         asset_kind = self.CIVITAI_TYPE_MAP.get(civitai_type, AssetKind.LORA)
-        
-        # Get files
-        files = version_data.get("files", [])
-        if not files:
-            raise ValueError(f"No files found for version {version_id}")
-        
-        # Find primary file (prefer safetensors)
-        primary_file = None
-        for f in files:
-            if f.get("primary"):
-                primary_file = f
-                break
-        if primary_file is None:
-            # Try to find safetensors
-            for f in files:
-                if f.get("name", "").endswith(".safetensors"):
-                    primary_file = f
-                    break
-        if primary_file is None:
-            primary_file = files[0]
-        
+
         # Create pack name (sanitized)
         model_name = model_data.get("name", f"model_{model_id}")
-        pack_name = self._sanitize_pack_name(model_name)
-        
-        # Get hash and size
-        hashes = primary_file.get("hashes", {})
-        sha256 = hashes.get("SHA256", "").lower() if hashes else None
-        autov2 = hashes.get("AutoV2") if hashes else None
-        file_size = primary_file.get("sizeKB", 0) * 1024 if primary_file.get("sizeKB") else None
-        
-        # Get download URL
-        download_url = primary_file.get("downloadUrl", "")
-        if not download_url:
-            download_url = f"https://civitai.com/api/download/models/{version_id}"
-        
-        # Get base model
-        base_model = version_data.get("baseModel")
-        
-        # Create main dependency
-        main_dep = PackDependency(
-            id=f"main_{asset_kind.value}",
-            kind=asset_kind,
-            required=True,
-            selector=DependencySelector(
-                strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
-                civitai=CivitaiSelector(
-                    model_id=model_id,
-                    version_id=version_id,
-                    file_id=primary_file.get("id"),
-                ),
-            ),
-            update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
-            expose=ExposeConfig(
-                filename=primary_file.get("name", f"{pack_name}.safetensors"),
-                trigger_words=version_data.get("trainedWords", []),
-            ),
-        )
-        
-        dependencies = [main_dep]
-        
+        name = pack_name or self._sanitize_pack_name(model_name)
+
+        # Determine which versions to import
+        # If selected_version_ids provided, use those; otherwise use single version from URL
+        versions_to_import: List[int] = []
+        if selected_version_ids and len(selected_version_ids) > 0:
+            versions_to_import = selected_version_ids
+            logger.info(f"[PackService] Multi-version import: {len(versions_to_import)} versions selected")
+        else:
+            versions_to_import = [version_id]
+            logger.info(f"[PackService] Single version import: {version_id}")
+
+        dependencies: List[PackDependency] = []
+        base_model = None
+        autov2 = None
+        sha256 = None
+        first_version_data = None
+
+        # Create one dependency for each selected version
+        for idx, ver_id in enumerate(versions_to_import):
+            try:
+                # Fetch version data
+                ver_data = self.civitai.get_model_version(ver_id)
+                if first_version_data is None:
+                    first_version_data = ver_data
+
+                # Get files for this version
+                files = ver_data.get("files", [])
+                if not files:
+                    logger.warning(f"[PackService] No files found for version {ver_id}, skipping")
+                    continue
+
+                # Find primary file (prefer safetensors)
+                primary_file = None
+                for f in files:
+                    if f.get("primary"):
+                        primary_file = f
+                        break
+                if primary_file is None:
+                    for f in files:
+                        if f.get("name", "").endswith(".safetensors"):
+                            primary_file = f
+                            break
+                if primary_file is None:
+                    primary_file = files[0]
+
+                # Get hash info for first version (for model_info)
+                if idx == 0:
+                    hashes = primary_file.get("hashes", {})
+                    sha256 = hashes.get("SHA256", "").lower() if hashes else None
+                    autov2 = hashes.get("AutoV2") if hashes else None
+                    base_model = ver_data.get("baseModel")
+
+                # Create unique dependency ID
+                # For single version: main_lora
+                # For multi-version: version_{version_id}_lora (with version name if available)
+                version_name = ver_data.get("name", str(ver_id))
+                if len(versions_to_import) == 1:
+                    dep_id = f"main_{asset_kind.value}"
+                else:
+                    # Sanitize version name for ID
+                    safe_name = re.sub(r'[^a-zA-Z0-9]', '_', version_name)[:30]
+                    dep_id = f"v{ver_id}_{safe_name}_{asset_kind.value}"
+
+                dep = PackDependency(
+                    id=dep_id,
+                    kind=asset_kind,
+                    required=True,
+                    selector=DependencySelector(
+                        strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                        civitai=CivitaiSelector(
+                            model_id=model_id,
+                            version_id=ver_id,
+                            file_id=primary_file.get("id"),
+                        ),
+                    ),
+                    update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                    expose=ExposeConfig(
+                        filename=primary_file.get("name", f"{name}.safetensors"),
+                        trigger_words=ver_data.get("trainedWords", []),
+                    ),
+                )
+                dependencies.append(dep)
+                logger.info(f"[PackService] Created dependency '{dep_id}' for version {ver_id} ({version_name})")
+
+            except Exception as e:
+                logger.error(f"[PackService] Failed to process version {ver_id}: {e}")
+                continue
+
+        if not dependencies:
+            raise ValueError(f"No valid versions could be processed for model {model_id}")
+
+        # Use first version data for pack metadata if we don't have version_data
+        if first_version_data:
+            version_data = first_version_data
+
         # Add base model dependency if detected
         if base_model:
             base_dep = self._create_base_model_dependency(base_model)
             if base_dep:
                 dependencies.insert(0, base_dep)
-        
-        # Extract model info (v1 feature)
+
+        # Extract model info
         stats = model_data.get("stats", {})
         model_info = ModelInfo(
             model_type=civitai_type,
@@ -290,10 +508,10 @@ class PackService:
             rating=stats.get("rating"),
             published_at=version_data.get("publishedAt"),
         )
-        
+
         # Create pack with all metadata
         pack = Pack(
-            name=pack_name,
+            name=name,
             pack_type=asset_kind,
             source=PackSource(
                 provider=ProviderName.CIVITAI,
@@ -306,7 +524,7 @@ class PackService:
                 previews_keep_in_git=True,
                 workflows_keep_in_git=True,
             ),
-            # Metadata fields
+            cover_url=cover_url,  # User-selected thumbnail
             version=version_data.get("name"),
             description=model_data.get("description"),
             base_model=base_model,
@@ -315,46 +533,36 @@ class PackService:
             trigger_words=version_data.get("trainedWords", []),
             model_info=model_info,
         )
-        
+
         # Save pack
         self.layout.save_pack(pack)
-        
-        # Create initial lock
-        lock = self._create_initial_lock(pack, version_data, primary_file, download_url, sha256, file_size)
+
+        # Create initial lock for all dependencies
+        lock = self._create_initial_lock_multi(pack)
         self.layout.save_pack_lock(lock)
-        
-        # Download previews and get metadata (pass detailed images for merge)
+
+        # Download previews and get metadata
         if download_previews:
             previews = self._download_previews(
-                pack_name, 
-                version_data, 
-                max_previews,
-                detailed_version_images=detailed_version_images
+                pack_name=name,
+                version_data=version_data,
+                max_count=max_previews,
+                detailed_version_images=detailed_version_images,
+                download_images=download_config.download_images,
+                download_videos=download_config.download_videos,
+                include_nsfw=download_config.include_nsfw,
+                video_quality=download_config.video_quality,
+                progress_callback=progress_callback,
             )
             if previews:
                 pack.previews = previews
-                # Save pack again with previews
                 self.layout.save_pack(pack)
-        
+
+        logger.info(f"[PackService] Import complete: {name}")
         return pack
-    
-    def _sanitize_pack_name(self, name: str) -> str:
-        """Sanitize a name for use as pack name."""
-        # Replace problematic characters
-        sanitized = re.sub(r'[/\\:*?"<>|]', '_', name)
-        sanitized = re.sub(r'\s+', '_', sanitized)
-        sanitized = re.sub(r'_+', '_', sanitized)
-        sanitized = sanitized.strip('_')
-        
-        # Limit length
-        if len(sanitized) > 100:
-            sanitized = sanitized[:100]
-        
-        return sanitized or "unnamed_pack"
-    
+
     def _create_base_model_dependency(self, base_model: str) -> Optional[PackDependency]:
         """Create a base model dependency from Civitai baseModel string."""
-        # Try to load config for base model aliases
         try:
             config = self.layout.load_config()
             alias = config.base_model_aliases.get(base_model)
@@ -372,12 +580,11 @@ class PackService:
                 )
         except Exception:
             pass
-        
-        # Create unresolved base model hint
+
         return PackDependency(
             id="base_checkpoint",
             kind=AssetKind.CHECKPOINT,
-            required=False,  # Not required since we can't resolve it
+            required=False,
             selector=DependencySelector(
                 strategy=SelectorStrategy.BASE_MODEL_HINT,
                 base_model=base_model,
@@ -385,7 +592,7 @@ class PackService:
             update_policy=UpdatePolicy(mode=UpdatePolicyMode.PINNED),
             expose=ExposeConfig(filename=f"{base_model}.safetensors"),
         )
-    
+
     def _create_initial_lock(
         self,
         pack: Pack,
@@ -398,10 +605,9 @@ class PackService:
         """Create initial lock file from import data."""
         resolved = []
         unresolved = []
-        
+
         for dep in pack.dependencies:
             if dep.selector.strategy == SelectorStrategy.CIVITAI_MODEL_LATEST:
-                # Main dependency - resolved from import
                 resolved.append(ResolvedDependency(
                     dependency_id=dep.id,
                     artifact=ResolvedArtifact(
@@ -419,7 +625,6 @@ class PackService:
                     ),
                 ))
             elif dep.selector.strategy == SelectorStrategy.BASE_MODEL_HINT:
-                # Base model - may be unresolved
                 try:
                     config = self.layout.load_config()
                     alias = config.base_model_aliases.get(dep.selector.base_model)
@@ -428,7 +633,7 @@ class PackService:
                             dependency_id=dep.id,
                             artifact=ResolvedArtifact(
                                 kind=dep.kind,
-                                sha256=None,  # Unknown until downloaded
+                                sha256=None,
                                 size_bytes=None,
                                 provider=ArtifactProvider(
                                     name=ProviderName.CIVITAI,
@@ -452,121 +657,373 @@ class PackService:
                         reason="base_model_resolution_failed",
                         details={"base_model": dep.selector.base_model},
                     ))
-        
+
         return PackLock(
             pack=pack.name,
             resolved_at=datetime.now().isoformat(),
             resolved=resolved,
             unresolved=unresolved,
         )
-    
+
+    def _create_initial_lock_multi(self, pack: Pack) -> PackLock:
+        """
+        Create initial lock file from pack with multi-version support.
+
+        Fetches version data for each Civitai dependency to get correct
+        sha256, size, and download URL for each version.
+        """
+        resolved = []
+        unresolved = []
+
+        for dep in pack.dependencies:
+            if dep.selector.strategy == SelectorStrategy.CIVITAI_MODEL_LATEST:
+                try:
+                    # Fetch version data for this specific dependency
+                    civ = dep.selector.civitai
+                    if not civ or not civ.version_id:
+                        continue
+
+                    version_data = self.civitai.get_model_version(civ.version_id)
+                    files = version_data.get("files", [])
+
+                    # Find the specific file or primary file
+                    target_file = None
+                    if civ.file_id:
+                        for f in files:
+                            if f.get("id") == civ.file_id:
+                                target_file = f
+                                break
+                    if not target_file and files:
+                        # Find primary or first safetensors
+                        for f in files:
+                            if f.get("primary"):
+                                target_file = f
+                                break
+                        if not target_file:
+                            for f in files:
+                                if f.get("name", "").endswith(".safetensors"):
+                                    target_file = f
+                                    break
+                        if not target_file:
+                            target_file = files[0]
+
+                    if not target_file:
+                        unresolved.append(UnresolvedDependency(
+                            dependency_id=dep.id,
+                            reason="no_file_found",
+                            details={"version_id": civ.version_id},
+                        ))
+                        continue
+
+                    # Extract file info
+                    hashes = target_file.get("hashes", {})
+                    sha256 = hashes.get("SHA256", "").lower() if hashes else None
+                    file_size = target_file.get("sizeKB", 0) * 1024 if target_file.get("sizeKB") else None
+
+                    download_url = target_file.get("downloadUrl", "")
+                    if not download_url:
+                        download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
+
+                    resolved.append(ResolvedDependency(
+                        dependency_id=dep.id,
+                        artifact=ResolvedArtifact(
+                            kind=dep.kind,
+                            sha256=sha256,
+                            size_bytes=file_size,
+                            provider=ArtifactProvider(
+                                name=ProviderName.CIVITAI,
+                                model_id=civ.model_id,
+                                version_id=civ.version_id,
+                                file_id=target_file.get("id"),
+                            ),
+                            download=ArtifactDownload(urls=[download_url]),
+                            integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
+                        ),
+                    ))
+                    logger.debug(f"[PackService] Resolved dependency '{dep.id}' for version {civ.version_id}")
+
+                except Exception as e:
+                    logger.error(f"[PackService] Failed to resolve {dep.id}: {e}")
+                    unresolved.append(UnresolvedDependency(
+                        dependency_id=dep.id,
+                        reason="resolution_error",
+                        details={"error": str(e)},
+                    ))
+
+            elif dep.selector.strategy == SelectorStrategy.BASE_MODEL_HINT:
+                try:
+                    config = self.layout.load_config()
+                    alias = config.base_model_aliases.get(dep.selector.base_model)
+                    if alias and alias.selector.civitai:
+                        resolved.append(ResolvedDependency(
+                            dependency_id=dep.id,
+                            artifact=ResolvedArtifact(
+                                kind=dep.kind,
+                                sha256=None,
+                                size_bytes=None,
+                                provider=ArtifactProvider(
+                                    name=ProviderName.CIVITAI,
+                                    model_id=alias.selector.civitai.model_id,
+                                    version_id=alias.selector.civitai.version_id,
+                                    file_id=alias.selector.civitai.file_id,
+                                ),
+                                download=ArtifactDownload(urls=[]),
+                                integrity=ArtifactIntegrity(sha256_verified=False),
+                            ),
+                        ))
+                    else:
+                        unresolved.append(UnresolvedDependency(
+                            dependency_id=dep.id,
+                            reason="unknown_base_model_alias",
+                            details={"base_model": dep.selector.base_model},
+                        ))
+                except Exception:
+                    unresolved.append(UnresolvedDependency(
+                        dependency_id=dep.id,
+                        reason="base_model_resolution_failed",
+                        details={"base_model": dep.selector.base_model},
+                    ))
+
+        logger.info(f"[PackService] Lock created: {len(resolved)} resolved, {len(unresolved)} unresolved")
+
+        return PackLock(
+            pack=pack.name,
+            resolved_at=datetime.now().isoformat(),
+            resolved=resolved,
+            unresolved=unresolved,
+        )
+
+    # =========================================================================
+    # Preview Download with Video Support
+    # =========================================================================
+
     def _download_previews(
         self,
         pack_name: str,
         version_data: Dict[str, Any],
         max_count: int = 100,
-        detailed_version_images: List[Dict[str, Any]] = None,
-    ) -> List[Any]: # Returns List[PreviewInfo] but Any to avoid circular import issues if type not available at runtime
+        detailed_version_images: Optional[List[Dict[str, Any]]] = None,
+        download_images: bool = True,
+        download_videos: bool = True,
+        include_nsfw: bool = True,
+        video_quality: int = 1080,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> List[PreviewInfo]:
         """
-        Download preview images for a pack and return metadata.
-        
-        Uses a merge algorithm to combine basic image data with detailed metadata:
-        1. Creates a lookup map from detailed_version_images by URL
-        2. For each basic image, tries to find richer data in the lookup map
-        3. Extracts meta from the richer source when available
-        
-        Returns:
-            List of PreviewInfo objects with full metadata
+        Download preview media for a pack with full video support.
+
+        This method handles downloading preview content from Civitai with
+        support for both images and videos. It includes configurable filtering
+        by media type and NSFW status, optimized video URLs, and progress
+        tracking for large downloads.
         """
-        from .models import PreviewInfo
-        
-        images = version_data.get("images", [])[:max_count]
+        from ..utils.media_detection import (
+            detect_media_type,
+            get_video_thumbnail_url,
+            get_optimized_video_url,
+        )
+
+        # Use detailed_version_images if available (contains all versions),
+        # otherwise fall back to version_data.images (single version)
+        if detailed_version_images:
+            images = detailed_version_images[:max_count]
+        else:
+            images = version_data.get("images", [])[:max_count]
+
         previews_dir = self.layout.pack_previews_path(pack_name)
         previews_dir.mkdir(parents=True, exist_ok=True)
-        
-        preview_infos = []
-        
-        # Create lookup map for detailed images by URL (v1 merge algorithm)
-        detailed_map = {}
+
+        preview_infos: List[PreviewInfo] = []
+
+        # Create lookup map for detailed images by URL (metadata merge)
+        detailed_map: Dict[str, Dict[str, Any]] = {}
         if detailed_version_images:
             for img in detailed_version_images:
                 url = img.get("url")
                 if url:
                     detailed_map[url] = img
-        
+
+        downloaded_urls: set = set()
+        preview_number = 0
+        total_count = len(images)
+
         for i, img_data in enumerate(images):
             url = img_data.get("url")
             if not url:
                 continue
-            
-            # MERGE: Check if we have richer data for this image
-            # The summary 'img_data' has limited info. 'detailed_img' has full meta if available.
+
+            if url in downloaded_urls:
+                logger.debug(f"[PackService] Skipping duplicate URL: {url[:60]}...")
+                continue
+
+            # MERGE: Get richer data if available
             detailed_img = detailed_map.get(url)
             source_img = detailed_img if detailed_img else img_data
-            
-            # Extract filename from URL
-            filename = url.split("/")[-1].split("?")[0]
-            if not filename:
-                filename = f"preview_{i}.jpg"
-            
-            dest = previews_dir / filename
-            
-            # Extract metadata safely (v1 algorithm)
-            meta = source_img.get("meta")
-            if not meta and "metadata" in source_img:
-                meta = source_img.get("metadata")
-            
-            # Handle potential nested 'meta' key (API quirk)
-            if isinstance(meta, dict) and "meta" in meta and isinstance(meta["meta"], dict):
-                meta = meta["meta"]
 
-            # Save metadata to sidecar JSON (Legacy/Compatibility)
+            is_nsfw = self._determine_nsfw_status(source_img)
+
+            if is_nsfw and not include_nsfw:
+                logger.debug(f"[PackService] Skipping NSFW preview: {url[:60]}...")
+                continue
+
+            # Detect media type from URL
+            media_info = detect_media_type(url, use_head_request=False)
+            media_type = media_info.type.value
+
+            if media_type == 'video' and not download_videos:
+                logger.debug(f"[PackService] Skipping video (disabled): {url[:60]}...")
+                continue
+
+            if media_type == 'image' and not download_images:
+                logger.debug(f"[PackService] Skipping image (disabled): {url[:60]}...")
+                continue
+
+            preview_number += 1
+
+            # Generate filename with appropriate extension
+            url_path = url.split("/")[-1].split("?")[0]
+            original_filename = url_path if url_path else f"preview_{preview_number}.jpg"
+
+            if media_type == 'video':
+                base_name = Path(original_filename).stem
+                filename = f"{base_name}.mp4"
+            else:
+                filename = original_filename
+
+            dest = previews_dir / filename
+
+            meta = self._extract_meta_safely(source_img)
+
+            # Get video thumbnail URL
+            thumbnail_url = None
+            if media_type == 'video':
+                thumbnail_url = get_video_thumbnail_url(url, width=450)
+
+            # Save metadata to sidecar JSON
             try:
                 if meta:
                     meta_file = dest.with_suffix(dest.suffix + '.json')
                     meta_file.write_text(json.dumps(meta, indent=2))
-            except Exception:
-                pass
-            
-            # Idempotency check: Don't re-download if exists
+            except Exception as e:
+                logger.debug(f"[PackService] Failed to write meta sidecar: {e}")
+
+            progress = DownloadProgressInfo(
+                index=preview_number - 1,
+                total=total_count,
+                filename=filename,
+                media_type=media_type,
+                status='downloading',
+            )
+
+            # Download if not exists
             if not dest.exists():
+                download_url = url
+                timeout = 60
+
+                if media_type == 'video':
+                    download_url = get_optimized_video_url(url, width=video_quality)
+                    timeout = 120
+                    logger.info(f"[PackService] Downloading video: {filename}")
+
+                if progress_callback:
+                    progress_callback(progress)
+
                 try:
-                    self.civitai.download_preview_image(
-                        type("Preview", (), {"url": url, "filename": filename})(),
-                        dest
+                    response = requests.get(
+                        download_url,
+                        timeout=timeout,
+                        stream=True,
                     )
-                except Exception:
-                    pass
-            
-            # Extract NSFW status (handle boolean, string, or level)
-            # Civitai nsfwLevel: 1=None/Safe, 2=Soft, 3+=Explicit
-            nsfw_val = source_img.get("nsfw")
-            nsfw_level = source_img.get("nsfwLevel")
-            is_nsfw = False
-            
-            if nsfw_val is True:
-                is_nsfw = True
-            elif isinstance(nsfw_val, str) and nsfw_val.lower() not in ["none", "false", "safe"]:
-                is_nsfw = True
-            elif isinstance(nsfw_level, (int, float)) and nsfw_level > 1:
-                is_nsfw = True  # Level 2+ is NSFW (Soft or Explicit)
-                
-            # Create PreviewInfo for Pack manifest
+                    response.raise_for_status()
+
+                    total_bytes = response.headers.get('content-length')
+                    if total_bytes:
+                        progress.total_bytes = int(total_bytes)
+
+                    bytes_downloaded = 0
+                    with open(dest, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                bytes_downloaded += len(chunk)
+
+                                progress.bytes_downloaded = bytes_downloaded
+                                if progress_callback and progress.total_bytes:
+                                    if bytes_downloaded % 102400 < 8192:
+                                        progress_callback(progress)
+
+                    progress.bytes_downloaded = bytes_downloaded
+                    progress.status = 'completed'
+                    if progress_callback:
+                        progress_callback(progress)
+
+                    if media_type == 'video':
+                        file_size = dest.stat().st_size
+                        logger.info(
+                            f"[PackService] Video downloaded: {filename} "
+                            f"({file_size / 1024 / 1024:.1f} MB)"
+                        )
+
+                except requests.exceptions.Timeout:
+                    error_msg = f"Timeout downloading {filename} (>{timeout}s)"
+                    logger.warning(f"[PackService] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    preview_number -= 1
+                    continue
+
+                except requests.exceptions.RequestException as e:
+                    error_msg = f"Network error: {str(e)}"
+                    logger.warning(f"[PackService] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    preview_number -= 1
+                    continue
+
+                except Exception as e:
+                    error_msg = f"Failed to download: {str(e)}"
+                    logger.error(f"[PackService] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    preview_number -= 1
+                    continue
+            else:
+                progress.status = 'completed'
+                if progress_callback:
+                    progress_callback(progress)
+
             preview_infos.append(PreviewInfo(
                 filename=filename,
                 url=url,
                 nsfw=is_nsfw,
                 width=source_img.get("width"),
                 height=source_img.get("height"),
-                meta=meta if isinstance(meta, dict) else None,  # Ensure it's a dict or None
+                meta=meta,
+                media_type=media_type,
+                thumbnail_url=thumbnail_url,
             ))
-        
+
+            downloaded_urls.add(url)
+
+        video_count = sum(1 for p in preview_infos if p.media_type == 'video')
+        image_count = sum(1 for p in preview_infos if p.media_type == 'image')
+        logger.info(
+            f"[PackService] Downloaded {len(preview_infos)} previews "
+            f"({video_count} videos, {image_count} images)"
+        )
+
         return preview_infos
-    
+
     # =========================================================================
     # Resolution
     # =========================================================================
-    
+
     def resolve_pack(
         self,
         pack_name: str,
@@ -574,24 +1031,24 @@ class PackService:
     ) -> PackLock:
         """
         Resolve all dependencies in a pack, creating/updating lock file.
-        
+
         Args:
             pack_name: Pack to resolve
             progress_callback: Optional callback for progress updates
-        
+
         Returns:
             Updated PackLock
         """
         pack = self.layout.load_pack(pack_name)
         existing_lock = self.layout.load_pack_lock(pack_name)
-        
+
         resolved = []
         unresolved = []
-        
+
         for dep in pack.dependencies:
             if progress_callback:
                 progress_callback(dep.id, "resolving")
-            
+
             try:
                 artifact = self._resolve_dependency(pack, dep, existing_lock)
                 if artifact:
@@ -617,17 +1074,17 @@ class PackService:
                 ))
                 if progress_callback:
                     progress_callback(dep.id, f"error: {e}")
-        
+
         lock = PackLock(
             pack=pack_name,
             resolved_at=datetime.now().isoformat(),
             resolved=resolved,
             unresolved=unresolved,
         )
-        
+
         self.layout.save_pack_lock(lock)
         return lock
-    
+
     def _resolve_dependency(
         self,
         pack: Pack,
@@ -636,7 +1093,7 @@ class PackService:
     ) -> Optional[ResolvedArtifact]:
         """Resolve a single dependency."""
         strategy = dep.selector.strategy
-        
+
         if strategy == SelectorStrategy.CIVITAI_FILE:
             return self._resolve_civitai_file(dep)
         elif strategy == SelectorStrategy.CIVITAI_MODEL_LATEST:
@@ -651,21 +1108,19 @@ class PackService:
             return self._resolve_local_file(dep)
         else:
             return None
-    
+
     def _resolve_civitai_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve a pinned Civitai file."""
         if not dep.selector.civitai:
             return None
-        
+
         civ = dep.selector.civitai
         if not civ.version_id:
             return None
-        
-        # Get version data
+
         version_data = self.civitai.get_model_version(civ.version_id)
         files = version_data.get("files", [])
-        
-        # Find specific file or first
+
         target_file = None
         if civ.file_id:
             for f in files:
@@ -674,17 +1129,17 @@ class PackService:
                     break
         if not target_file and files:
             target_file = files[0]
-        
+
         if not target_file:
             return None
-        
+
         hashes = target_file.get("hashes", {})
         sha256 = hashes.get("SHA256", "").lower() if hashes else None
-        
+
         download_url = target_file.get("downloadUrl", "")
         if not download_url:
             download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
-        
+
         return ResolvedArtifact(
             kind=dep.kind,
             sha256=sha256,
@@ -698,38 +1153,35 @@ class PackService:
             download=ArtifactDownload(urls=[download_url]),
             integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
         )
-    
+
     def _resolve_civitai_latest(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve latest version of a Civitai model."""
         if not dep.selector.civitai:
             return None
-        
+
         civ = dep.selector.civitai
-        
-        # Get model data
+
         model_data = self.civitai.get_model(civ.model_id)
         versions = model_data.get("modelVersions", [])
         if not versions:
             return None
-        
-        # Get latest version
+
         latest = versions[0]
         files = latest.get("files", [])
         if not files:
             return None
-        
-        # Find best file based on constraints
+
         target_file = self._select_file(files, dep.selector.constraints)
         if not target_file:
             return None
-        
+
         hashes = target_file.get("hashes", {})
         sha256 = hashes.get("SHA256", "").lower() if hashes else None
-        
+
         download_url = target_file.get("downloadUrl", "")
         if not download_url:
             download_url = f"https://civitai.com/api/download/models/{latest['id']}"
-        
+
         return ResolvedArtifact(
             kind=dep.kind,
             sha256=sha256,
@@ -743,7 +1195,7 @@ class PackService:
             download=ArtifactDownload(urls=[download_url]),
             integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
         )
-    
+
     def _select_file(
         self,
         files: List[Dict[str, Any]],
@@ -752,17 +1204,15 @@ class PackService:
         """Select best file from list based on constraints."""
         if not files:
             return None
-        
+
         candidates = files.copy()
-        
+
         if constraints:
-            # Filter by primary file
             if constraints.primary_file_only:
                 primary = [f for f in candidates if f.get("primary")]
                 if primary:
                     candidates = primary
-            
-            # Filter by extension
+
             if constraints.file_ext:
                 ext_filtered = [
                     f for f in candidates
@@ -770,27 +1220,25 @@ class PackService:
                 ]
                 if ext_filtered:
                     candidates = ext_filtered
-        
-        # Return first remaining candidate
+
         return candidates[0] if candidates else None
-    
+
     def _resolve_base_model_hint(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve a base model hint using config aliases."""
         if not dep.selector.base_model:
             return None
-        
+
         try:
             config = self.layout.load_config()
             alias = config.base_model_aliases.get(dep.selector.base_model)
             if not alias or not alias.selector.civitai:
                 return None
-            
-            # Resolve via Civitai
+
             civ = alias.selector.civitai
             if civ.version_id:
                 version_data = self.civitai.get_model_version(civ.version_id)
                 files = version_data.get("files", [])
-                
+
                 target_file = None
                 if civ.file_id:
                     for f in files:
@@ -799,15 +1247,15 @@ class PackService:
                             break
                 if not target_file and files:
                     target_file = files[0]
-                
+
                 if target_file:
                     hashes = target_file.get("hashes", {})
                     sha256 = hashes.get("SHA256", "").lower() if hashes else None
-                    
+
                     download_url = target_file.get("downloadUrl", "")
                     if not download_url:
                         download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
-                    
+
                     return ResolvedArtifact(
                         kind=dep.kind,
                         sha256=sha256,
@@ -823,25 +1271,24 @@ class PackService:
                     )
         except Exception:
             pass
-        
+
         return None
-    
+
     def _resolve_huggingface_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve a HuggingFace file."""
         if not dep.selector.huggingface:
             return None
-        
+
         hf = dep.selector.huggingface
-        
-        # Build download URL
+
         url = f"https://huggingface.co/{hf.repo_id}/resolve/{hf.revision or 'main'}"
         if hf.subfolder:
             url += f"/{hf.subfolder}"
         url += f"/{hf.filename}"
-        
+
         return ResolvedArtifact(
             kind=dep.kind,
-            sha256=None,  # HF doesn't provide SHA256 easily
+            sha256=None,
             size_bytes=None,
             provider=ArtifactProvider(
                 name=ProviderName.HUGGINGFACE,
@@ -852,12 +1299,12 @@ class PackService:
             download=ArtifactDownload(urls=[url]),
             integrity=ArtifactIntegrity(sha256_verified=False),
         )
-    
+
     def _resolve_url(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve a direct URL download."""
         if not dep.selector.url:
             return None
-        
+
         return ResolvedArtifact(
             kind=dep.kind,
             sha256=None,
@@ -866,20 +1313,19 @@ class PackService:
             download=ArtifactDownload(urls=[dep.selector.url]),
             integrity=ArtifactIntegrity(sha256_verified=False),
         )
-    
+
     def _resolve_local_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
         """Resolve a local file."""
         if not dep.selector.local_path:
             return None
-        
+
         path = Path(dep.selector.local_path)
         if not path.exists():
             return None
-        
-        # Compute SHA256
+
         from .blob_store import compute_sha256
         sha256 = compute_sha256(path)
-        
+
         return ResolvedArtifact(
             kind=dep.kind,
             sha256=sha256,
@@ -888,11 +1334,11 @@ class PackService:
             download=ArtifactDownload(urls=[path.as_uri()]),
             integrity=ArtifactIntegrity(sha256_verified=True),
         )
-    
+
     # =========================================================================
     # Installation
     # =========================================================================
-    
+
     def install_pack(
         self,
         pack_name: str,
@@ -900,53 +1346,50 @@ class PackService:
     ) -> List[str]:
         """
         Install all blobs for a pack from its lock file.
-        
+
         Args:
             pack_name: Pack to install
             progress_callback: Optional callback (dep_id, downloaded, total)
-        
+
         Returns:
             List of installed SHA256 hashes
         """
         lock = self.layout.load_pack_lock(pack_name)
         if not lock:
             raise PackNotFoundError(f"No lock file for pack: {pack_name}")
-        
+
         installed = []
-        
+
         for resolved in lock.resolved:
             sha256 = resolved.artifact.sha256
             urls = resolved.artifact.download.urls
-            
+
             if not urls:
                 continue
-            
-            # Skip if already downloaded
+
             if sha256 and self.blob_store.blob_exists(sha256):
                 installed.append(sha256)
                 continue
-            
-            # Download
+
             try:
                 def make_callback(dep_id: str):
                     if progress_callback:
                         return lambda d, t: progress_callback(dep_id, d, t)
                     return None
-                
+
                 actual_sha = self.blob_store.download(
                     urls[0],
                     sha256,
                     progress_callback=make_callback(resolved.dependency_id),
                 )
                 installed.append(actual_sha)
-                
-                # Update lock with actual SHA if it was unknown
+
                 if not sha256:
                     resolved.artifact.sha256 = actual_sha
                     resolved.artifact.integrity.sha256_verified = True
                     self.layout.save_pack_lock(lock)
-                    
-            except Exception:
-                pass  # Log error, continue
-        
+
+            except Exception as e:
+                logger.error(f"[PackService] Failed to install {resolved.dependency_id}: {e}")
+
         return installed

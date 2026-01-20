@@ -18,12 +18,22 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from ..core.models import (
-    Pack, PackLock, LockedAsset, AssetDependency, CustomNodeDependency,
-    AssetSource, AssetHash, PreviewImage, ASSET_TYPE_FOLDERS
-)
-from ..clients.civitai_client import CivitaiClient
-from ..clients.huggingface_client import HuggingFaceClient
+try:
+    # When running as part of src package (normal operation)
+    from .models import (
+        Pack, PackLock, LockedAsset, AssetDependency, CustomNodeDependency,
+        AssetSource, AssetHash, PreviewImage, ASSET_TYPE_FOLDERS
+    )
+    from ..clients.civitai_client import CivitaiClient
+    from ..clients.huggingface_client import HuggingFaceClient
+except ImportError:
+    # When running tests with core as top-level package
+    from core.models import (
+        Pack, PackLock, LockedAsset, AssetDependency, CustomNodeDependency,
+        AssetSource, AssetHash, PreviewImage, ASSET_TYPE_FOLDERS
+    )
+    from clients.civitai_client import CivitaiClient
+    from clients.huggingface_client import HuggingFaceClient
 from config.settings import get_config, SynapseConfig
 
 

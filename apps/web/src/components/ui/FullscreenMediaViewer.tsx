@@ -10,7 +10,7 @@ import { clsx } from 'clsx'
 import {
   X, ChevronLeft, ChevronRight, Download, ExternalLink, Eye, EyeOff,
   ZoomIn, ZoomOut, RotateCcw, Repeat, Play, Pause, Volume2, VolumeX,
-  Maximize, SkipBack, SkipForward, Loader2,
+  Maximize, SkipBack, SkipForward, Loader2, Info, Copy, Check,
 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -135,6 +135,10 @@ export function FullscreenMediaViewer({
   const [showControls, setShowControls] = useState(true)
   const [showQualityMenu, setShowQualityMenu] = useState(false)
 
+  // Metadata panel state
+  const [showMetadata, setShowMetadata] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+
   // Refs
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -161,6 +165,11 @@ export function FullscreenMediaViewer({
     if (!currentItem?.url) return ''
     return currentItem.url.includes('civitai.com') && isVideo ? getCivitaiVideoUrl(currentItem.url, 'fhd') : currentItem.url
   }, [currentItem?.url, isVideo])
+
+  // Check if current item has metadata
+  const currentHasMeta = useMemo(() => {
+    return currentItem?.meta && Object.keys(currentItem.meta).length > 0
+  }, [currentItem])
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
 
@@ -199,6 +208,7 @@ export function FullscreenMediaViewer({
       setShowControls(true)
       setVideoQuality('sd')
       setVideoFit('fit')
+      setShowMetadata(false)
       setTimeout(() => scrollToThumb(initialIndex), 100)
     }
   }, [isOpen, initialIndex, scrollToThumb])
@@ -210,6 +220,13 @@ export function FullscreenMediaViewer({
     setImageZoom(1)
     setImagePosition({ x: 0, y: 0 })
   }, [currentIndex])
+
+  // Auto-hide metadata panel when navigating to item without meta
+  useEffect(() => {
+    if (!currentHasMeta && showMetadata) {
+      setShowMetadata(false)
+    }
+  }, [currentIndex, currentHasMeta, showMetadata])
 
   // Autoplay
   useEffect(() => {
@@ -398,13 +415,25 @@ export function FullscreenMediaViewer({
         case 'j': case 'J': if (isVideo) skip(-10); break
         case 'k': case 'K': if (isVideo) togglePlay(); break
         case ';': if (isVideo) skip(10); break
+        case 'i': case 'I': if (currentHasMeta) setShowMetadata(prev => !prev); break
       }
     }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
-  }, [isOpen, isVideo, goToPrevious, goToNext, togglePlay, toggleMute, toggleLoop, toggleFullscreen, cycleVideoFit, zoomIn, zoomOut, resetZoom, volume, skip, onClose])
+  }, [isOpen, isVideo, goToPrevious, goToNext, togglePlay, toggleMute, toggleLoop, toggleFullscreen, cycleVideoFit, zoomIn, zoomOut, resetZoom, volume, skip, onClose, currentHasMeta])
 
   const formatTime = (s: number) => !isFinite(s) ? '0:00' : `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`
+
+  // Copy text to clipboard - MUST be before early return!
+  const copyToClipboard = useCallback(async (text: string, fieldName: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(fieldName)
+      setTimeout(() => setCopiedField(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
+  }, [])
 
   // ============================================================================
   // Render slide content helper
@@ -525,6 +554,19 @@ export function FullscreenMediaViewer({
                   <button onClick={e => { e.stopPropagation(); resetZoom() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><RotateCcw className="w-5 h-5" /></button>
                 </>
               )}
+              {/* Metadata panel toggle */}
+              <button
+                onClick={e => { e.stopPropagation(); if (currentHasMeta) setShowMetadata(prev => !prev) }}
+                disabled={!currentHasMeta}
+                className={clsx(
+                  'p-2.5 rounded-xl backdrop-blur-sm transition-all',
+                  showMetadata && currentHasMeta ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/60 hover:bg-white/20',
+                  !currentHasMeta && 'opacity-30 cursor-not-allowed'
+                )}
+                title={currentHasMeta ? (showMetadata ? 'Hide info (I)' : 'Show info (I)') : 'No metadata'}
+              >
+                <Info className="w-5 h-5" />
+              </button>
               <div className="w-px h-6 bg-white/20 mx-1" />
               <button onClick={e => { e.stopPropagation(); handleDownload() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><Download className="w-5 h-5" /></button>
               <button onClick={e => { e.stopPropagation(); handleOpenExternal() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ExternalLink className="w-5 h-5" /></button>
@@ -682,7 +724,12 @@ export function FullscreenMediaViewer({
                     <img src={thumb} alt="" className={clsx('w-full h-full object-cover', item.nsfw && nsfwBlurEnabled && 'blur-md')}
                       onError={(e) => {
                         const img = e.target as HTMLImageElement
-                        if (img.src !== item.url) img.src = item.url
+                        // For videos, fallback to transformed thumbnail URL (not raw video URL)
+                        // For images, fallback to original URL
+                        const fallbackUrl = itemIsVideo && item.url?.includes('civitai.com')
+                          ? getCivitaiThumbnailUrl(item.url, 450)
+                          : item.url
+                        if (img.src !== fallbackUrl) img.src = fallbackUrl
                       }}
                     />
                     {itemIsVideo && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Play className="w-5 h-5 text-white fill-white" /></div>}
@@ -691,6 +738,61 @@ export function FullscreenMediaViewer({
                 )
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Metadata panel - right side overlay */}
+      {showMetadata && currentHasMeta && (
+        <div
+          className="absolute top-0 right-0 bottom-0 w-[380px] z-40 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 flex flex-col overflow-hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Panel header */}
+          <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
+            <h3 className="text-white font-semibold">Generation Data</h3>
+            <button
+              onClick={() => setShowMetadata(false)}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Panel content - scrollable */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {currentItem.meta && Object.entries(currentItem.meta).map(([key, value]) => {
+              if (value === null || value === undefined || value === '') return null
+
+              const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+              const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+              const isLongText = displayValue.length > 100
+
+              return (
+                <div key={key} className="group">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-white/50 uppercase tracking-wide">{displayKey}</span>
+                    <button
+                      onClick={() => copyToClipboard(displayValue, key)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === key ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                  <div className={clsx(
+                    'text-sm text-white/90 bg-white/5 rounded-lg p-2',
+                    isLongText && 'max-h-32 overflow-y-auto'
+                  )}>
+                    {isLongText ? (
+                      <pre className="whitespace-pre-wrap break-words font-mono text-xs">{displayValue}</pre>
+                    ) : (
+                      <span className="break-words">{displayValue}</span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

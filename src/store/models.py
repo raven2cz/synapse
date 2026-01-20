@@ -499,10 +499,14 @@ class Pack(BaseModel):
     source: PackSource
     dependencies: List[PackDependency] = Field(default_factory=list)
     resources: PackResources = Field(default_factory=PackResources)
-    
+
     # Previews with metadata (canonical source of truth)
     previews: List[PreviewInfo] = Field(default_factory=list)
-    
+
+    # Cover/thumbnail URL - user-selected preview to show as pack cover
+    # If not set, falls back to first preview
+    cover_url: Optional[str] = None
+
     # Optional metadata fields
     version: Optional[str] = None
     description: Optional[str] = None

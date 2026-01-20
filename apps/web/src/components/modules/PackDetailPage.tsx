@@ -306,7 +306,7 @@ export function PackDetailPage() {
   // Create MediaItems for viewer
   const mediaItems = pack?.previews.map(p => ({
     url: p.url || '',
-    type: p.media_type,
+    type: p.media_type === 'video' ? 'video' as const : 'image' as const,
     thumbnailUrl: p.thumbnail_url,
     nsfw: p.nsfw,
     width: p.width,
@@ -1750,17 +1750,41 @@ export function PackDetailPage() {
           </div>
           <div className={`grid ${gridClass}`}>
             {pack.previews.map((preview, idx) => (
-              <MediaPreview
+              <div
                 key={idx}
-                src={preview.url || ''}
-                type={preview.media_type || 'image'}
-                thumbnailSrc={preview.thumbnail_url}
-                nsfw={preview.nsfw}
-                aspectRatio="portrait"
-                className="w-full h-full bg-slate-dark"
+                className={clsx(
+                  'group/card relative rounded-xl overflow-hidden cursor-pointer',
+                  'bg-slate-dark',
+                  // Smooth transitions for all hover effects
+                  'transition-all duration-300 ease-out',
+                  // Hover effects - Civitai style
+                  'hover:ring-2 hover:ring-synapse/60',
+                  'hover:shadow-lg hover:shadow-synapse/20',
+                  'hover:scale-[1.02]',
+                  'hover:-translate-y-1'
+                )}
                 onClick={() => openFullscreen(idx)}
-                showAudioIndicator={true}
-              />
+              >
+                <MediaPreview
+                  src={preview.url || ''}
+                  type={preview.media_type || 'image'}
+                  thumbnailSrc={preview.thumbnail_url}
+                  nsfw={preview.nsfw}
+                  aspectRatio="portrait"
+                  className="w-full h-full"
+                  autoPlay={true}
+                  playFullOnHover={true}
+                />
+                {/* Video indicator badge */}
+                {preview.media_type === 'video' && (
+                  <div className="absolute bottom-2 right-2 px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm text-white text-xs font-medium flex items-center gap-1 pointer-events-none">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                    Video
+                  </div>
+                )}
+              </div>
             ))}
           </div>
         </div>

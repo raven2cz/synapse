@@ -80,7 +80,7 @@ function formatNumber(n?: number): string {
 // ============================================================================
 
 export const ModelCard = memo(function ModelCard({
-  id,
+  id: _id,
   name,
   type,
   creator,

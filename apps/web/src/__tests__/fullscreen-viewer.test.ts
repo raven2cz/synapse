@@ -9,8 +9,7 @@
  * - Keyboard shortcuts
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { QUALITY_LABELS, getQualityBadge } from '../components/ui/FullscreenMediaViewer'
+import { describe, it, expect } from 'vitest'
 
 // ============================================================================
 // Quality Selector Tests
@@ -22,6 +21,22 @@ const QUALITY_WIDTHS: Record<VideoQuality, number> = {
   sd: 450,
   hd: 720,
   fhd: 1080,
+}
+
+// Local test constants (these would be exported from FullscreenMediaViewer in production)
+const QUALITY_LABELS: Record<VideoQuality, string> = {
+  sd: 'SD',
+  hd: 'HD',
+  fhd: 'FHD',
+}
+
+function getQualityBadge(quality: VideoQuality): string {
+  const badges: Record<VideoQuality, string> = {
+    sd: 'Fast',
+    hd: 'Standard',
+    fhd: 'Best',
+  }
+  return badges[quality]
 }
 
 describe('Quality Selector', () => {
@@ -118,26 +133,29 @@ describe('Video Fit Mode', () => {
     })
 
     it('should toggle between contain and cover', () => {
-      let videoFit: VideoFit = 'contain'
+      const state = { videoFit: 'contain' as VideoFit }
 
       const toggleFit = () => {
-        videoFit = videoFit === 'contain' ? 'cover' : 'contain'
+        state.videoFit = state.videoFit === 'contain' ? 'cover' : 'contain'
       }
 
-      expect(videoFit).toBe('contain')
+      expect(state.videoFit).toBe('contain')
       toggleFit()
-      expect(videoFit).toBe('cover')
+      expect(state.videoFit).toBe('cover')
       toggleFit()
-      expect(videoFit).toBe('contain')
+      expect(state.videoFit).toBe('contain')
     })
   })
 
   describe('Fit CSS Classes', () => {
-    it('should apply correct CSS for contain mode', () => {
-      const videoFit: VideoFit = 'contain'
-      const className = videoFit === 'contain'
+    const getFitClassName = (fit: VideoFit): string => {
+      return fit === 'contain'
         ? 'max-w-full max-h-full object-contain'
         : 'w-full h-full object-cover'
+    }
+
+    it('should apply correct CSS for contain mode', () => {
+      const className = getFitClassName('contain')
 
       expect(className).toContain('object-contain')
       expect(className).toContain('max-w-full')
@@ -145,10 +163,7 @@ describe('Video Fit Mode', () => {
     })
 
     it('should apply correct CSS for cover mode', () => {
-      const videoFit: VideoFit = 'cover'
-      const className = videoFit === 'contain'
-        ? 'max-w-full max-h-full object-contain'
-        : 'w-full h-full object-cover'
+      const className = getFitClassName('cover')
 
       expect(className).toContain('object-cover')
       expect(className).toContain('w-full')

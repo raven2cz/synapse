@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { 
-  Package, Search, Tag, 
+import {
+  Package, Search, Tag,
   ZoomIn, ZoomOut, Loader2, X, AlertTriangle
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { MediaPreview } from '../ui/MediaPreview'
 
 interface PackSummary {
   name: string
@@ -19,11 +20,33 @@ interface PackSummary {
   source_url?: string
   created_at?: string
   thumbnail?: string  // This is the URL to preview image
+  thumbnail_type?: 'image' | 'video'  // Media type of thumbnail
   tags: string[]
   user_tags: string[]
   has_unresolved: boolean
   model_type?: string  // LORA, Checkpoint, etc.
   base_model?: string  // SD 1.5, SDXL, etc.
+  is_nsfw?: boolean  // Has nsfw-pack tag (from API)
+  is_nsfw_hidden?: boolean  // Has nsfw-pack-hide tag (from API)
+}
+
+// Special tags with distinct colors
+const SPECIAL_TAGS: Record<string, { bg: string; text: string }> = {
+  'nsfw-pack': { bg: 'bg-red-500/60', text: 'text-red-100' },
+  'nsfw-pack-hide': { bg: 'bg-red-700/60', text: 'text-red-100' },
+  'favorites': { bg: 'bg-amber-500/60', text: 'text-amber-100' },
+  'to-review': { bg: 'bg-blue-500/60', text: 'text-blue-100' },
+  'wip': { bg: 'bg-orange-500/60', text: 'text-orange-100' },
+  'archived': { bg: 'bg-slate-500/60', text: 'text-slate-200' },
+}
+
+/** Get style for user tag (special or default) */
+function getTagStyle(tag: string): string {
+  const special = SPECIAL_TAGS[tag.toLowerCase()]
+  if (special) {
+    return `${special.bg} ${special.text} backdrop-blur-sm`
+  }
+  return 'bg-pulse/50 text-white backdrop-blur-sm'
 }
 
 // Card widths for zoom - fixed sizes
@@ -80,6 +103,11 @@ export function PacksPage() {
 
   // Filter packs
   const filteredPacks = packs.filter(pack => {
+    // Hide nsfw-pack-hide packs when blur is enabled
+    if (nsfwBlurEnabled && (pack.is_nsfw_hidden || pack.user_tags?.includes('nsfw-pack-hide'))) {
+      return false
+    }
+
     // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
@@ -89,10 +117,10 @@ export function PacksPage() {
       const matchesUserTags = pack.user_tags?.some(t => t.toLowerCase().includes(q))
       if (!matchesName && !matchesDesc && !matchesTags && !matchesUserTags) return false
     }
-    
+
     // User tag filter
     if (selectedTag && !pack.user_tags?.includes(selectedTag)) return false
-    
+
     return true
   })
 
@@ -236,8 +264,9 @@ export function PacksPage() {
       <div className="flex flex-wrap gap-4">
         {filteredPacks.map(pack => {
           const thumbnailUrl = pack.thumbnail
-          const isNsfwPack = pack.user_tags?.includes('nsfw-pack')
-          
+          // Check NSFW status from API flag OR user_tags
+          const isNsfwPack = pack.is_nsfw || pack.user_tags?.includes('nsfw-pack') || pack.nsfw_previews_count > 0
+
           console.log(`[PacksPage] Rendering pack: ${pack.name}, thumbnail: ${thumbnailUrl}, nsfw: ${isNsfwPack}`)
           
           return (
@@ -247,39 +276,30 @@ export function PacksPage() {
               className="group cursor-pointer"
               style={{ width: cardWidth }}
             >
-              {/* Card - Civitai style */}
-              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark">
-                {/* Image with hover zoom and NSFW blur */}
+              {/* Card - Civitai style with Border + Inner Glow hover effect */}
+              <div className={clsx(
+                "relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark",
+                // Transition and base shadow
+                "transition-all duration-300 ease-out",
+                "shadow-md shadow-black/30",
+                // Hover: scale + inner glow + outer border + shadow
+                "group-hover:scale-[1.03]",
+                "group-hover:shadow-[inset_0_0_40px_rgba(102,126,234,0.3),0_0_0_2px_rgba(102,126,234,0.6),0_8px_24px_rgba(102,126,234,0.3)]"
+              )}>
+                {/* Media preview with video autoPlay support */}
                 {thumbnailUrl ? (
-                  <img
+                  <MediaPreview
                     src={thumbnailUrl}
-                    alt={pack.name}
-                    className={clsx(
-                      "w-full h-full object-cover transition-all duration-500 ease-out",
-                      "group-hover:scale-110",
-                      isNsfwPack && nsfwBlurEnabled && "blur-xl group-hover:blur-0"
-                    )}
-                    loading="lazy"
-                    onError={(e) => {
-                      console.error(`[PacksPage] Image load error for ${pack.name}:`, thumbnailUrl)
-                      ;(e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                    onLoad={() => {
-                      console.log(`[PacksPage] Image loaded for ${pack.name}`)
-                    }}
+                    type={pack.thumbnail_type || 'image'}
+                    nsfw={isNsfwPack}
+                    aspectRatio="portrait"
+                    className="w-full h-full"
+                    autoPlay={true}
+                    playFullOnHover={true}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-dark to-slate-mid">
                     <Package className="w-16 h-16 text-slate-mid" />
-                  </div>
-                )}
-                
-                {/* NSFW overlay indicator */}
-                {isNsfwPack && nsfwBlurEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:opacity-0 transition-opacity duration-500 pointer-events-none">
-                    <span className="px-3 py-1.5 bg-red-500/80 backdrop-blur-sm rounded-lg text-sm text-white font-semibold">
-                      NSFW
-                    </span>
                   </div>
                 )}
                 
@@ -303,11 +323,17 @@ export function PacksPage() {
                   </div>
                 )}
                 
-                {/* User tags */}
+                {/* User tags with special colors */}
                 {pack.user_tags && pack.user_tags.length > 0 && (
                   <div className="absolute top-12 left-3 flex gap-1 flex-wrap max-w-[90%]">
-                    {pack.user_tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="px-2 py-0.5 bg-pulse/60 backdrop-blur-sm rounded text-xs text-white">
+                    {pack.user_tags.slice(0, 3).map(tag => (
+                      <span
+                        key={tag}
+                        className={clsx(
+                          'px-2 py-0.5 rounded text-xs',
+                          getTagStyle(tag)
+                        )}
+                      >
                         {tag}
                       </span>
                     ))}

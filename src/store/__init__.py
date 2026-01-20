@@ -364,23 +364,62 @@ class Store:
         url: str,
         download_previews: bool = True,
         add_to_global: bool = True,
+        # Extended wizard options
+        pack_name: Optional[str] = None,
+        max_previews: int = 100,
+        download_images: bool = True,
+        download_videos: bool = True,
+        include_nsfw: bool = True,
+        video_quality: int = 1080,
+        download_from_all_versions: bool = True,
+        cover_url: Optional[str] = None,
+        selected_version_ids: Optional[List[int]] = None,
+        **kwargs,  # For future extensibility
     ) -> Pack:
         """
         Import a pack from Civitai URL.
-        
+
         Args:
             url: Civitai model URL
-            download_previews: If True, download preview images
+            download_previews: If True, download preview images/videos
             add_to_global: If True, add pack to global profile
-        
+            pack_name: Optional custom pack name
+            max_previews: Maximum number of previews to download
+            download_images: Whether to download image previews
+            download_videos: Whether to download video previews
+            include_nsfw: Whether to include NSFW content
+            video_quality: Target video width (450, 720, 1080)
+            download_from_all_versions: If True, download previews from all versions
+            cover_url: User-selected thumbnail URL for pack cover
+            selected_version_ids: List of version IDs to import (creates one dependency per version)
+
         Returns:
             Created Pack
         """
-        pack = self.pack_service.import_from_civitai(url, download_previews)
-        
+        from .pack_service import PreviewDownloadConfig
+
+        # Build download config from wizard options
+        download_config = PreviewDownloadConfig(
+            download_images=download_images,
+            download_videos=download_videos,
+            include_nsfw=include_nsfw,
+            video_quality=video_quality,
+            download_from_all_versions=download_from_all_versions,
+        )
+
+        pack = self.pack_service.import_from_civitai(
+            url=url,
+            download_previews=download_previews,
+            max_previews=max_previews,
+            pack_name=pack_name,
+            download_config=download_config,
+            cover_url=cover_url,
+            selected_version_ids=selected_version_ids,
+        )
+
         if add_to_global:
             self.profile_service.add_pack_to_global(pack.name)
-        
+
         return pack
     
     def resolve(

@@ -135,17 +135,77 @@ class BulkUpdateCheckResponse(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    """Request for import command."""
+    """Request for import command with wizard options."""
     url: str
+    # Wizard options
+    version_ids: Optional[List[int]] = Field(None, description="Specific versions to import")
+    download_images: bool = Field(True, description="Download image previews")
+    download_videos: bool = Field(True, description="Download video previews")
+    include_nsfw: bool = Field(True, description="Include NSFW content")
+    download_from_all_versions: bool = Field(True, description="Download previews from all versions, not just selected")
+    thumbnail_url: Optional[str] = Field(None, description="Custom thumbnail URL")
+    pack_name: Optional[str] = Field(None, description="Custom pack name")
+    pack_description: Optional[str] = Field(None, description="Custom description")
+    max_previews: int = Field(100, description="Max previews to download")
+    video_quality: int = Field(1080, description="Video quality width")
+    # Legacy fields for compatibility
     download_previews: bool = True
     add_to_global: bool = True
 
 
 class ImportResponse(BaseModel):
     """Response for import command."""
+    success: bool = True
     pack_name: str
     pack_type: str
     dependencies_count: int
+    previews_downloaded: int = 0
+    videos_downloaded: int = 0
+    message: str = ""
+
+
+class ImportPreviewRequest(BaseModel):
+    """Request for import preview - fetches model info without importing."""
+    url: str
+    version_ids: Optional[List[int]] = None
+
+
+class VersionPreviewInfo(BaseModel):
+    """Preview info for a single version."""
+    id: int
+    name: str
+    base_model: Optional[str] = None
+    files: List[Dict[str, Any]] = []
+    image_count: int = 0
+    video_count: int = 0
+    nsfw_count: int = 0
+    total_size_bytes: int = 0
+
+
+class ThumbnailOption(BaseModel):
+    """Thumbnail option for selection."""
+    url: str
+    version_id: Optional[int] = None
+    nsfw: bool = False
+    type: str = "image"
+    width: Optional[int] = None
+    height: Optional[int] = None
+
+
+class ImportPreviewResponse(BaseModel):
+    """Response for import preview endpoint."""
+    model_id: int
+    model_name: str
+    creator: Optional[str] = None
+    model_type: Optional[str] = None
+    base_model: Optional[str] = None
+    versions: List[VersionPreviewInfo] = []
+    total_size_bytes: int = 0
+    total_size_formatted: str = "0 B"
+    total_image_count: int = 0
+    total_video_count: int = 0
+    total_nsfw_count: int = 0
+    thumbnail_options: List[ThumbnailOption] = []
 
 
 class InstallResponse(BaseModel):
@@ -383,16 +443,53 @@ def list_packs(
             if not show_nsfw and is_nsfw_hidden:
                 continue
             
-            # Get preview thumbnail
+            # Get preview thumbnail with video support
+            # Priority: 1. User-selected cover_url, 2. First preview in pack.previews, 3. First file on disk
             thumbnail = None
+            thumbnail_type = "image"  # Default type
             previews_dir = store.layout.pack_previews_path(name)
-            if previews_dir.exists():
+
+            # 1. Check for user-selected cover_url
+            if pack.cover_url:
+                # Find the matching preview by URL and use its filename
+                for preview in pack.previews:
+                    if preview.url == pack.cover_url and preview.filename:
+                        local_path = previews_dir / preview.filename
+                        if local_path.exists():
+                            thumbnail = f"/previews/{name}/resources/previews/{preview.filename}"
+                            thumbnail_type = preview.media_type or ("video" if preview.filename.endswith(('.mp4', '.webm')) else "image")
+                            break
+
+            # 2. Fallback to first preview from pack.previews with existing local file
+            if not thumbnail and pack.previews:
+                for preview in pack.previews:
+                    if preview.filename:
+                        local_path = previews_dir / preview.filename
+                        if local_path.exists():
+                            thumbnail = f"/previews/{name}/resources/previews/{preview.filename}"
+                            thumbnail_type = preview.media_type or ("video" if preview.filename.endswith(('.mp4', '.webm')) else "image")
+                            break
+
+            # 3. Final fallback: scan filesystem
+            if not thumbnail and previews_dir.exists():
+                # First look for images
                 for ext in ['.png', '.jpg', '.jpeg', '.webp']:
                     for f in previews_dir.glob(f'*{ext}'):
                         thumbnail = f"/previews/{name}/resources/previews/{f.name}"
+                        thumbnail_type = "image"
                         break
                     if thumbnail:
                         break
+
+                # If no image found, look for videos
+                if not thumbnail:
+                    for ext in ['.mp4', '.webm']:
+                        for f in previews_dir.glob(f'*{ext}'):
+                            thumbnail = f"/previews/{name}/resources/previews/{f.name}"
+                            thumbnail_type = "video"
+                            break
+                        if thumbnail:
+                            break
             
             # Check for unresolved dependencies
             has_unresolved = False
@@ -413,6 +510,7 @@ def list_packs(
                 "dependencies_count": len(pack.dependencies),
                 "has_unresolved": has_unresolved,
                 "thumbnail": thumbnail,
+                "thumbnail_type": thumbnail_type,  # NEW: video support
                 "source_url": pack.source.url if pack.source else None,
                 "tags": pack.tags or [],
                 "user_tags": pack.user_tags or [],
@@ -430,6 +528,7 @@ def list_packs(
                 "dependencies_count": 0,
                 "has_unresolved": True,
                 "thumbnail": None,
+                "thumbnail_type": "image",  # Default for error case
                 "is_nsfw": False,
                 "is_nsfw_hidden": False,
             })
@@ -521,14 +620,29 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
         if pack.previews:
             # Use pack.previews as canonical source (has correct nsfw and meta)
             for preview in pack.previews:
+                preview_url = f"/previews/{pack_name}/resources/previews/{preview.filename}"
+
+                # Determine media_type from filename extension or pack data
+                media_type = getattr(preview, 'media_type', None)
+                if not media_type:
+                    ext = preview.filename.lower().split('.')[-1] if '.' in preview.filename else ''
+                    media_type = 'video' if ext in ['mp4', 'webm', 'mov'] else 'image'
+
                 preview_info = {
                     "filename": preview.filename,
-                    "url": f"/previews/{pack_name}/resources/previews/{preview.filename}",
+                    "url": preview_url,
                     "nsfw": preview.nsfw,
                     "width": preview.width,
                     "height": preview.height,
+                    "media_type": media_type,
                 }
-                
+
+                # For videos, generate thumbnail URL (first frame)
+                if media_type == 'video':
+                    # Civitai URLs need special handling, local files can be served directly
+                    # For local .mp4 files, frontend will use video element to show first frame
+                    preview_info["thumbnail_url"] = getattr(preview, 'thumbnail_url', None) or preview_url
+
                 # Use meta from pack manifest first
                 if preview.meta:
                     preview_info["meta"] = preview.meta
@@ -546,14 +660,26 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 previews.append(preview_info)
         elif previews_dir.exists():
             # Fallback for packs without manifest previews (legacy)
+            image_exts = ['.png', '.jpg', '.jpeg', '.webp', '.gif']
+            video_exts = ['.mp4', '.webm', '.mov']
+            all_exts = image_exts + video_exts
+
             for f in sorted(previews_dir.iterdir()):
-                if f.suffix.lower() in ['.png', '.jpg', '.jpeg', '.webp', '.gif']:
+                if f.suffix.lower() in all_exts:
+                    preview_url = f"/previews/{pack_name}/resources/previews/{f.name}"
+                    media_type = 'video' if f.suffix.lower() in video_exts else 'image'
+
                     preview_info = {
                         "filename": f.name,
-                        "url": f"/previews/{pack_name}/resources/previews/{f.name}",
+                        "url": preview_url,
                         "nsfw": "nsfw" in f.name.lower(),
+                        "media_type": media_type,
                     }
-                    
+
+                    # For videos, thumbnail_url is the same (frontend shows first frame)
+                    if media_type == 'video':
+                        preview_info["thumbnail_url"] = preview_url
+
                     # Try to load meta from sidecar
                     meta_file = f.with_suffix(f.suffix + '.json')
                     if meta_file.exists():
@@ -562,7 +688,7 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                             preview_info["meta"] = json.loads(meta_file.read_text())
                         except:
                             pass
-                    
+
                     previews.append(preview_info)
         
         # Build workflows list - use pack.json as primary source, enrich with filesystem info
@@ -694,24 +820,196 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@v2_packs_router.get("/import/preview", response_model=ImportPreviewResponse)
+def import_preview(
+    url: str = Query(..., description="Civitai model URL"),
+    store=Depends(require_initialized),
+):
+    """
+    Preview what will be imported without actually importing.
+
+    Fetches model information from Civitai and returns version details,
+    file sizes, and preview statistics for the Import Wizard.
+    """
+    import re
+    from ..utils.media_detection import detect_media_type, MediaType
+
+    # Parse model ID from URL
+    model_id_match = re.search(r'civitai\.com/models/(\d+)', url)
+    if not model_id_match:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Civitai URL. Expected: https://civitai.com/models/12345"
+        )
+
+    model_id = int(model_id_match.group(1))
+
+    try:
+        # Fetch model data from Civitai
+        civitai = store.pack_service.civitai
+        model_data = civitai.get_model(model_id)
+
+        if not model_data:
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
+
+        model_versions = model_data.get("modelVersions", [])
+
+        versions = []
+        total_size = 0
+        total_images = 0
+        total_videos = 0
+        total_nsfw = 0
+        all_thumbnails = []
+
+        for version in model_versions:
+            # Process files
+            files = []
+            version_size = 0
+            for f in version.get("files", []):
+                size_kb = f.get("sizeKB") or f.get("sizeKb") or 0
+                version_size += size_kb * 1024
+                files.append({
+                    "id": f.get("id", 0),
+                    "name": f.get("name", "unknown"),
+                    "sizeKB": size_kb,
+                    "type": f.get("type"),
+                    "primary": f.get("primary", False),
+                })
+
+            # Count previews
+            images = version.get("images", [])
+            image_count = 0
+            video_count = 0
+            nsfw_count = 0
+
+            for img in images:
+                img_url = img.get("url", "")
+                is_nsfw = img.get("nsfw", False) or (img.get("nsfwLevel", 1) >= 4)
+                media_info = detect_media_type(img_url)
+                is_video = media_info.type == MediaType.VIDEO
+
+                if is_nsfw:
+                    nsfw_count += 1
+                if is_video:
+                    video_count += 1
+                else:
+                    image_count += 1
+
+                all_thumbnails.append(ThumbnailOption(
+                    url=img_url,
+                    version_id=version.get("id"),
+                    nsfw=is_nsfw,
+                    type="video" if is_video else "image",
+                    width=img.get("width"),
+                    height=img.get("height"),
+                ))
+
+            versions.append(VersionPreviewInfo(
+                id=version.get("id", 0),
+                name=version.get("name", "Unknown"),
+                base_model=version.get("baseModel"),
+                files=files,
+                image_count=image_count,
+                video_count=video_count,
+                nsfw_count=nsfw_count,
+                total_size_bytes=int(version_size),
+            ))
+
+            total_size += version_size
+            total_images += image_count
+            total_videos += video_count
+            total_nsfw += nsfw_count
+
+        # Get creator
+        creator = model_data.get("creator", {})
+        creator_name = creator.get("username") if isinstance(creator, dict) else None
+
+        # Format size
+        def format_size(size_bytes: int) -> str:
+            if size_bytes < 1024:
+                return f"{size_bytes} B"
+            elif size_bytes < 1024 * 1024:
+                return f"{size_bytes / 1024:.1f} KB"
+            elif size_bytes < 1024 * 1024 * 1024:
+                return f"{size_bytes / (1024 * 1024):.1f} MB"
+            else:
+                return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+        return ImportPreviewResponse(
+            model_id=model_id,
+            model_name=model_data.get("name", "Unknown Model"),
+            creator=creator_name,
+            model_type=model_data.get("type"),
+            base_model=versions[0].base_model if versions else None,
+            versions=versions,
+            total_size_bytes=int(total_size),
+            total_size_formatted=format_size(int(total_size)),
+            total_image_count=total_images,
+            total_video_count=total_videos,
+            total_nsfw_count=total_nsfw,
+            thumbnail_options=all_thumbnails[:20],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[import-preview] Failed: {e}")
+        # Check if it's a 404 from Civitai API
+        if "404" in str(e) or "not found" in str(e).lower():
+            raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @v2_packs_router.post("/import", response_model=ImportResponse)
 def import_pack(
     request: ImportRequest,
     store=Depends(require_initialized),
 ):
-    """Import a pack from Civitai URL."""
+    """
+    Import a pack from Civitai URL with wizard options.
+
+    Supports:
+    - Version selection (version_ids)
+    - Preview filtering (download_images, download_videos, include_nsfw)
+    - Custom thumbnail (thumbnail_url)
+    - Custom pack name and description
+    """
+    logger.info(f"[import] Starting import from: {request.url}")
+    logger.info(f"[import] Options: images={request.download_images}, "
+                f"videos={request.download_videos}, nsfw={request.include_nsfw}, "
+                f"all_versions={request.download_from_all_versions}")
+
     try:
         pack = store.import_civitai(
-            request.url,
+            url=request.url,
             download_previews=request.download_previews,
             add_to_global=request.add_to_global,
+            pack_name=request.pack_name,
+            max_previews=request.max_previews,
+            download_images=request.download_images,
+            download_videos=request.download_videos,
+            include_nsfw=request.include_nsfw,
+            video_quality=request.video_quality,
+            download_from_all_versions=request.download_from_all_versions,
+            cover_url=request.thumbnail_url,  # User-selected thumbnail
+            selected_version_ids=request.version_ids,  # Multi-version import support
         )
+
+        # Count downloaded previews
+        videos_count = sum(1 for p in pack.previews if getattr(p, 'media_type', 'image') == 'video')
+        images_count = len(pack.previews) - videos_count
+
         return ImportResponse(
+            success=True,
             pack_name=pack.name,
             pack_type=pack.pack_type.value,
             dependencies_count=len(pack.dependencies),
+            previews_downloaded=images_count,
+            videos_downloaded=videos_count,
+            message=f"Successfully imported '{pack.name}' with {len(pack.previews)} previews",
         )
     except Exception as e:
+        logger.exception(f"[import] Failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

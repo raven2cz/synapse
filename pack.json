@@ -1,0 +1,1879 @@
+{
+  "author": "Shrekman17",
+  "base_model": "Illustrious",
+  "cover_url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/6279598a-ad2f-416f-a9fa-a32b400d0a96/original=true/117590887.jpeg",
+  "created_at": null,
+  "dependencies": [
+    {
+      "description": null,
+      "expose": {
+        "filename": "illustrious_v1.safetensors",
+        "trigger_words": []
+      },
+      "id": "base_checkpoint",
+      "kind": "checkpoint",
+      "required": true,
+      "selector": {
+        "base_model": "Illustrious",
+        "civitai": null,
+        "constraints": null,
+        "huggingface": null,
+        "local_path": null,
+        "strategy": "base_model_hint",
+        "url": null
+      },
+      "update_policy": {
+        "mode": "pinned"
+      }
+    },
+    {
+      "description": null,
+      "expose": {
+        "filename": "ExtremeFrenchKiss-000010.safetensors",
+        "trigger_words": [
+          "EFKV1, extreme french kiss, french kiss, tongue,"
+        ]
+      },
+      "id": "main_lora",
+      "kind": "lora",
+      "required": true,
+      "selector": {
+        "base_model": null,
+        "civitai": {
+          "file_id": 2487922,
+          "model_id": 2191560,
+          "version_id": 2600679
+        },
+        "constraints": null,
+        "huggingface": null,
+        "local_path": null,
+        "strategy": "civitai_model_latest",
+        "url": null
+      },
+      "update_policy": {
+        "mode": "follow_latest"
+      }
+    }
+  ],
+  "description": "<h1 id=\"the-best-way-to-support-me-is-to-subscribe-or-write-some-comment-on-myyoutube-where-i-shitpost-almost-everyday\"><span style=\"color:rgb(250, 82, 82)\"><strong>The best way to support me is to subscribe or write some comment on my</strong></span><strong><br /></strong><a target=\"_blank\" rel=\"ugc\" href=\"https://www.youtube.com/channel/UCNw3_Z8z2uVPwpSegK3mYvA\"><span style=\"color:rgb(250, 82, 82)\"><strong><em>YouTube - Where i shitpost almost everyday</em></strong></span></a></h1><h1 id=\"my-socials:discord-server\"><span style=\"color:rgb(130, 201, 30)\"><strong><em>My socials</em>:</strong></span><br /><a target=\"_blank\" rel=\"ugc\" href=\"https://discord.gg/SGvX8dckDE\"><span style=\"color:rgb(76, 110, 245)\"><strong><em>DISCORD SERVER</em></strong></span></a></h1><h1 id=\"if-you-want-to-contact-me-discordcivit-are-best-options-since-i-check-those-everyday!\"><span style=\"color:rgb(76, 110, 245)\">If You want to contact me Discord/Civit are best options since i check those everyday!</span></h1><h1 id=\"twitter-fb\"><a target=\"_blank\" rel=\"ugc\" href=\"https://x.com/RenAIssaneGRV17\"><span style=\"color:rgb(76, 110, 245)\"><strong><em>Twitter </em></strong></span></a><a target=\"_blank\" rel=\"ugc\" href=\"https://www.facebook.com/profile.php?id=61573881910024\"><strong>FB</strong></a></h1><p></p><p>My loras are available from my official accounts on:<br />Tensor Art: <a target=\"_blank\" rel=\"ugc\" href=\"https://tensor.art/u/836328663648595213\">https://tensor.art/u/836328663648595213</a><br />CivitAI: <a target=\"_blank\" rel=\"ugc\" href=\"https://civitai.com/user/Shrekman17\">https://civitai.com/user/Shrekman17</a><br />Seeart: <a target=\"_blank\" rel=\"ugc\" href=\"https://www.seaart.ai/user/ab14b528c289f390e228b8c5d6f497f1?u_code=DAS7ETB\">https://www.seaart.ai/user/ab14b528c289f390e228b8c5d6f497f1?u_code=DAS7ETB</a></p>",
+  "model_info": {
+    "base_model": "Illustrious",
+    "civitai_air": "civitai: 2191560 @ 2600679",
+    "download_count": 1638,
+    "hash_autov2": "658594DC7D",
+    "hash_sha256": "658594dc7d6d44f49aba89205f414a3877e178184bedee98a2707de6bea1a509",
+    "model_type": "LORA",
+    "published_at": "2026-01-15T18:36:29.083Z",
+    "rating": null,
+    "strength_recommended": null,
+    "trained_words": [
+      "EFKV1, extreme french kiss, french kiss, tongue,"
+    ],
+    "trigger_words": [
+      "EFKV1, extreme french kiss, french kiss, tongue,"
+    ],
+    "usage_tips": null
+  },
+  "name": "Monster_Fucker_Bundle_Shrekman_Hentai_Loras",
+  "pack_type": "lora",
+  "parameters": null,
+  "previews": [
+    {
+      "duration": null,
+      "filename": "117590879.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 2girls, long tongue, very long tongue,  monster girl, grey skin, colored skin, demon girl, goth fashion, makeup, eyeshadow, mascara,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/473fdb4c-dec3-4ec4-ba91-3efb09b50f4a/original=true/117590879.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590882.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 2girls, long tongue, very long tongue,  monster girl, grey skin, colored skin, demon girl, goth fashion, makeup, eyeshadow, mascara,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/420b44af-ced3-4d27-b2ba-cdf28b94be2b/original=true/117590882.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590883.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 1boy, monster, monster boy, 1girl, Ada_wong, \\(resident evil\\), asian, asian female, short hair, black hair, sweater, red sweater,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/ac35d331-5500-458c-8689-cfad55c51698/original=true/117590883.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590885.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 1boy, monster, monster boy, long tongue, very long tongue,  1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/205dd266-2999-4757-860d-2c06da5b120f/original=true/117590885.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590880.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 2girls, long tongue, very long tongue,  monster girl, grey skin, colored skin, demon girl, goth fashion, makeup, eyeshadow, mascara,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/ed5154f9-b51f-4d64-9520-42ad518c61e1/original=true/117590880.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590886.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 2girls, long tongue, very long tongue,  monster girl, grey skin, colored skin, demon girl, goth fashion, makeup, eyeshadow, mascara,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/2766ad83-776d-4ab6-ace6-8633a33bb06f/original=true/117590886.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590881.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 2girls, long tongue, very long tongue,  monster girl, grey skin, colored skin, demon girl, goth fashion, makeup, eyeshadow, mascara,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/0797fca1-35b6-40b9-82b6-6dd87f96c462/original=true/117590881.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590884.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 1boy, monster, monster boy, 1girl, Ada_wong, \\(resident evil\\), asian, asian female, short hair, black hair, sweater, red sweater,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/bff150de-2bcf-4863-b53d-31504d860b5e/original=true/117590884.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117590887.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, EFKV1, extreme french kiss, french kiss, tongue, open mouth, 1boy, monster, monster boy, 1girl, Ada_wong, \\(resident evil\\), asian, asian female, short hair, black hair, sweater, red sweater,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/6279598a-ad2f-416f-a9fa-a32b400d0a96/original=true/117590887.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117449364.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Created Date": "2026-01-14T1217:55.0698025Z",
+        "Size": "1024x1024",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 2514310,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2596732,
+            "type": "lora",
+            "weight": 0.7
+          }
+        ],
+        "clipSkip": 2,
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, \n1girl, femdom, girl on top, \n1girl, femdom, girl on top, nun, orange hair, pale, pale skin, mature woman, habit, cross,",
+        "resources": [],
+        "sampler": "DPM++ 2M Karras",
+        "seed": 1170609518,
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/3db6f62c-bfb8-43b8-9aac-59c8754a7fc4/original=true/117449364.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117449365.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:827184@2514310",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 2514310,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2596732,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:827184@2514310"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,",
+        "sampler": "DPM++ 2M",
+        "seed": 1920598941,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/4f1518c3-d6c6-4ab0-b432-87e2dd6827c5/original=true/117449365.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117445870.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/c2f48706-8399-4eba-884f-a65fe3475ef7/original=true/117445870.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117445872.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/09c7f4af-1083-4d6c-bfb8-f1525ad2864f/original=true/117445872.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117449366.jpeg",
+      "has_audio": null,
+      "height": 1216,
+      "media_type": "image",
+      "meta": {
+        "Created Date": "2026-01-14T1207:55.7094229Z",
+        "Size": "832x1216",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 2514310,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2596732,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "clipSkip": 2,
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, \n1girl, femdom, girl on top, smug, \npale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes, \nblack leather,  armor, cape, leather armor,\ntorn clothes, breasts out, partially nude,",
+        "resources": [],
+        "sampler": "DPM++ 2M Karras",
+        "seed": 1815089195,
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/f45dc550-3cb9-4b7c-a881-a209449ac27d/original=true/117449366.jpeg",
+      "width": 832
+    },
+    {
+      "duration": null,
+      "filename": "117449363.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:827184@2514310",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 2514310,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2596732,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:827184@2514310"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, chains, sex, vaginal, monster, girl on top, rough sex, size diffrence, 1boy, musucular, demon boy, monster boy, \n1girl, femdom, girl on top, \npale, white skin, colored skin, makeup, black makeup, black lips, eye shadow, ancient greek clothes, side cut, sleeveless, armor, bracelet, short hair, tomboy, toned, muscular female, laurel crown, red eyes, black hair,",
+        "sampler": "DPM++ 2M",
+        "seed": 782728092,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/102e7c6e-358b-443a-b326-05d883fa0a0e/original=true/117449363.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "117445873.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FBCMV1, restrained, monster, chains, sex, vaginal, monster, monster boy, 1boy, 1girl, makima (chainsaw_man), rehead, red hair, yellow eyes, white shirt,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/d6bf484a-98b5-482a-8cfa-663faa08637c/original=true/117445873.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374724.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, prone bone, 1girl, queen marika the eternal (elden ring), bare shoulders, black dress, circlet, gold circlet, cracked skin, halter dress, halterneck, long hair, yellow eyes, braid, braided hair, long braid, blonde, blonde hair,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/5c1f44e5-eb67-4b36-bc0c-48dbac3d7d18/original=true/116374724.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374731.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, sex from behind, 1boy, muscular male, werewolf, 1girl, ghislaine_dedoldia, abs, dark-skinned female, animal ears, animal tail, brown skin, brown skinned female, curvaceous figure, toned, muscular, muscular female,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/e3adde94-a209-49a1-8444-c5e246ad4908/original=true/116374731.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374717.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, orc, muscular male, 1boy, 1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes,  black leather,  armor, cape, leather armor, torn clothes, breasts out, partially nude,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/7f79ae4b-e889-4cbc-97b2-ed6e9f905f36/original=true/116374717.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374718.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, orc, muscular male, 1boy, 1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes,  black leather,  armor, cape, leather armor, torn clothes, breasts out, partially nude,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/48840cb2-d12f-4b9d-a563-5d53bf27ce9e/original=true/116374718.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374716.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, prone bone, 1girl, queen marika the eternal (elden ring), bare shoulders, black dress, circlet, gold circlet, cracked skin, halter dress, halterneck, long hair, yellow eyes, braid, braided hair, long braid, blonde, blonde hair,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/ea123dc9-c764-4e54-9920-842e89c1af4d/original=true/116374716.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374730.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, sex from behind, 1boy, muscular male, werewolf, 1girl, ghislaine_dedoldia, abs, dark-skinned female, animal ears, animal tail, brown skin, brown skinned female, curvaceous figure, toned, muscular, muscular female,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/1caea967-892e-4a2d-9221-9d89e76229b6/original=true/116374730.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374732.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, prone bone, 1girl, queen marika the eternal (elden ring), bare shoulders, black dress, circlet, gold circlet, cracked skin, halter dress, halterneck, long hair, yellow eyes, braid, braided hair, long braid, blonde, blonde hair,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/f3b85bb1-310e-4e83-a03a-e9122a3313be/original=true/116374732.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116374719.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, MFV1, monster, monster boy, sex, vaginal, rough sex, sex from behind, 1boy, muscular male, werewolf, 1girl, ghislaine_dedoldia, abs, dark-skinned female, animal ears, animal tail, brown skin, brown skinned female, curvaceous figure, toned, muscular, muscular female,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/e90ec403-6c43-44d2-9d52-2a78239ed50b/original=true/116374719.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116379840.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy, 1boy, muscular male, beard, bald, monster, facial hair, blue skin, colored skin,\nBREAK\n1girl, mature female, purple dress, purple eyes, ancient Greek clothes, megara_(disney),",
+        "sampler": "DPM++ 2M",
+        "seed": 1547724960,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/49867db9-18e1-465a-abf5-9e515eb7df53/original=true/116379840.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116378665.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy, 1boy, muscular male, \n1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes, \nblack leather,  armor, cape, leather armor,\ntorn clothes, breasts out, partially nude, ",
+        "sampler": "DPM++ 2M",
+        "seed": 1922126196,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/d0550b58-0e9e-41be-8beb-c23e68a00020/original=true/116378665.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116378743.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy,\n1girl, mature female, ",
+        "sampler": "DPM++ 2M",
+        "seed": 1922126196,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/bb68020a-59b0-4b0f-b26d-e76acf00df09/original=true/116378743.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116379839.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy, 1boy, muscular male, beard, bald, monster, facial hair, blue skin, colored skin,\nBREAK\n1girl, mature female, purple dress, purple eyes, ancient Greek clothes, megara_(disney),",
+        "sampler": "DPM++ 2M",
+        "seed": 708749908,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/aff747de-3781-4a0c-935e-c942709db5b0/original=true/116379839.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116378666.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy, 1boy, muscular male, \n1girl, mature female, ",
+        "sampler": "DPM++ 2M",
+        "seed": 1922126196,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/8670abeb-bbeb-4f78-8c5b-ea8ce02edfc3/original=true/116378666.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116376711.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FCCV1, centaur, taur, sex, anal, 1boy, monster boy, 1girl, makima (chainsaw_man), rehead, red hair, yellow eyes, white shirt, open clothes, torn clothes, open shirt,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/c71ec62b-1c39-4848-b293-df35d1d66117/original=true/116376711.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116376709.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FCCV1, centaur, taur, sex, anal, 1boy, monster boy, 1girl, makima (chainsaw_man), rehead, red hair, yellow eyes, white shirt, open clothes, torn clothes, open shirt,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/57ca1169-9b46-4575-87cd-0d7443822222/original=true/116376709.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116376710.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FCCV1, centaur, taur, sex, anal, 1boy, monster boy, 1girl, makima (chainsaw_man), rehead, red hair, yellow eyes, white shirt, open clothes, torn clothes, open shirt,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/e14a739b-9ad5-4674-bd35-dca610867943/original=true/116376710.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116376712.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FCCV1, centaur, taur, sex, anal, 1boy, monster boy, 1girl, makima (chainsaw_man), rehead, red hair, yellow eyes, white shirt, open clothes, torn clothes, open shirt,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/1d9f3a7e-7752-4b62-8a28-a9028d0e4364/original=true/116376712.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116379836.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "urn:air:sdxl:checkpoint:civitai:996495@1916444",
+        "cfgScale": 7,
+        "civitaiResources": [
+          {
+            "modelVersionId": 1916444,
+            "type": "checkpoint"
+          },
+          {
+            "modelVersionId": 2567334,
+            "type": "lora",
+            "weight": 1
+          }
+        ],
+        "extra": {},
+        "models": [
+          "urn:air:sdxl:checkpoint:civitai:996495@1916444"
+        ],
+        "negativePrompt": "worst quality, old, early, low quality, lowres, bad hands, mutated hands, greyscale, simple background, text, signature, patreon logo, artist name, loli. child, chibi, big brests, huge breasts, massive breasts, background characters,",
+        "prompt": "masterpiece, best quality, newest, absurdres, highres,  \nFCCV1, centaur, taur, sex, vaginal, monster boy, 1boy, muscular male, beard, bald, monster, facial hair, blue skin, colored skin,\nBREAK\n1girl, mature female, purple dress, purple eyes, ancient Greek clothes, megara_(disney),",
+        "sampler": "DPM++ 2M",
+        "seed": 563336526,
+        "steps": 30,
+        "workflow": "img2img-facefix"
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/a4d8247d-46bb-436f-b9f3-8681641e1a51/original=true/116379836.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116738359.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FTCV1, centaur, taur, 1girl, monster girl, pale, pale skin, goth fashion, makeup, eyeshadow, mascara, 1boy, faceles male, muscular male,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/12d043ec-548a-4543-b95b-3f4f38c77ab3/original=true/116738359.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116738360.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FTCV1, centaur, taur, 1girl, monster girl, pale, pale skin, goth fashion, makeup, eyeshadow, mascara, 1boy, faceles male, muscular male,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/6a5e932c-b433-40f9-a7ff-4a5cd6ca3cb3/original=true/116738360.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116738361.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FTCV1, centaur, taur, 1boy, faceles male, muscular male, 1girl, monster girl, dryad, faun, blue skin, blue colored skin, colored skin, horns, antlers, loin cloth, deer ears, deer tail, deer girl, sex, vaginal, hetero,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/1c8052d3-d5c3-4b9b-8399-aae85125ea7c/original=true/116738361.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "116738357.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, FTCV1, centaur, taur, 1boy, faceles male, muscular male, 1girl, monster girl, dryad, faun, blue skin, blue colored skin, colored skin, horns, antlers, loin cloth, deer ears, deer tail, deer girl, sex, vaginal, hetero,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/efdd09e6-c4c0-41ef-892d-136b3766e8c9/original=true/116738357.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910357.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/461cbd33-1da3-4a8d-9d9d-25e673cd8c69/original=true/114910357.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910360.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, top-down bottom-up, hand on another's head, 1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/707d580a-01a9-4b0a-8eec-5c7f466e805d/original=true/114910360.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910362.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/111cc4ed-e809-4631-962b-2fff73e3b556/original=true/114910362.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910365.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, top-down bottom-up, hand on another's head, 1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/eb14db79-f9cf-4b70-982f-dae76d82d8c5/original=true/114910365.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910364.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/e13cf3a6-a2ea-4fa7-9452-5c02c0219f2d/original=true/114910364.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910358.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, top-down bottom-up, hand on another's head, 1girl, pale, white skin, colored skin, pale skin, elf, pointy ears, muscular woman, mature female, aged up, scar, scars on face, white hair, long hair, messy hair, blue eyes,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/23702b2e-f97f-48db-b4ef-309e63d374ab/original=true/114910358.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910359.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/468b6570-2c01-46a8-af69-ad09c546f343/original=true/114910359.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910361.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/f4659c5b-ca49-4ccc-b029-0a32cacc2a7a/original=true/114910361.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "114910363.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2514310.safetensors",
+        "Model hash": "A5F58EB1C3",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "A5F58EB1C3"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, PBMV1, pinned, pinned down, monster, sex, vaginal, hetero, 1boy, monster boy, 1girl, modeus (helltaker), white hair, horns, hearts, symbol shaped pupils,",
+        "resources": [
+          {
+            "hash": "A5F58EB1C3",
+            "name": "2514310.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/66ef61be-f98b-4026-91ed-7a196802eaae/original=true/114910363.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546602.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, sex, hetero, vaginal, 1girl, revy_(black_lagoon), ponytail, black gloves, black tank top, tank top, tattoo, tribal tattoo, shoulder tattoo, crop top, brown eyes, brown hair,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/882025a8-173a-4040-a4c5-4ac89354bb42/original=true/112546602.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546600.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab, hand on another's neck,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/cbc78f56-4841-419d-a726-79b609fd3fb2/original=true/112546600.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546598.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, sex, hetero, vaginal, 1girl, revy_(black_lagoon), ponytail, black gloves, black tank top, tank top, tattoo, tribal tattoo, shoulder tattoo, crop top, brown eyes, brown hair,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/186a5dcc-c037-4959-bcd6-ace48fb306b3/original=true/112546598.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546596.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,  lying,  1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab,  hand on another's neck, , rough sex, motion lines, emphasis lines,  tentacles under clothes, tentacle_in_mouth",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/b897d098-9fd2-4984-9934-de96bc5558d0/original=true/112546596.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546603.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, sex, hetero, vaginal, 1girl, revy_(black_lagoon), ponytail, black gloves, black tank top, tank top, tattoo, tribal tattoo, shoulder tattoo, crop top, brown eyes, brown hair,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/c59441d2-9b72-4d97-ad2b-6cf8fe1680f8/original=true/112546603.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546597.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,  lying,  1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab,  hand on another's neck, , rough sex, motion lines, emphasis lines,  tentacles under clothes, tentacle_in_mouth",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/af9979f7-7380-40d6-a1fa-eaa2372b0e93/original=true/112546597.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546595.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,  lying,  1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab,  hand on another's neck, , rough sex, motion lines, emphasis lines,  tentacles under clothes, tentacle_in_mouth",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/4cfbd344-a1c2-4ab8-a25a-5f1575e0acd7/original=true/112546595.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546599.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab, hand on another's neck,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/4e4dbce5-47d2-44e2-9f33-8049ea71581b/original=true/112546599.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546593.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab, hand on another's neck,",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/fb8db0c4-4f2c-4480-becd-db3ea229befc/original=true/112546593.jpeg",
+      "width": 1024
+    },
+    {
+      "duration": null,
+      "filename": "112546591.jpeg",
+      "has_audio": null,
+      "height": 1024,
+      "media_type": "image",
+      "meta": {
+        "Model": "2167369.safetensors",
+        "Model hash": "BEFC694A29",
+        "Size": "512x512",
+        "cfgScale": 7.5,
+        "hashes": {
+          "model": "BEFC694A29"
+        },
+        "prompt": "masterpiece, best quality, newest, absurdres, highres, TMBXV1, monster boy, sex, vaginal, tentacle, tentacle monster, 1girl, shadowheart \\(baldur's gate\\), long braid, elf, pointy ears, black hair, braid, side bangs, green eyes,  lying,  1boy, monster boy, sex, vaginal, tentacle, tentacle monster, throat grab, neck grab,  hand on another's neck, , rough sex, motion lines, emphasis lines,  tentacles under clothes, tentacle_in_mouth",
+        "resources": [
+          {
+            "hash": "BEFC694A29",
+            "name": "2167369.safetensors",
+            "type": "model"
+          }
+        ],
+        "sampler": "DDIM",
+        "steps": 30
+      },
+      "nsfw": true,
+      "thumbnail_url": null,
+      "url": "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/236c68ba-d3c3-4a1f-999c-9d58f785194e/original=true/112546591.jpeg",
+      "width": 1024
+    }
+  ],
+  "resources": {
+    "previews_keep_in_git": true,
+    "workflows_keep_in_git": true
+  },
+  "schema": "synapse.pack.v2",
+  "source": {
+    "model_id": 2191560,
+    "provider": "civitai",
+    "url": "https://civitai.com/models/2191560",
+    "version_id": 2600679
+  },
+  "tags": [
+    "concept",
+    "tentacle",
+    "monster",
+    "tentacle monster",
+    "tentacle sex",
+    "monster fucked",
+    "monster cock",
+    "horse cock",
+    "taur",
+    "centaur",
+    "monster on female",
+    "woman and monster"
+  ],
+  "trigger_words": [
+    "EFKV1, extreme french kiss, french kiss, tongue,"
+  ],
+  "user_tags": [],
+  "version": "ExtremeFrenchKissV1",
+  "workflows": []
+}

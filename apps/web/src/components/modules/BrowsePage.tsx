@@ -10,6 +10,8 @@ import { clsx } from 'clsx'
 
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
+import { ImportWizardModal } from '@/components/ui/ImportWizardModal'
+import type { ModelVersion as WizardModelVersion } from '@/components/ui/ImportWizardModal'
 import type { MediaType } from '@/lib/media'
 
 interface ModelPreview {
@@ -124,6 +126,10 @@ export function BrowsePage() {
 
   const [fullscreenIndex, setFullscreenIndex] = useState<number>(-1)
   const isFullscreenOpen = fullscreenIndex >= 0
+
+  // Import Wizard state
+  const [showImportWizard, setShowImportWizard] = useState(false)
+  const [importWizardLoading, setImportWizardLoading] = useState(false)
 
   const [cardSize, setCardSize] = useState<CardSize>('md')
 
@@ -400,7 +406,7 @@ export function BrowsePage() {
         <FullscreenMediaViewer
           items={modelDetail.previews.map(p => ({
             url: p.url,
-            type: p.media_type,
+            type: p.media_type === 'video' ? 'video' : 'image',
             thumbnailUrl: p.thumbnail_url,
             nsfw: p.nsfw,
             width: p.width,
@@ -411,6 +417,69 @@ export function BrowsePage() {
           isOpen={isFullscreenOpen}
           onClose={() => setFullscreenIndex(-1)}
           onIndexChange={setFullscreenIndex}
+        />
+      )}
+
+      {/* Import Wizard Modal */}
+      {modelDetail && (
+        <ImportWizardModal
+          isOpen={showImportWizard}
+          onClose={() => setShowImportWizard(false)}
+          modelName={modelDetail.name}
+          modelDescription={modelDetail.description}
+          versions={modelDetail.versions.map(v => ({
+            id: v.id,
+            name: v.name,
+            baseModel: v.base_model,
+            createdAt: v.published_at,
+            files: v.files?.map(f => ({
+              id: f.id,
+              name: f.name,
+              sizeKB: f.size_kb,
+              primary: true,
+            })) || [],
+            images: modelDetail.previews.map(p => ({
+              url: p.url,
+              nsfw: p.nsfw,
+              width: p.width,
+              height: p.height,
+              type: p.media_type as 'image' | 'video' | undefined,
+              meta: p.meta,
+            })),
+          }))}
+          isLoading={importWizardLoading}
+          onImport={async (selectedVersionIds, options, thumbnailUrl, customPackName) => {
+            setImportWizardLoading(true)
+            try {
+              const res = await fetch('/api/packs/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  url: `https://civitai.com/models/${modelDetail.id}`,
+                  version_ids: selectedVersionIds,
+                  download_images: options.downloadImages,
+                  download_videos: options.downloadVideos,
+                  include_nsfw: options.includeNsfw,
+                  download_from_all_versions: options.downloadFromAllVersions,
+                  thumbnail_url: thumbnailUrl,
+                  pack_name: customPackName,  // Custom pack name if user edited it
+                }),
+              })
+              if (!res.ok) {
+                const err = await res.json()
+                throw new Error(err.detail || 'Import failed')
+              }
+              const data = await res.json()
+              addToast('success', `Successfully imported '${data.pack_name}'`)
+              queryClient.invalidateQueries({ queryKey: ['packs'] })
+              setShowImportWizard(false)
+              setSelectedModel(null)
+            } catch (error) {
+              addToast('error', 'Import failed', (error as Error).message)
+            } finally {
+              setImportWizardLoading(false)
+            }
+          }}
         />
       )}
 
@@ -642,12 +711,22 @@ export function BrowsePage() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedModel(null)}
-                    className="p-2 hover:bg-slate-mid rounded-xl text-text-muted hover:text-text-primary transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {/* Main Import Button - Opens Wizard */}
+                    <Button
+                      onClick={() => setShowImportWizard(true)}
+                      className="bg-gradient-to-r from-synapse to-pulse hover:shadow-lg hover:shadow-synapse/25"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Import to Pack...
+                    </Button>
+                    <button
+                      onClick={() => setSelectedModel(null)}
+                      className="p-2 hover:bg-slate-mid rounded-xl text-text-muted hover:text-text-primary transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Modal Content - Scrollable */}

@@ -592,5 +592,121 @@ class TestWorkflowManagement:
             "workflow upload endpoint should exist"
 
 
+class TestListPacksEndpoint:
+    """Tests for GET /packs endpoint."""
+
+    def test_list_packs_returns_empty_when_no_packs(self):
+        """Test that list_packs returns empty packs array, not 500 error."""
+        from src.store.api import list_packs
+        from unittest.mock import MagicMock
+
+        # Create mock store with empty pack list
+        mock_store = MagicMock()
+        mock_store.list_packs.return_value = []
+
+        # Call the endpoint
+        result = list_packs(show_nsfw=True, store=mock_store)
+
+        # Should return {"packs": []} not raise an exception
+        assert result == {"packs": []}
+        assert isinstance(result["packs"], list)
+        assert len(result["packs"]) == 0
+
+    def test_list_packs_returns_packs_with_thumbnail_type(self):
+        """Test that list_packs includes thumbnail_type field."""
+        from src.store.api import list_packs
+        from unittest.mock import MagicMock, patch
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+
+            # Create mock store
+            mock_store = MagicMock()
+            mock_store.list_packs.return_value = ["test-pack"]
+
+            # Mock pack
+            mock_pack = MagicMock()
+            mock_pack.name = "test-pack"
+            mock_pack.version = "1.0.0"
+            mock_pack.description = "Test description"
+            mock_pack.pack_type = MagicMock(value="lora")
+            mock_pack.base_model = "SDXL"
+            mock_pack.dependencies = []
+            mock_pack.source = MagicMock(url="https://test.com")
+            mock_pack.tags = []
+            mock_pack.user_tags = []
+            mock_pack.is_nsfw = False
+            mock_pack.is_nsfw_hidden = False
+            mock_pack.created_at = None
+            mock_store.get_pack.return_value = mock_pack
+
+            # Mock lock
+            mock_store.get_pack_lock.return_value = None
+
+            # Mock layout - no previews
+            previews_dir = tmp_path / "packs" / "test-pack" / "resources" / "previews"
+            previews_dir.mkdir(parents=True)
+            mock_store.layout.pack_previews_path.return_value = previews_dir
+
+            # Call the endpoint
+            result = list_packs(show_nsfw=True, store=mock_store)
+
+            # Should have one pack
+            assert len(result["packs"]) == 1
+
+            # Should have thumbnail_type field (even if no thumbnail)
+            assert "thumbnail_type" in result["packs"][0]
+            assert result["packs"][0]["thumbnail_type"] == "image"  # default
+
+    def test_list_packs_detects_video_thumbnail(self):
+        """Test that list_packs detects .mp4 thumbnails and sets thumbnail_type=video."""
+        from src.store.api import list_packs
+        from unittest.mock import MagicMock
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+
+            # Create mock store
+            mock_store = MagicMock()
+            mock_store.list_packs.return_value = ["video-pack"]
+
+            # Mock pack
+            mock_pack = MagicMock()
+            mock_pack.name = "video-pack"
+            mock_pack.version = "1.0.0"
+            mock_pack.description = "Video pack"
+            mock_pack.pack_type = MagicMock(value="lora")
+            mock_pack.base_model = "SDXL"
+            mock_pack.dependencies = []
+            mock_pack.source = MagicMock(url="https://test.com")
+            mock_pack.tags = []
+            mock_pack.user_tags = []
+            mock_pack.is_nsfw = False
+            mock_pack.is_nsfw_hidden = False
+            mock_pack.created_at = None
+            mock_store.get_pack.return_value = mock_pack
+
+            # Mock lock
+            mock_store.get_pack_lock.return_value = None
+
+            # Create previews directory with video file only
+            previews_dir = tmp_path / "packs" / "video-pack" / "resources" / "previews"
+            previews_dir.mkdir(parents=True)
+            (previews_dir / "preview_1.mp4").touch()  # Video only!
+            mock_store.layout.pack_previews_path.return_value = previews_dir
+
+            # Call the endpoint
+            result = list_packs(show_nsfw=True, store=mock_store)
+
+            # Should have one pack with video thumbnail
+            assert len(result["packs"]) == 1
+            assert result["packs"][0]["thumbnail_type"] == "video"
+            assert result["packs"][0]["thumbnail"].endswith(".mp4")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

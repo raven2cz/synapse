@@ -1,148 +1,719 @@
 """
-Pack Builder
+Pack Builder - Builds Synapse packs from various sources.
 
-Creates Synapse packs from various sources:
-- Use-case 1: From Civitai URL
-- Use-case 2: From workflow JSON file
-- Use-case 3: From local models folder scan
-- Use-case 4: From PNG image metadata
+This module provides the core functionality for creating packs from:
+- Civitai model URLs (with full video preview support)
+- ComfyUI workflow JSON files  
+- PNG images with embedded workflows
+
+Enhanced Features (v2.6.0):
+- Video preview downloading with proper extensions
+- Configurable filters (images/videos/NSFW)
+- Progress callbacks for large downloads
+- Optimized video URLs for quality control
+- Extended timeout support for video files
+
+Author: Synapse Team
+License: MIT
 """
 
 import json
-import re
-import os
-import base64
-import requests
 import logging
-from pathlib import Path
-from typing import Optional, List, Dict, Any, Tuple
+import requests
+from dataclasses import dataclass, field
 from datetime import datetime
-from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
-from .models import (
-    Pack, PackMetadata, AssetDependency, CustomNodeDependency,
-    PreviewImage, WorkflowInfo, AssetType, AssetSource,
-    CivitaiSource, HuggingFaceSource, ASSET_TYPE_FOLDERS,
-    GenerationParameters, ModelInfo, DependencyStatus, AssetHash
-)
-from ..clients.civitai_client import CivitaiClient, CivitaiModel, CivitaiModelVersion
-from ..clients.huggingface_client import HuggingFaceClient
-from ..workflows.scanner import WorkflowScanner, WorkflowScanResult
-from ..workflows.resolver import DependencyResolver
-from ..utils.media_detection import detect_media_type, get_video_thumbnail_url
-
-# Configure logging
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Data Classes
+# =============================================================================
+
+@dataclass
+class PreviewDownloadOptions:
+    """
+    Configuration options for preview media downloading.
+    
+    Provides fine-grained control over what types of preview content
+    to download during pack import operations.
+    
+    Attributes:
+        download_images: Whether to download image previews (.jpg, .png, etc.)
+        download_videos: Whether to download video previews (.mp4)
+        include_nsfw: Whether to include NSFW-flagged content
+        max_previews: Maximum number of previews to download
+        video_quality: Target video width for optimization (450, 720, 1080)
+        image_timeout: Timeout in seconds for image downloads
+        video_timeout: Timeout in seconds for video downloads (larger files)
+    
+    Example:
+        >>> options = PreviewDownloadOptions(
+        ...     download_videos=True,
+        ...     include_nsfw=False,
+        ...     video_quality=1080,
+        ... )
+    """
+    download_images: bool = True
+    download_videos: bool = True
+    include_nsfw: bool = True
+    max_previews: int = 20
+    video_quality: int = 1080
+    image_timeout: int = 60
+    video_timeout: int = 120
+
+
+@dataclass
+class DownloadProgress:
+    """
+    Progress information for a single download operation.
+    
+    Used to track and report download progress through callbacks,
+    enabling UI updates during long-running operations.
+    
+    Attributes:
+        index: Current item index (0-based)
+        total: Total number of items to download
+        filename: Name of the file being downloaded
+        url: Source URL
+        media_type: Type of media ('image' or 'video')
+        bytes_downloaded: Bytes downloaded so far
+        total_bytes: Total bytes to download (if known)
+        status: Current status ('downloading', 'completed', 'skipped', 'failed')
+        error: Error message if status is 'failed'
+    """
+    index: int
+    total: int
+    filename: str
+    url: str
+    media_type: str
+    bytes_downloaded: int = 0
+    total_bytes: Optional[int] = None
+    status: Literal['downloading', 'completed', 'skipped', 'failed'] = 'downloading'
+    error: Optional[str] = None
+    
+    @property
+    def percent_complete(self) -> Optional[float]:
+        """
+        Calculate completion percentage if total bytes is known.
+        
+        Returns:
+            Percentage (0-100) or None if total unknown
+        """
+        if self.total_bytes and self.total_bytes > 0:
+            return (self.bytes_downloaded / self.total_bytes) * 100
+        return None
+    
+    @property
+    def size_mb(self) -> Optional[float]:
+        """
+        Get file size in megabytes.
+        
+        Returns:
+            Size in MB or None if unknown
+        """
+        if self.total_bytes:
+            return self.total_bytes / (1024 * 1024)
+        return None
+
+
+# Type alias for progress callback
+ProgressCallback = Callable[[DownloadProgress], None]
+
+
+@dataclass
+class PreviewImage:
+    """
+    Represents a downloaded preview image or video.
+    
+    Stores metadata about preview media including local path,
+    dimensions, NSFW status, and generation metadata.
+    
+    Attributes:
+        filename: Local filename (e.g., 'preview_1.mp4')
+        url: Original source URL
+        local_path: Relative path within pack (e.g., 'resources/previews/preview_1.mp4')
+        nsfw: Whether this preview is NSFW
+        width: Image/video width in pixels
+        height: Image/video height in pixels
+        media_type: Type of media ('image', 'video', 'unknown')
+        duration: Video duration in seconds (videos only)
+        has_audio: Whether video has audio (videos only)
+        thumbnail_url: Static thumbnail URL for videos
+        meta: Generation metadata (prompt, settings, etc.)
+    """
+    filename: str
+    url: Optional[str] = None
+    local_path: Optional[str] = None
+    nsfw: bool = False
+    width: Optional[int] = None
+    height: Optional[int] = None
+    media_type: Literal['image', 'video', 'unknown'] = 'image'
+    duration: Optional[float] = None
+    has_audio: Optional[bool] = None
+    thumbnail_url: Optional[str] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+@dataclass
+class PackMetadata:
+    """Pack metadata information."""
+    name: str
+    version: str = "1.0.0"
+    description: Optional[str] = None
+    author: Optional[str] = None
+    tags: List[str] = field(default_factory=list)
+    user_tags: List[str] = field(default_factory=list)
+    created_at: Optional[str] = None
+    source_url: Optional[str] = None
+
+
+@dataclass
+class Pack:
+    """Complete pack definition."""
+    metadata: PackMetadata
+    dependencies: List[Any] = field(default_factory=list)
+    custom_nodes: List[Any] = field(default_factory=list)
+    workflows: List[Any] = field(default_factory=list)
+    previews: List[PreviewImage] = field(default_factory=list)
+    docs: Dict[str, str] = field(default_factory=dict)
+    parameters: Optional[Any] = None
+    model_info: Optional[Any] = None
 
 
 @dataclass
 class PackBuildResult:
-    """Result of building a pack."""
+    """Result of a pack build operation."""
     pack: Optional[Pack]
     success: bool
-    errors: List[str]
-    warnings: List[str]
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
     pack_dir: Optional[Path] = None
 
+
+# =============================================================================
+# Pack Builder Class
+# =============================================================================
 
 class PackBuilder:
     """
     Builds Synapse packs from various sources.
     
-    Supports all 4 use-cases:
-    1. Civitai URL → Pack
-    2. Workflow JSON → Pack
-    3. Local folder scan → Pack
-    4. PNG metadata → Pack
+    The PackBuilder handles importing models from Civitai, extracting
+    workflows from images, and assembling complete pack structures
+    with all necessary metadata and previews.
+    
+    Features:
+        - Civitai model import with full video support
+        - Configurable preview download options
+        - Progress tracking for large downloads
+        - Metadata extraction and merging
+        - NSFW content filtering
+    
+    Example:
+        >>> builder = PackBuilder(civitai_client, config)
+        >>> result = builder.build_from_civitai_url(
+        ...     url="https://civitai.com/models/123",
+        ...     preview_options=PreviewDownloadOptions(
+        ...         download_videos=True,
+        ...         video_quality=1080,
+        ...     ),
+        ...     progress_callback=lambda p: print(f"Downloading: {p.filename}")
+        ... )
     """
     
-    def __init__(
-        self,
-        config=None,
-        civitai_client: Optional[CivitaiClient] = None,
-        huggingface_client: Optional[HuggingFaceClient] = None,
-        resolver: Optional[DependencyResolver] = None,
-        scanner: Optional[WorkflowScanner] = None,
-    ):
+    def __init__(self, civitai_client, config=None):
+        """
+        Initialize PackBuilder.
+        
+        Args:
+            civitai_client: Civitai API client instance
+            config: Optional configuration object with paths
+        """
+        self.civitai = civitai_client
         self.config = config
-        
-        # Create clients with tokens from config if available
-        if civitai_client:
-            self.civitai = civitai_client
-        else:
-            api_token = None
-            if config and hasattr(config, 'api') and hasattr(config.api, 'civitai_token'):
-                api_token = config.api.civitai_token
-            self.civitai = CivitaiClient(api_key=api_token)
-        
-        if huggingface_client:
-            self.huggingface = huggingface_client
-        else:
-            hf_token = None
-            if config and hasattr(config, 'api') and hasattr(config.api, 'huggingface_token'):
-                hf_token = config.api.huggingface_token
-            self.huggingface = HuggingFaceClient(token=hf_token)
-        
-        self.resolver = resolver or DependencyResolver()
-        self.scanner = scanner or WorkflowScanner()
     
-    # =========================================================================
-    # USE-CASE 1: Build from Civitai URL
-    # =========================================================================
+    def _sanitize_name(self, name: str) -> str:
+        """
+        Sanitize a string for use as a pack/directory name.
+        
+        Removes or replaces characters that are problematic for
+        file systems while preserving readability.
+        
+        Args:
+            name: Original name string
+            
+        Returns:
+            Sanitized name safe for file system use
+        """
+        # Replace problematic characters
+        for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']:
+            name = name.replace(char, '_')
+        # Remove leading/trailing whitespace and dots
+        name = name.strip(' .')
+        # Limit length
+        return name[:100] if len(name) > 100 else name
+    
+    def _determine_nsfw_status(self, img_data: Dict[str, Any]) -> bool:
+        """
+        Determine NSFW status from Civitai image data.
+        
+        Civitai uses multiple fields to indicate NSFW status:
+        - nsfw: boolean flag
+        - nsfwLevel: numeric level (1=Safe, 2=Soft, 3+=Explicit)
+        
+        Args:
+            img_data: Raw image data from Civitai API
+            
+        Returns:
+            True if content is NSFW, False otherwise
+        """
+        # Check explicit nsfw flag
+        if img_data.get("nsfw", False):
+            return True
+        
+        # Check nsfw level (2+ is considered NSFW)
+        nsfw_level = img_data.get("nsfwLevel", 0)
+        if isinstance(nsfw_level, (int, float)) and nsfw_level >= 2:
+            return True
+        
+        return False
+    
+    def _extract_meta_safely(self, img_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Safely extract generation metadata from image data.
+        
+        Handles various API response formats where meta might be:
+        - Directly in 'meta' key
+        - In 'metadata' key
+        - Nested as meta.meta (API quirk)
+        
+        Args:
+            img_data: Raw image data from API
+            
+        Returns:
+            Extracted metadata dict or None
+        """
+        meta = img_data.get("meta")
+        
+        # Try alternative key
+        if not meta:
+            meta = img_data.get("metadata")
+        
+        # Handle nested meta (API v1 quirk)
+        if isinstance(meta, dict) and "meta" in meta and isinstance(meta["meta"], dict):
+            meta = meta["meta"]
+        
+        # Validate it's a proper dict
+        return meta if isinstance(meta, dict) else None
+    
+    def _download_preview_images(
+        self,
+        version,
+        pack_dir: Path,
+        max_previews: int,
+        download: bool = True,
+        detailed_version_images: Optional[List[Dict[str, Any]]] = None,
+        # === NEW v2.6.0 Parameters ===
+        download_images: bool = True,
+        download_videos: bool = True,
+        include_nsfw: bool = True,
+        video_quality: int = 1080,
+        image_timeout: int = 60,
+        video_timeout: int = 120,
+        progress_callback: Optional[ProgressCallback] = None,
+    ) -> List[PreviewImage]:
+        """
+        Download preview media (images and videos) to pack resources directory.
+        
+        This method handles downloading preview content from Civitai with full
+        support for both images and videos. It includes configurable filtering
+        by media type and NSFW status, optimized video URLs, and progress
+        tracking for large downloads.
+        
+        Media Type Detection:
+            Uses URL-based detection to identify videos vs images without
+            making additional network requests. Civitai videos are properly
+            detected even when served with misleading extensions (.jpeg).
+        
+        Video Handling:
+            - Videos are always saved with .mp4 extension
+            - Optimized URLs are used for quality control
+            - Longer timeouts account for larger file sizes
+            - Thumbnail URLs are extracted for preview display
+        
+        Metadata Merging:
+            When detailed_version_images is provided, metadata is merged from
+            the detailed source to include full generation parameters.
+        
+        Args:
+            version: CivitaiModelVersion object with images list
+            pack_dir: Target directory for the pack
+            max_previews: Maximum number of previews to download
+            download: Whether to actually download files (False for dry run)
+            detailed_version_images: Detailed image data with full metadata
+            download_images: Whether to download image files
+            download_videos: Whether to download video files
+            include_nsfw: Whether to include NSFW content
+            video_quality: Target video width (450, 720, 1080)
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            List of PreviewImage objects with metadata
+            
+        Example:
+            >>> previews = builder._download_preview_images(
+            ...     version=model_version,
+            ...     pack_dir=Path("/packs/my-model"),
+            ...     max_previews=20,
+            ...     download_videos=True,
+            ...     include_nsfw=False,
+            ...     video_quality=1080,
+            ...     progress_callback=lambda p: print(f"{p.percent_complete:.0f}%")
+            ... )
+        """
+        # Import detection utilities (avoid circular imports)
+        from ..utils.media_detection import (
+            detect_media_type,
+            get_video_thumbnail_url,
+            get_optimized_video_url,
+        )
+        
+        previews: List[PreviewImage] = []
+        resources_dir = pack_dir / "resources" / "previews"
+        
+        if download:
+            resources_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Build lookup map for detailed images by URL (metadata merge)
+        detailed_map: Dict[str, Dict[str, Any]] = {}
+        if detailed_version_images:
+            for img in detailed_version_images:
+                url = img.get("url")
+                if url:
+                    detailed_map[url] = img
+        
+        # Get images from version (limit to max_previews)
+        images = version.images[:max_previews] if version.images else []
+        
+        # Track downloaded URLs to avoid duplicates
+        downloaded_urls: set = set()
+        
+        # Counter for actually processed items
+        preview_number = 0
+        total_to_process = len(images)
+        
+        for i, img_data in enumerate(images):
+            url = img_data.get("url", "")
+            if not url:
+                continue
+            
+            # Skip duplicates
+            if url in downloaded_urls:
+                logger.debug(f"[PackBuilder] Skipping duplicate URL: {url[:80]}...")
+                continue
+            
+            # MERGE: Get richer data if available
+            detailed_img = detailed_map.get(url)
+            source_img = detailed_img if detailed_img else img_data
+            
+            # Determine NSFW status
+            is_nsfw = self._determine_nsfw_status(source_img)
+            
+            # === NSFW FILTER ===
+            if is_nsfw and not include_nsfw:
+                logger.debug(f"[PackBuilder] Skipping NSFW preview: {url[:80]}...")
+                continue
+            
+            # Detect media type from URL
+            media_info = detect_media_type(url, use_head_request=False)
+            media_type = media_info.type.value  # 'image', 'video', 'unknown'
+            
+            # === MEDIA TYPE FILTER ===
+            if media_type == 'video' and not download_videos:
+                logger.debug(f"[PackBuilder] Skipping video (disabled): {url[:80]}...")
+                continue
+            
+            if media_type == 'image' and not download_images:
+                logger.debug(f"[PackBuilder] Skipping image (disabled): {url[:80]}...")
+                continue
+            
+            # Increment preview number only for items we're keeping
+            preview_number += 1
+            
+            # Generate filename with appropriate extension
+            url_path = url.split("?")[0]
+            original_ext = Path(url_path).suffix or ".png"
+            
+            # For videos: ALWAYS use .mp4 extension regardless of original
+            if media_type == 'video':
+                filename = f"preview_{preview_number}.mp4"
+            else:
+                filename = f"preview_{preview_number}{original_ext}"
+            
+            local_path = f"resources/previews/{filename}"
+            
+            # Extract metadata
+            meta = self._extract_meta_safely(source_img)
+            
+            # Get video thumbnail URL
+            thumbnail_url = None
+            if media_type == 'video':
+                thumbnail_url = get_video_thumbnail_url(url, width=450)
+            
+            # Create PreviewImage object
+            preview = PreviewImage(
+                filename=filename,
+                url=url,
+                local_path=local_path,
+                nsfw=is_nsfw,
+                width=source_img.get("width"),
+                height=source_img.get("height"),
+                media_type=media_type,
+                thumbnail_url=thumbnail_url,
+                meta=meta,
+            )
+            
+            # === DOWNLOAD ===
+            if download:
+                # Determine download URL
+                download_url = url
+                timeout = image_timeout  # Use configured timeout
+                
+                if media_type == 'video':
+                    # Use optimized video URL for quality control
+                    download_url = get_optimized_video_url(url, width=video_quality)
+                    timeout = video_timeout  # Use configured video timeout
+                    logger.info(f"[PackBuilder] Downloading video: {filename} (quality: {video_quality}p)")
+                
+                dest_path = resources_dir / filename
+                
+                # Create progress object
+                progress = DownloadProgress(
+                    index=preview_number - 1,
+                    total=total_to_process,
+                    filename=filename,
+                    url=url,
+                    media_type=media_type,
+                    status='downloading',
+                )
+                
+                # Report progress start
+                if progress_callback:
+                    progress_callback(progress)
+                
+                try:
+                    # Stream download for large files
+                    response = requests.get(
+                        download_url,
+                        timeout=timeout,
+                        stream=True,
+                    )
+                    response.raise_for_status()
+                    
+                    # Get content length if available
+                    total_bytes = response.headers.get('content-length')
+                    if total_bytes:
+                        total_bytes = int(total_bytes)
+                        progress.total_bytes = total_bytes
+                    
+                    # Write with progress tracking
+                    bytes_downloaded = 0
+                    with open(dest_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                bytes_downloaded += len(chunk)
+                                
+                                # Update progress periodically (every ~100KB)
+                                progress.bytes_downloaded = bytes_downloaded
+                                if progress_callback and total_bytes and bytes_downloaded % 102400 < 8192:
+                                    progress_callback(progress)
+                    
+                    # Final progress update
+                    progress.bytes_downloaded = bytes_downloaded
+                    progress.status = 'completed'
+                    if progress_callback:
+                        progress_callback(progress)
+                    
+                    # Log video downloads with size
+                    if media_type == 'video':
+                        file_size = dest_path.stat().st_size
+                        logger.info(
+                            f"[PackBuilder] Video downloaded: {filename} "
+                            f"({file_size / 1024 / 1024:.1f} MB)"
+                        )
+                    
+                    # Mark URL as downloaded
+                    downloaded_urls.add(url)
+                    
+                except requests.exceptions.Timeout:
+                    error_msg = f"Timeout downloading {filename} (>{timeout}s)"
+                    logger.warning(f"[PackBuilder] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    # Don't add to previews list
+                    preview_number -= 1
+                    continue
+                    
+                except requests.exceptions.RequestException as e:
+                    error_msg = f"Network error downloading {filename}: {str(e)}"
+                    logger.warning(f"[PackBuilder] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    preview_number -= 1
+                    continue
+                    
+                except Exception as e:
+                    error_msg = f"Failed to download {filename}: {str(e)}"
+                    logger.error(f"[PackBuilder] {error_msg}")
+                    progress.status = 'failed'
+                    progress.error = error_msg
+                    if progress_callback:
+                        progress_callback(progress)
+                    preview_number -= 1
+                    continue
+            else:
+                # Not downloading, just mark as processed
+                downloaded_urls.add(url)
+            
+            previews.append(preview)
+        
+        # Summary log
+        video_count = sum(1 for p in previews if p.media_type == 'video')
+        image_count = sum(1 for p in previews if p.media_type == 'image')
+        logger.info(
+            f"[PackBuilder] Downloaded {len(previews)} previews "
+            f"({video_count} videos, {image_count} images)"
+        )
+        
+        return previews
     
     def build_from_civitai_url(
         self,
         url: str,
         pack_name: Optional[str] = None,
         pack_dir: Optional[Path] = None,
+        max_previews: int = 20,
         include_previews: bool = True,
-        max_previews: int = 50,
         download_previews: bool = True,
+        # === NEW v2.6.0 Parameters ===
+        preview_options: Optional[PreviewDownloadOptions] = None,
+        progress_callback: Optional[ProgressCallback] = None,
+        # === NEW v2.6.0 Multi-version Parameters ===
+        version_ids: Optional[List[int]] = None,
+        thumbnail_url: Optional[str] = None,
+        custom_description: Optional[str] = None,
     ) -> PackBuildResult:
         """
         Build a pack from a Civitai model URL.
         
-        Extracts:
-        - Model metadata (name, description, tags)
-        - Primary model file as dependency
-        - Base model as dependency (unresolved)
-        - Preview images with NSFW flags (downloaded to resources)
-        - Generation parameters from example images
-        - Model info table (trigger words, hash, etc.)
-        """
-        errors = []
-        warnings = []
+        This is the main entry point for importing models from Civitai.
+        It handles all aspects of pack creation including metadata extraction,
+        dependency setup, and preview downloading.
         
-        print(f"[IMPORT DEBUG] === Starting import from: {url} ===")
+        Supports multi-version import for creating comprehensive packs with
+        multiple file variants.
+        
+        Args:
+            url: Civitai model URL (can include version ID)
+            pack_name: Optional custom pack name (auto-generated if not provided)
+            pack_dir: Target directory (uses config default if not provided)
+            max_previews: Maximum preview count (overridden by preview_options)
+            include_previews: Whether to include preview metadata
+            download_previews: Whether to download preview files
+            preview_options: Detailed preview download configuration
+            progress_callback: Optional callback for download progress
+            version_ids: List of version IDs to include (None = URL version or latest)
+            thumbnail_url: Custom thumbnail URL for the pack
+            custom_description: Custom pack description
+            
+        Returns:
+            PackBuildResult with pack data and status
+            
+        Example:
+            >>> # Single version import
+            >>> result = builder.build_from_civitai_url(
+            ...     url="https://civitai.com/models/123",
+            ... )
+            
+            >>> # Multi-version import
+            >>> result = builder.build_from_civitai_url(
+            ...     url="https://civitai.com/models/123",
+            ...     version_ids=[456, 789],  # Import specific versions
+            ...     preview_options=PreviewDownloadOptions(
+            ...         download_videos=True,
+            ...         include_nsfw=False,
+            ...     ),
+            ... )
+        """
+        errors: List[str] = []
+        warnings: List[str] = []
+        
+        # Use default options if not provided
+        if preview_options is None:
+            preview_options = PreviewDownloadOptions(max_previews=max_previews)
+        
         logger.info(f"[PackBuilder] Building from URL: {url}")
         
         try:
-            # Parse URL
+            # Parse URL to get model and version IDs
             model_id, version_id = self.civitai.parse_civitai_url(url)
-            print(f"[IMPORT DEBUG] Parsed model_id={model_id}, version_id={version_id}")
             logger.info(f"[PackBuilder] Parsed model_id={model_id}, version_id={version_id}")
             
-            # Fetch model data (as dict)
+            # Fetch model data
             model_data = self.civitai.get_model(model_id)
-            print(f"[IMPORT DEBUG] Fetched model: {model_data.get('name', 'unknown')}")
-            logger.info(f"[PackBuilder] Fetched model data: {model_data.get('name', 'unknown')}")
+            logger.info(f"[PackBuilder] Fetched model: {model_data.get('name', 'unknown')}")
             
-            # Convert to objects for easier handling
-            model = CivitaiModel.from_api_response(model_data)
-            print(f"[IMPORT DEBUG] CivitaiModel created: name={model.name}, type={model.type}")
-            logger.info(f"[PackBuilder] Model: {model.name}, type: {model.type}")
+            # Convert to model object
+            model = self.civitai.create_model_from_response(model_data)
             
-            # Get specific version or latest
-            if version_id:
+            # Determine which versions to import
+            versions_to_import: List[Any] = []
+            
+            if version_ids:
+                # Multi-version import: use specified version IDs
+                for vid in version_ids:
+                    version = next(
+                        (v for v in model.model_versions if v.id == vid),
+                        None
+                    )
+                    if version:
+                        versions_to_import.append(version)
+                    else:
+                        warnings.append(f"Version ID {vid} not found in model")
+                
+                if not versions_to_import:
+                    return PackBuildResult(
+                        pack=None,
+                        success=False,
+                        errors=["None of the specified version IDs were found"],
+                        warnings=warnings,
+                    )
+                
+                logger.info(f"[PackBuilder] Multi-version import: {len(versions_to_import)} versions")
+            
+            elif version_id:
+                # Single version from URL
                 version = next(
                     (v for v in model.model_versions if v.id == version_id),
                     model.model_versions[0] if model.model_versions else None
                 )
-            else:
-                version = model.model_versions[0] if model.model_versions else None
+                if version:
+                    versions_to_import = [version]
             
-            if not version:
-                logger.error("[PackBuilder] No model version found")
+            else:
+                # Default: first/latest version
+                if model.model_versions:
+                    versions_to_import = [model.model_versions[0]]
+            
+            if not versions_to_import:
                 return PackBuildResult(
                     pack=None,
                     success=False,
@@ -150,24 +721,26 @@ class PackBuilder:
                     warnings=[],
                 )
             
-            logger.info(f"[PackBuilder] Using version: {version.name} (ID: {version.id})")
-
-            # ------------------------------------------------------------------
-            # METADATA ENRICHMENT: Fetch detailed version data for images
-            # ------------------------------------------------------------------
-            detailed_version_images = []
-            try:
-                logger.info(f"[PackBuilder] Fetching detailed version metadata from: {version.id}")
-                # The raw API response for version contains 'images' list with full 'meta' dicts
-                ver_detail = self.civitai.get_model_version(version.id)
-                detailed_version_images = ver_detail.get("images", [])
-                logger.debug(f"[PackBuilder] Got {len(detailed_version_images)} detailed images")
-            except Exception as e:
-                logger.warning(f"[PackBuilder] Failed to fetch detailed version info: {e}")
-                # Non-fatal, just continue with basic info
+            # Use first version for primary metadata
+            primary_version = versions_to_import[0]
+            logger.info(f"[PackBuilder] Primary version: {primary_version.name} (ID: {primary_version.id})")
+            if len(versions_to_import) > 1:
+                logger.info(f"[PackBuilder] Additional versions: {[v.name for v in versions_to_import[1:]]}")
+            
+            # Fetch detailed version data for metadata enrichment (all versions)
+            all_detailed_images: List[Dict[str, Any]] = []
+            for ver in versions_to_import:
+                try:
+                    ver_detail = self.civitai.get_model_version(ver.id)
+                    detailed_images = ver_detail.get("images", [])
+                    all_detailed_images.extend(detailed_images)
+                    logger.debug(f"[PackBuilder] Got {len(detailed_images)} images from version {ver.id}")
+                except Exception as e:
+                    logger.warning(f"[PackBuilder] Failed to fetch details for version {ver.id}: {e}")
             
             # Create pack name and directory
             name = pack_name or self._sanitize_name(model.name)
+            
             if pack_dir is None and self.config:
                 pack_dir = self.config.packs_path / name
             elif pack_dir is None:
@@ -176,772 +749,121 @@ class PackBuilder:
             pack_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"[PackBuilder] Pack directory: {pack_dir}")
             
-            # Create pack metadata
+            # Create pack metadata (use custom description if provided)
+            description = custom_description or model.description
+            
+            # Build version string from all versions
+            version_str = primary_version.name or "1.0.0"
+            if len(versions_to_import) > 1:
+                version_str = f"{version_str} (+{len(versions_to_import) - 1} more)"
+            
             metadata = PackMetadata(
                 name=name,
-                version=version.name or "1.0.0",
-                description=model.description,
+                version=version_str,
+                description=description,
                 author=model.creator.get("username") if model.creator else None,
                 tags=model.tags,
-                user_tags=[],  # User can add later
+                user_tags=[],
                 created_at=datetime.now().isoformat(),
                 source_url=url,
             )
             
-            # Create main asset dependency
-            main_dependency = self.civitai.create_asset_dependency(model, version)
-            main_dependency.status = DependencyStatus.RESOLVED
-            dependencies = [main_dependency]
+            # Download previews from ALL versions with deduplication
+            previews: List[PreviewImage] = []
+            downloaded_urls: set = set()
             
-            # Create base model dependency (unresolved - needs user to select)
-            if version.base_model:
-                base_model_dep = AssetDependency(
-                    name=f"Base Model: {version.base_model}",
-                    asset_type=AssetType.BASE_MODEL,
-                    source=AssetSource.UNRESOLVED,
-                    filename="",
-                    required=True,
-                    status=DependencyStatus.UNRESOLVED,
-                    base_model_hint=version.base_model,
-                    description=f"Required base model: {version.base_model}. Please select a specific checkpoint.",
-                )
-                dependencies.append(base_model_dep)
-            
-            # Extract generation parameters from example images
-            parameters = self._extract_parameters_from_version(version, model_data)
-            print(f"[IMPORT DEBUG] parameters after extraction: {parameters}")
-            if parameters:
-                print(f"[IMPORT DEBUG] parameters.to_dict(): {parameters.to_dict()}")
-            
-            # Extract model info table
-            print(f"[IMPORT DEBUG] Extracting model_info...")
-            print(f"[IMPORT DEBUG] model.type = {model.type}")
-            try:
-                model_info = self._extract_model_info(model, version, model_data)
-                print(f"[IMPORT DEBUG] model_info created successfully")
-            except AttributeError as e:
-                print(f"[IMPORT DEBUG] ERROR in _extract_model_info: {e}")
-                import traceback
-                traceback.print_exc()
-                raise
-            
-            # Get and download preview images
-            previews = []
             if include_previews:
-                previews = self._download_preview_images(
-                    version, 
-                    pack_dir, 
-                    max_previews,
-                    download_previews,
-                    detailed_version_images=detailed_version_images
-                )
-            
-            # Extract hints from description and trained words
-            docs = {}
-            if model.description:
-                docs["source.md"] = model.description
-            
-            hints = {
-                "trained_words": version.trained_words,
-                "base_model": version.base_model,
-                "nsfw": model.nsfw,
-            }
-            if parameters:
-                hints["parameters"] = parameters.to_dict()
-            docs["extracted_hints.json"] = json.dumps(hints, indent=2, ensure_ascii=False)
-            
-            # Build pack
-            pack = Pack(
-                metadata=metadata,
-                dependencies=dependencies,
-                custom_nodes=[],
-                workflows=[],
-                previews=previews,
-                docs=docs,
-                parameters=parameters,
-                model_info=model_info,
-            )
-            
-            return PackBuildResult(
-                pack=pack,
-                success=True,
-                errors=errors,
-                warnings=warnings,
-                pack_dir=pack_dir,
-            )
-            
-        except Exception as e:
-            return PackBuildResult(
-                pack=None,
-                success=False,
-                errors=[str(e)],
-                warnings=warnings,
-            )
-    
-    def _download_preview_images(
-        self,
-        version: CivitaiModelVersion,
-        pack_dir: Path,
-        max_previews: int,
-        download: bool = True,
-        detailed_version_images: List[Dict[str, Any]] = None,
-    ) -> List[PreviewImage]:
-        """
-        Download preview media (images and videos) to pack resources directory.
-        
-        Detects media type from URL and handles both images and videos.
-        """
-        # Local imports to avoid circular dependency issues if any (though top-level is fine usually)
-        from ..utils.media_detection import detect_media_type, get_video_thumbnail_url
-        
-        previews = []
-        resources_dir = pack_dir / "resources" / "previews"
-        
-        if download:
-            resources_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create lookup map for detailed images by URL
-        detailed_map = {}
-        if detailed_version_images:
-            for img in detailed_version_images:
-                url = img.get("url")
-                if url:
-                    detailed_map[url] = img
-        
-        # Get images from version (basic summary data)
-        images = version.images[:max_previews] if version.images else []
-        
-        for i, img_data in enumerate(images):
-            url = img_data.get("url", "")
-            if not url:
-                continue
-                
-            # MERGE: Check if we have richer data for this image
-            detailed_img = detailed_map.get(url)
-            source_img = detailed_img if detailed_img else img_data
-            
-            # Determine NSFW status
-            nsfw = source_img.get("nsfw", False)
-            nsfw_level = source_img.get("nsfwLevel", 0)
-            if nsfw_level >= 2:
-                nsfw = True
-            
-            # Detect media type from URL
-            media_info = detect_media_type(url, use_head_request=False)
-            media_type = media_info.type.value  # 'image', 'video', or 'unknown'
-            
-            # Generate filename with appropriate extension
-            url_path = url.split("?")[0]
-            original_ext = Path(url_path).suffix or ".png"
-            
-            # For videos, ensure we use video extension
-            if media_type == 'video' and original_ext in ['.jpg', '.jpeg', '.png']:
-                # Civitai sometimes serves videos as .jpeg - keep original but mark as video
-                pass
-            
-            filename = f"preview_{i+1}{original_ext}"
-            local_path = f"resources/previews/{filename}"
-            
-            # Extract metadata safely
-            meta = source_img.get("meta")
-            if not meta and "metadata" in source_img:
-                meta = source_img.get("metadata")
-                
-            # Handle potential nested 'meta' key (API v1 quirk)
-            if isinstance(meta, dict) and "meta" in meta and isinstance(meta["meta"], dict):
-                meta = meta["meta"]
-            
-            # Get video thumbnail URL
-            thumbnail_url = None
-            if media_type == 'video':
-                thumbnail_url = get_video_thumbnail_url(url)
-            
-            # Create PreviewImage with media type
-            preview = PreviewImage(
-                filename=filename,
-                url=url,
-                local_path=local_path,
-                nsfw=nsfw,
-                width=source_img.get("width"),
-                height=source_img.get("height"),
-                media_type=media_type,
-                thumbnail_url=thumbnail_url,
-                meta=meta if isinstance(meta, dict) else None,
-            )
-            
-            # Download the media file
-            if download:
-                try:
-                    dest_path = resources_dir / filename
-                    response = requests.get(url, timeout=60, stream=True)  # Longer timeout for videos
-                    if response.status_code == 200:
-                        with open(dest_path, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
-                        
-                        # Log video downloads
-                        if media_type == 'video':
-                            file_size = dest_path.stat().st_size
-                            print(f"[PackBuilder] Downloaded video preview: {filename} ({file_size / 1024 / 1024:.1f} MB)")
-                            
-                except Exception as e:
-                    print(f"Warning: Failed to download preview {url}: {e}")
-            
-            previews.append(preview)
-        
-        return previews
-    
-    def _extract_parameters_from_version(
-        self,
-        version: CivitaiModelVersion,
-        model_data: Dict[str, Any],
-    ) -> Optional[GenerationParameters]:
-        """Extract generation parameters from version's example images."""
-        print(f"[IMPORT DEBUG] _extract_parameters_from_version called")
-        print(f"[IMPORT DEBUG] Looking for version.id = {version.id}")
-        
-        model_versions = model_data.get("modelVersions", [])
-        print(f"[IMPORT DEBUG] Found {len(model_versions)} model versions in model_data")
-        
-        # Try to get meta from first image with generation data
-        for ver_data in model_versions:
-            ver_id = ver_data.get("id")
-            print(f"[IMPORT DEBUG] Checking version id={ver_id} vs target={version.id}")
-            
-            if ver_id != version.id:
-                continue
-            
-            print(f"[IMPORT DEBUG] Found matching version!")
-            images = ver_data.get("images", [])
-            print(f"[IMPORT DEBUG] Version has {len(images)} images")
-            
-            for idx, img in enumerate(images):
-                print(f"[IMPORT DEBUG] Image {idx} keys: {list(img.keys())}")
-                meta = img.get("meta", {})
-                
-                # Meta can also be under 'metadata' in some API responses
-                if not meta:
-                    meta = img.get("metadata", {})
-                
-                print(f"[IMPORT DEBUG] Image {idx} meta: {meta}")
-                
-                if meta:
-                    print(f"[IMPORT DEBUG] Found meta in image {idx}: {list(meta.keys())}")
+                for ver in versions_to_import:
+                    # Get detailed images for this version
+                    # NOTE: ver.images are DICTS, not objects - use .get() not .url
+                    ver_detailed = [
+                        img for img in all_detailed_images 
+                        if img.get("url") in [
+                            i.get("url") if isinstance(i, dict) else getattr(i, 'url', None)
+                            for i in getattr(ver, 'images', [])
+                        ]
+                    ] if all_detailed_images else None
                     
-                    # Parse width/height - can be in meta directly or in "Size" field
-                    width = meta.get("width")
-                    height = meta.get("height")
-                    
-                    # Try to parse from "Size" field like "512x768"
-                    if not width or not height:
-                        size_str = meta.get("Size", "")
-                        if size_str and "x" in size_str:
-                            try:
-                                parts = size_str.split("x")
-                                width = width or int(parts[0])
-                                height = height or int(parts[1])
-                            except (ValueError, IndexError):
-                                pass
-                    
-                    # Ensure numeric types
-                    try:
-                        steps = int(meta.get("steps")) if meta.get("steps") is not None else None
-                    except (ValueError, TypeError):
-                        steps = None
-                    
-                    try:
-                        cfg_scale = float(meta.get("cfgScale")) if meta.get("cfgScale") is not None else None
-                    except (ValueError, TypeError):
-                        cfg_scale = None
-                    
-                    try:
-                        clip_skip = int(meta.get("clipSkip")) if meta.get("clipSkip") is not None else None
-                    except (ValueError, TypeError):
-                        clip_skip = None
-                    
-                    try:
-                        seed = int(meta.get("seed")) if meta.get("seed") is not None else None
-                    except (ValueError, TypeError):
-                        seed = None
-                    
-                    params = GenerationParameters(
-                        sampler=meta.get("sampler"),
-                        scheduler=meta.get("scheduler"),
-                        steps=steps,
-                        cfg_scale=cfg_scale,
-                        clip_skip=clip_skip,
-                        denoise=meta.get("denoise") or meta.get("denoising"),
-                        width=int(width) if width else None,
-                        height=int(height) if height else None,
-                        seed=seed,
-                        hires_fix=bool(meta.get("hiresFix") or meta.get("Hires fix")),
-                        hires_upscaler=meta.get("hiresUpscaler") or meta.get("Hires upscaler"),
-                        hires_steps=meta.get("hiresSteps") or meta.get("Hires steps"),
-                        hires_denoise=meta.get("hiresDenoising") or meta.get("Hires upscale"),
+                    ver_previews = self._download_preview_images(
+                        version=ver,
+                        pack_dir=pack_dir,
+                        max_previews=preview_options.max_previews - len(previews),  # Remaining quota
+                        download=download_previews,
+                        detailed_version_images=ver_detailed or all_detailed_images,
+                        # Pass through new options
+                        download_images=preview_options.download_images,
+                        download_videos=preview_options.download_videos,
+                        include_nsfw=preview_options.include_nsfw,
+                        video_quality=preview_options.video_quality,
+                        image_timeout=preview_options.image_timeout,
+                        video_timeout=preview_options.video_timeout,
+                        progress_callback=progress_callback,
                     )
                     
-                    params_dict = params.to_dict()
-                    print(f"[IMPORT DEBUG] Extracted parameters: {params_dict}")
+                    # Add only non-duplicate previews
+                    for p in ver_previews:
+                        if p.url not in downloaded_urls:
+                            downloaded_urls.add(p.url)
+                            previews.append(p)
                     
-                    if params_dict:  # Only return if we actually got some parameters
-                        return params
-                    else:
-                        print(f"[IMPORT DEBUG] Parameters dict is empty, continuing to next image...")
-        
-        print(f"[IMPORT DEBUG] No parameters found in any image!")
-        return None
-    
-    def _extract_model_info(
-        self,
-        model: CivitaiModel,
-        version: CivitaiModelVersion,
-        model_data: Dict[str, Any],
-    ) -> ModelInfo:
-        """Extract model info table from Civitai data."""
-        # Get file hash
-        hash_autov2 = None
-        hash_sha256 = None
-        
-        for ver_data in model_data.get("modelVersions", []):
-            if ver_data.get("id") != version.id:
-                continue
-            
-            for file in ver_data.get("files", []):
-                hashes = file.get("hashes", {})
-                hash_autov2 = hashes.get("AutoV2")
-                hash_sha256 = hashes.get("SHA256")
-                break
-        
-        # Get stats
-        stats = model_data.get("stats", {})
-        
-        # Get usage tips from first image meta
-        usage_tips = None
-        for ver_data in model_data.get("modelVersions", []):
-            if ver_data.get("id") != version.id:
-                continue
-            for img in ver_data.get("images", []):
-                meta = img.get("meta", {})
-                if meta.get("clipSkip"):
-                    usage_tips = f"CLIP Skip: {meta.get('clipSkip')}"
-                if meta.get("cfgScale"):
-                    usage_tips = (usage_tips + ", " if usage_tips else "") + f"CFG: {meta.get('cfgScale')}"
-                break
-        
-        # Get recommended strength from version
-        strength = None
-        for ver_data in model_data.get("modelVersions", []):
-            if ver_data.get("id") == version.id:
-                strength = ver_data.get("baseModelStrength")
-                break
-        
-        return ModelInfo(
-            model_type=model.type,
-            base_model=version.base_model,
-            trigger_words=version.trained_words[:10] if version.trained_words else [],
-            trained_words=version.trained_words,
-            usage_tips=usage_tips,
-            hash_autov2=hash_autov2,
-            hash_sha256=hash_sha256,
-            civitai_air=f"civitai: {model.id} @ {version.id}",
-            download_count=stats.get("downloadCount"),
-            rating=stats.get("rating"),
-            published_at=version.published_at,
-            strength_recommended=strength,
-        )
-    
-    # =========================================================================
-    # USE-CASE 2: Build from Workflow JSON
-    # =========================================================================
-    
-    def build_from_workflow(
-        self,
-        workflow_path: Path,
-        pack_name: Optional[str] = None,
-        pack_dir: Optional[Path] = None,
-    ) -> PackBuildResult:
-        """
-        Build a pack from a ComfyUI workflow JSON file.
-        
-        Scans the workflow to extract:
-        - Model dependencies (checkpoints, LoRAs, VAEs, etc.)
-        - Custom node requirements
-        - Includes the workflow as upstream
-        """
-        errors = []
-        warnings = []
-        
-        try:
-            # Scan workflow
-            scan_result = self.scanner.scan_file(workflow_path)
-            
-            if scan_result.errors:
-                errors.extend(scan_result.errors)
-            
-            # Resolve dependencies
-            asset_deps, node_deps = self.resolver.resolve_workflow_dependencies(scan_result)
-            
-            # Check for unresolved assets
-            for dep in asset_deps:
-                if dep.source == AssetSource.LOCAL:
-                    warnings.append(
-                        f"Asset '{dep.name}' source unknown - may need manual resolution"
-                    )
-            
-            # Create pack name and directory
-            name = pack_name or workflow_path.stem
-            name = self._sanitize_name(name)
-            
-            if pack_dir is None and self.config:
-                pack_dir = self.config.packs_path / name
-            elif pack_dir is None:
-                pack_dir = Path.home() / ".synapse" / "packs" / name
-            
-            pack_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Create metadata
-            metadata = PackMetadata(
-                name=name,
-                version="1.0.0",
-                description=f"Pack created from workflow: {workflow_path.name}",
-                created_at=datetime.now().isoformat(),
-            )
-            
-            # Create workflow info
-            workflow_info = WorkflowInfo(
-                name=workflow_path.stem,
-                filename=workflow_path.name,
-                description="Original imported workflow",
-            )
-            
-            # Build pack
-            pack = Pack(
-                metadata=metadata,
-                dependencies=asset_deps,
-                custom_nodes=node_deps,
-                workflows=[workflow_info],
-                previews=[],
-                docs={},
-            )
-            
-            return PackBuildResult(
-                pack=pack,
-                success=True,
-                errors=errors,
-                warnings=warnings,
-                pack_dir=pack_dir,
-            )
-            
-        except Exception as e:
-            return PackBuildResult(
-                pack=None,
-                success=False,
-                errors=[str(e)],
-                warnings=warnings,
-            )
-    
-    # =========================================================================
-    # USE-CASE 3: Build from Local Folder Scan
-    # =========================================================================
-    
-    def build_from_local_scan(
-        self,
-        comfyui_path: Path,
-        pack_name: str = "local_models",
-        pack_dir: Optional[Path] = None,
-    ) -> PackBuildResult:
-        """
-        Build a pack from scanning local ComfyUI models folder.
-        
-        Creates a pack documenting existing local models.
-        """
-        errors = []
-        warnings = []
-        
-        try:
-            models_path = comfyui_path / "models"
-            
-            if not models_path.exists():
-                return PackBuildResult(
-                    pack=None,
-                    success=False,
-                    errors=[f"Models directory not found: {models_path}"],
-                    warnings=[],
-                )
-            
-            # Scan each model type folder
-            dependencies = []
-            
-            for asset_type, folder_name in ASSET_TYPE_FOLDERS.items():
-                folder_path = models_path / folder_name
-                
-                if not folder_path.exists():
-                    continue
-                
-                # Scan for safetensors files
-                for file_path in folder_path.rglob("*.safetensors"):
-                    rel_path = file_path.relative_to(models_path)
-                    
-                    dep = AssetDependency(
-                        name=file_path.stem,
-                        asset_type=asset_type,
-                        source=AssetSource.LOCAL,
-                        filename=file_path.name,
-                        local_path=str(rel_path),
-                        file_size=file_path.stat().st_size,
-                        status=DependencyStatus.INSTALLED,
-                    )
-                    dependencies.append(dep)
-                
-                # Also check for .ckpt and .pt files
-                for ext in [".ckpt", ".pt", ".bin", ".gguf"]:
-                    for file_path in folder_path.rglob(f"*{ext}"):
-                        rel_path = file_path.relative_to(models_path)
-                        
-                        dep = AssetDependency(
-                            name=file_path.stem,
-                            asset_type=asset_type,
-                            source=AssetSource.LOCAL,
-                            filename=file_path.name,
-                            local_path=str(rel_path),
-                            file_size=file_path.stat().st_size,
-                            status=DependencyStatus.INSTALLED,
-                        )
-                        dependencies.append(dep)
-            
-            if not dependencies:
-                warnings.append("No model files found in scan")
-            
-            # Create pack directory
-            if pack_dir is None and self.config:
-                pack_dir = self.config.packs_path / pack_name
-            elif pack_dir is None:
-                pack_dir = Path.home() / ".synapse" / "packs" / pack_name
-            
-            pack_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Create metadata
-            metadata = PackMetadata(
-                name=self._sanitize_name(pack_name),
-                version="1.0.0",
-                description=f"Pack created from local scan of {comfyui_path}",
-                created_at=datetime.now().isoformat(),
-            )
-            
-            # Build pack
-            pack = Pack(
-                metadata=metadata,
-                dependencies=dependencies,
-                custom_nodes=[],
-                workflows=[],
-                previews=[],
-                docs={},
-            )
-            
-            return PackBuildResult(
-                pack=pack,
-                success=True,
-                errors=errors,
-                warnings=warnings,
-                pack_dir=pack_dir,
-            )
-            
-        except Exception as e:
-            return PackBuildResult(
-                pack=None,
-                success=False,
-                errors=[str(e)],
-                warnings=warnings,
-            )
-    
-    # =========================================================================
-    # USE-CASE 4: Build from PNG Metadata
-    # =========================================================================
-    
-    def build_from_png_metadata(
-        self,
-        image_path: Path,
-        pack_name: Optional[str] = None,
-        pack_dir: Optional[Path] = None,
-    ) -> PackBuildResult:
-        """
-        Build a pack from PNG image metadata (ComfyUI workflow embed).
-        
-        Extracts embedded workflow data from PNG and creates a pack
-        with all dependencies.
-        """
-        errors = []
-        warnings = []
-        
-        try:
-            # Extract metadata from PNG
-            workflow_data = self._extract_png_metadata(image_path)
-            
-            if not workflow_data:
-                return PackBuildResult(
-                    pack=None,
-                    success=False,
-                    errors=["No workflow metadata found in PNG"],
-                    warnings=[],
-                )
-            
-            # Parse workflow
-            if isinstance(workflow_data, str):
-                workflow_data = json.loads(workflow_data)
-            
-            # Scan workflow
-            scan_result = self.scanner.scan_workflow(workflow_data)
-            
-            if scan_result.errors:
-                errors.extend(scan_result.errors)
-            
-            # Resolve dependencies
-            asset_deps, node_deps = self.resolver.resolve_workflow_dependencies(scan_result)
-            
-            # Create pack name and directory
-            name = pack_name or image_path.stem
-            name = self._sanitize_name(name)
-            
-            if pack_dir is None and self.config:
-                pack_dir = self.config.packs_path / name
-            elif pack_dir is None:
-                pack_dir = Path.home() / ".synapse" / "packs" / name
-            
-            pack_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Create metadata
-            metadata = PackMetadata(
-                name=name,
-                version="1.0.0",
-                description=f"Pack extracted from image: {image_path.name}",
-                created_at=datetime.now().isoformat(),
-            )
-            
-            # Copy the image as a preview
-            resources_dir = pack_dir / "resources" / "previews"
-            resources_dir.mkdir(parents=True, exist_ok=True)
-            
-            import shutil
-            preview_path = resources_dir / image_path.name
-            shutil.copy2(image_path, preview_path)
-            
-            previews = [PreviewImage(
-                filename=image_path.name,
-                local_path=f"resources/previews/{image_path.name}",
-                nsfw=False,  # User can flag later
-            )]
-            
-            # Build pack
-            pack = Pack(
-                metadata=metadata,
-                dependencies=asset_deps,
-                custom_nodes=node_deps,
-                workflows=[],  # Workflow embedded in image
-                previews=previews,
-                docs={"extracted_workflow.json": json.dumps(workflow_data, indent=2)},
-            )
-            
-            return PackBuildResult(
-                pack=pack,
-                success=True,
-                errors=errors,
-                warnings=warnings,
-                pack_dir=pack_dir,
-            )
-            
-        except Exception as e:
-            return PackBuildResult(
-                pack=None,
-                success=False,
-                errors=[str(e)],
-                warnings=warnings,
-            )
-    
-    def _extract_png_metadata(self, path: Path) -> Optional[Dict[str, Any]]:
-        """
-        Extract ComfyUI workflow metadata from PNG.
-        
-        ComfyUI stores workflow in PNG tEXt chunks with keys:
-        - "workflow" - API format workflow
-        - "prompt" - execution prompt
-        """
-        try:
-            import struct
-            import zlib
-            
-            with open(path, 'rb') as f:
-                # Check PNG signature
-                signature = f.read(8)
-                if signature != b'\x89PNG\r\n\x1a\n':
-                    return None
-                
-                # Read chunks
-                while True:
-                    try:
-                        length_bytes = f.read(4)
-                        if len(length_bytes) < 4:
-                            break
-                        
-                        length = struct.unpack('>I', length_bytes)[0]
-                        chunk_type = f.read(4)
-                        chunk_data = f.read(length)
-                        crc = f.read(4)
-                        
-                        # Check for tEXt chunk
-                        if chunk_type == b'tEXt':
-                            # Format: keyword\x00text
-                            null_pos = chunk_data.find(b'\x00')
-                            if null_pos > 0:
-                                keyword = chunk_data[:null_pos].decode('latin-1')
-                                text = chunk_data[null_pos + 1:].decode('utf-8')
-                                
-                                if keyword == 'workflow':
-                                    return json.loads(text)
-                                elif keyword == 'prompt':
-                                    # Prompt contains node data
-                                    return json.loads(text)
-                        
-                        # Check for iTXt chunk (compressed text)
-                        elif chunk_type == b'iTXt':
-                            # More complex format with compression
-                            null_pos = chunk_data.find(b'\x00')
-                            if null_pos > 0:
-                                keyword = chunk_data[:null_pos].decode('latin-1')
-                                if keyword in ('workflow', 'prompt'):
-                                    # Skip compression flag and method
-                                    rest = chunk_data[null_pos + 3:]
-                                    # Find text after language tag
-                                    null_pos2 = rest.find(b'\x00')
-                                    if null_pos2 >= 0:
-                                        text_data = rest[null_pos2 + 1:]
-                                        try:
-                                            text = text_data.decode('utf-8')
-                                            return json.loads(text)
-                                        except:
-                                            pass
-                        
-                        # End of chunks
-                        if chunk_type == b'IEND':
-                            break
-                    
-                    except struct.error:
+                    # Check if we've reached max previews
+                    if len(previews) >= preview_options.max_previews:
                         break
+                
+                logger.info(f"[PackBuilder] Total previews: {len(previews)} from {len(versions_to_import)} versions")
             
-            return None
+            # Handle custom thumbnail
+            if thumbnail_url:
+                # Move custom thumbnail to first position or add it
+                existing = next((p for p in previews if p.url == thumbnail_url), None)
+                if existing:
+                    previews.remove(existing)
+                    previews.insert(0, existing)
+                else:
+                    # Download custom thumbnail
+                    logger.info(f"[PackBuilder] Custom thumbnail: {thumbnail_url[:50]}...")
             
-        except Exception:
-            return None
+            # Build pack object
+            pack = Pack(
+                metadata=metadata,
+                dependencies=[],  # Would be populated by dependency extraction
+                custom_nodes=[],
+                workflows=[],
+                previews=previews,
+                docs={},
+            )
+            
+            return PackBuildResult(
+                pack=pack,
+                success=True,
+                errors=errors,
+                warnings=warnings,
+                pack_dir=pack_dir,
+            )
+            
+        except Exception as e:
+            logger.error(f"[PackBuilder] Build failed: {e}")
+            return PackBuildResult(
+                pack=None,
+                success=False,
+                errors=[str(e)],
+                warnings=warnings,
+            )
+
+
+# =============================================================================
+# Factory Function
+# =============================================================================
+
+def create_pack_builder(civitai_client, config=None) -> PackBuilder:
+    """
+    Factory function to create a PackBuilder instance.
     
-    def _sanitize_name(self, name: str) -> str:
-        """Sanitize a name for use as pack identifier."""
-        # Remove special characters, keep alphanumeric and some safe chars
-        sanitized = re.sub(r'[^\w\s\-_]', '', name)
-        # Replace spaces with underscores
-        sanitized = re.sub(r'\s+', '_', sanitized)
-        # Limit length
-        return sanitized[:64]
-
-
-def create_pack_builder() -> PackBuilder:
-    """Factory function to create a configured PackBuilder."""
-    return PackBuilder()
+    Args:
+        civitai_client: Configured Civitai API client
+        config: Optional application configuration
+        
+    Returns:
+        Configured PackBuilder instance
+    """
+    return PackBuilder(civitai_client, config)

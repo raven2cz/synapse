@@ -8,11 +8,14 @@
  * - Video: Use `transcode=true` + `.mp4` → actual MP4 video
  *
  * This avoids Firefox issues with "fake JPEG" videos from Civitai API.
+ * 
+ * @module components/ui/MediaPreview
+ * @version 2.6.0
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { clsx } from 'clsx'
-import { Volume2, VolumeX, Eye, EyeOff } from 'lucide-react'
+import { Volume2, VolumeX, EyeOff } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 // ============================================================================
@@ -29,12 +32,9 @@ function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
   }
 
   try {
-    // Parse URL and reconstruct with correct params
     const urlObj = new URL(url)
     const pathParts = urlObj.pathname.split('/')
 
-    // Find and replace params segment (contains = signs)
-    // Format: /{uuid}/{params}/{filename}
     let paramsIndex = -1
     for (let i = 0; i < pathParts.length; i++) {
       if (pathParts[i].includes('=') || pathParts[i].startsWith('width')) {
@@ -48,7 +48,6 @@ function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
     if (paramsIndex >= 0) {
       pathParts[paramsIndex] = newParams
     } else if (pathParts.length >= 3) {
-      // Insert before filename
       pathParts.splice(-1, 0, newParams)
     }
 
@@ -72,7 +71,6 @@ function getCivitaiVideoUrl(url: string, width: number = 450): string {
     const urlObj = new URL(url)
     const pathParts = urlObj.pathname.split('/')
 
-    // Find params segment
     let paramsIndex = -1
     for (let i = 0; i < pathParts.length; i++) {
       if (pathParts[i].includes('=') || pathParts[i].startsWith('width')) {
@@ -93,7 +91,6 @@ function getCivitaiVideoUrl(url: string, width: number = 450): string {
     const lastIndex = pathParts.length - 1
     if (lastIndex >= 0) {
       const filename = pathParts[lastIndex]
-      // Replace extension with .mp4
       const baseName = filename.replace(/\.[^.]+$/, '')
       pathParts[lastIndex] = `${baseName}.mp4`
     }
@@ -143,6 +140,9 @@ interface MediaPreviewProps {
   /** NSFW content - show blur overlay */
   nsfw?: boolean
 
+  /** NSFW blur enabled setting (passed from parent for performance) */
+  nsfwBlurEnabled?: boolean
+
   /** Aspect ratio */
   aspectRatio?: 'square' | 'portrait' | 'landscape' | 'auto'
 
@@ -155,8 +155,14 @@ interface MediaPreviewProps {
   /** Auto-play video when in viewport (default: false for stability) */
   autoPlay?: boolean
 
-  /** Play full video on hover */
+  /** Play full video on hover (alias: playOnHover) */
   playFullOnHover?: boolean
+
+  /** Play video on hover - alias for playFullOnHover for backward compatibility */
+  playOnHover?: boolean
+
+  /** Show play icon overlay on videos */
+  showPlayIcon?: boolean
 
   /** Callback when clicked */
   onClick?: () => void
@@ -177,29 +183,45 @@ export function MediaPreview({
   type,
   thumbnailSrc: providedThumbnailSrc,
   nsfw = false,
+  nsfwBlurEnabled: nsfwBlurEnabledProp,
   aspectRatio = 'auto',
   className,
   alt = '',
   autoPlay = false,
-  playFullOnHover = true,
+  playFullOnHover: playFullOnHoverProp,
+  playOnHover,
+  showPlayIcon = false,
   onClick,
   onLoad,
   onError,
 }: MediaPreviewProps) {
-  // Use selector to only re-render when nsfwBlurEnabled actually changes
-  // This is efficient - Zustand only triggers re-render if selected value changes
-  const nsfwBlurEnabled = useSettingsStore((state) => state.nsfwBlurEnabled)
+  // Handle alias: playOnHover is alias for playFullOnHover
+  const playFullOnHover = playFullOnHoverProp ?? playOnHover ?? true
+
+  // Use prop if provided, otherwise use selector for efficient re-renders
+  const nsfwBlurEnabledStore = useSettingsStore((state) => state.nsfwBlurEnabled)
+  const nsfwBlurEnabled = nsfwBlurEnabledProp ?? nsfwBlurEnabledStore
 
   // State
   const [isHovering, setIsHovering] = useState(false)
-  const [isRevealed, setIsRevealed] = useState(false) // For NSFW reveal toggle
+  const [isRevealed, setIsRevealed] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [videoLoaded, setVideoLoaded] = useState(false) // Track if video has loaded enough to show
   const [imageError, setImageError] = useState(false)
   const [videoError, setVideoError] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
+  const [forceVideoDisplay, setForceVideoDisplay] = useState(false) // Fallback when thumbnail fails
 
   // Computed: should we blur this content?
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
+
+  // Reset revealed state when NSFW blur is re-enabled
+  // This ensures all content becomes blurred again when global toggle turns blur ON
+  useEffect(() => {
+    if (nsfwBlurEnabled) {
+      setIsRevealed(false)
+    }
+  }, [nsfwBlurEnabled])
 
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
@@ -217,7 +239,6 @@ export function MediaPreview({
     if (providedThumbnailSrc) return providedThumbnailSrc
     if (!src) return ''
 
-    // For Civitai, always get static thumbnail with anim=false
     if (src.includes('civitai.com')) {
       return getCivitaiThumbnailUrl(src)
     }
@@ -228,7 +249,6 @@ export function MediaPreview({
   const videoUrl = useMemo(() => {
     if (!src || !isVideo) return ''
 
-    // For Civitai, get proper MP4 URL
     if (src.includes('civitai.com')) {
       return getCivitaiVideoUrl(src)
     }
@@ -236,8 +256,23 @@ export function MediaPreview({
     return src
   }, [src, isVideo])
 
-  // Should we show video element?
+  // Should we show video element (for playback or fallback)?
   const showVideo = isVideo && (autoPlay || (playFullOnHover && isHovering)) && !videoError
+  // Should the video ELEMENT be visible (even if not playing, e.g. for fallback)?
+  const isVideoVisible = (showVideo || forceVideoDisplay) && !videoError
+
+  // For local video files, skip the thumbnail image and go straight to video display
+  // This prevents trying to load a .mp4 file as an image (which fails silently in some browsers)
+  useEffect(() => {
+    if (isVideo && thumbnailUrl && !thumbnailUrl.includes('civitai.com')) {
+      // Check if thumbnail URL is a video file (local video)
+      const isVideoFile = /\.(mp4|webm|mov|avi|mkv)/i.test(thumbnailUrl)
+      if (isVideoFile && autoPlay) {
+        // Skip thumbnail loading, go straight to video
+        setForceVideoDisplay(true)
+      }
+    }
+  }, [isVideo, thumbnailUrl, autoPlay])
 
   // Handle hover
   const handleMouseEnter = useCallback(() => {
@@ -248,27 +283,36 @@ export function MediaPreview({
     setIsHovering(false)
   }, [])
 
-  // Handle video play/pause based on hover
+  // Handle video play/pause based on hover (but NOT if it's just fallback)
   useEffect(() => {
     if (!videoRef.current || !isVideo) return
 
     const video = videoRef.current
 
-    if (showVideo && imageLoaded) {
-      // Small delay to let video element mount
+    // Play video when:
+    // 1. showVideo is true (autoPlay or hover active) AND
+    // 2. Either: image is loaded, or we're in fallback mode, or autoPlay is enabled
+    // Note: With autoPlay, we should start playing immediately without waiting for thumbnail
+    // This fixes playback for local video files where thumbnail may not load
+    const shouldPlay = showVideo && (imageLoaded || forceVideoDisplay || autoPlay)
+
+    if (shouldPlay) {
       const playTimer = setTimeout(() => {
         video.play().catch((err) => {
           if (err.name !== 'AbortError') {
-            console.debug('Video play failed:', err.message)
+            console.debug('[MediaPreview] Video play failed:', err.message)
           }
         })
       }, 50)
       return () => clearTimeout(playTimer)
     } else {
       video.pause()
-      video.currentTime = 0
+      // Only reset time if we are not in fallback mode (fallback needs to show frame)
+      if (!forceVideoDisplay) {
+        video.currentTime = 0
+      }
     }
-  }, [showVideo, isVideo, imageLoaded])
+  }, [showVideo, isVideo, imageLoaded, forceVideoDisplay, autoPlay])
 
   // Handle image load
   const handleImageLoad = useCallback(() => {
@@ -279,15 +323,34 @@ export function MediaPreview({
 
   // Handle image error
   const handleImageError = useCallback(() => {
+    if (isVideo) {
+      console.warn('[MediaPreview] Thumbnail failed for video, using video element fallback')
+      setForceVideoDisplay(true)
+      // We do NOT set imageError(true) because we are handling it gracefully
+      return
+    }
+
+    console.warn('[MediaPreview] Image load failed:', thumbnailUrl?.substring(0, 50))
     setImageError(true)
     onError?.()
-  }, [onError])
+  }, [onError, thumbnailUrl, isVideo])
+
+  // Handle video loaded data (first frame ready)
+  const handleVideoLoadedData = useCallback(() => {
+    setVideoLoaded(true)
+    setVideoError(false)
+  }, [])
 
   // Handle video error - fallback to image only
   const handleVideoError = useCallback(() => {
-    console.debug('Video failed to load, showing thumbnail only:', videoUrl)
+    console.debug('[MediaPreview] Video failed to load, showing thumbnail only')
     setVideoError(true)
-  }, [videoUrl])
+    // If we were forcing video display, we must stop now or we get nothing
+    if (forceVideoDisplay) {
+      setForceVideoDisplay(false)
+      setImageError(true) // Now it's a real error since both failed
+    }
+  }, [forceVideoDisplay])
 
   // Handle NSFW reveal toggle
   const handleRevealToggle = useCallback((e: React.MouseEvent) => {
@@ -325,42 +388,58 @@ export function MediaPreview({
       onClick={onClick}
     >
       {/* Thumbnail Image - Always rendered for stability */}
-      <img
-        src={thumbnailUrl}
-        alt={alt}
-        className={clsx(
-          'absolute inset-0 w-full h-full object-cover transition-all duration-300',
-          showVideo && !videoError ? 'opacity-0' : 'opacity-100',
-          !showVideo && 'group-hover:scale-105',
-          shouldBlur && 'blur-xl scale-110'
-        )}
-        loading="lazy"
-        onLoad={handleImageLoad}
-        onError={handleImageError}
-      />
+      {thumbnailUrl ? (
+        <img
+          src={thumbnailUrl}
+          alt={alt}
+          className={clsx(
+            'absolute inset-0 w-full h-full object-cover',
+            'transition-all duration-500 ease-out',
+            isVideoVisible ? 'opacity-0 scale-105' : 'opacity-100',
+            !isVideoVisible && 'group-hover:scale-110 group-hover:brightness-110',
+            shouldBlur && 'blur-xl scale-110'
+          )}
+          loading="lazy"
+          onLoad={handleImageLoad}
+          onError={handleImageError}
+        />
+      ) : (
+        /* Empty state placeholder when no URL is present */
+        <div className={clsx(
+          'absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-600',
+          shouldBlur && 'blur-xl'
+        )}>
+          <svg className="w-12 h-12 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+      )}
 
       {/* Video Element - Only rendered when needed */}
       {isVideo && !videoError && (
         <video
           ref={videoRef}
-          src={showVideo ? videoUrl : undefined}
+          src={isVideoVisible ? videoUrl : undefined}
           className={clsx(
-            'absolute inset-0 w-full h-full object-cover transition-all duration-300',
-            showVideo ? 'opacity-100' : 'opacity-0',
+            'absolute inset-0 w-full h-full object-cover',
+            'transition-all duration-500 ease-out',
+            isVideoVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
             shouldBlur && 'blur-xl scale-110'
           )}
           loop
           muted={isMuted}
           playsInline
-          preload="none"
+          autoPlay={autoPlay && isVideoVisible}
+          preload={isVideoVisible || forceVideoDisplay ? "auto" : "none"}
+          onLoadedData={handleVideoLoadedData}
           onError={handleVideoError}
         />
       )}
 
-      {/* Loading placeholder */}
-      {!imageLoaded && !imageError && (
+      {/* Loading placeholder - Shown when image loading or video fallback loading */}
+      {(!imageLoaded && !imageError && !forceVideoDisplay) || (forceVideoDisplay && !videoLoaded) ? (
         <div className="absolute inset-0 bg-slate-700 animate-pulse" />
-      )}
+      ) : null}
 
       {/* Error state */}
       {imageError && (
@@ -369,7 +448,7 @@ export function MediaPreview({
         </div>
       )}
 
-      {/* NSFW Blur Overlay - centered indicator (no backdrop-blur to prevent flickering) */}
+      {/* NSFW Blur Overlay - centered indicator */}
       {nsfw && nsfwBlurEnabled && !isRevealed && (
         <div
           className={clsx(
@@ -384,8 +463,7 @@ export function MediaPreview({
         </div>
       )}
 
-      {/* NSFW Toggle Button - ONLY visible when card is revealed (to hide it back) */}
-      {/* When blur is ON and NOT revealed, the overlay itself is clickable */}
+      {/* NSFW Toggle Button - ONLY visible when card is revealed */}
       {nsfw && nsfwBlurEnabled && isRevealed && (
         <button
           onClick={handleRevealToggle}
@@ -401,7 +479,7 @@ export function MediaPreview({
         </button>
       )}
 
-      {/* Clickable reveal area when blurred - clicking anywhere reveals */}
+      {/* Clickable reveal area when blurred */}
       {nsfw && nsfwBlurEnabled && !isRevealed && (
         <button
           onClick={handleRevealToggle}
@@ -417,7 +495,18 @@ export function MediaPreview({
         </div>
       )}
 
-      {/* Video indicator badge - bottom left (to not conflict with NSFW badge) */}
+      {/* Play icon overlay for videos - shown when showPlayIcon is true and not playing */}
+      {isVideo && showPlayIcon && !showVideo && !videoError && !shouldBlur && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+            <svg className="w-6 h-6 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {/* Video indicator badge - bottom left */}
       {isVideo && !showVideo && !videoError && (
         <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10">
           VIDEO

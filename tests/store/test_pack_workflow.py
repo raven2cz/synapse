@@ -112,18 +112,24 @@ def test_metadata_persistence_in_pack_json(pack_service, mock_layout):
         "id": 100
     }
     
+    # Mock requests.get to return fake image data
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
+    mock_response.headers = {'content-length': '100'}
+
     # Mock the internal helpers to focus on import logic
     with patch("src.store.pack_service.PackService.parse_civitai_url", return_value=(123, 456)), \
          patch("src.store.pack_service.PackService._sanitize_pack_name", return_value=pack_name), \
          patch("src.store.pack_service.PackService._create_initial_lock"), \
-         patch("src.clients.civitai_client.CivitaiClient.download_preview_image"):
+         patch("src.store.pack_service.requests.get", return_value=mock_response):
 
         # Mock save_pack_lock to avoid serialization of MagicMock lock
         mock_layout.save_pack_lock = MagicMock()
-             
+
         pack_service.civitai.get_model = MagicMock(return_value={"name": "Test Model", "type": "Checkpoint"})
         pack_service.civitai.get_model_version = MagicMock(return_value=version_data)
-        
+
         # Run import
         pack = pack_service.import_from_civitai("https://civitai.com/models/123", download_previews=True)
         

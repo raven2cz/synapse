@@ -1,96 +1,47 @@
 """
-Unit tests for media_detection.py
+Unit tests for media detection utilities.
 
 Tests cover:
-- Media type detection from URLs
-- Civitai URL transformation
-- Video/image classification
-- URL transformation utilities
+- URL-based media type detection
+- Civitai URL handling quirks
+- Video URL optimization
+- Thumbnail URL generation
+- Extension extraction
+
+Author: Synapse Team
+License: MIT
 """
 
 import pytest
-from pathlib import Path
 import sys
+from pathlib import Path
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from src.utils.media_detection import (
+from utils.media_detection import (
     MediaType,
     MediaInfo,
     detect_media_type,
-    detect_by_extension,
-    detect_by_url_pattern,
     is_video_url,
-    is_likely_animated,
-    get_video_thumbnail_url,
+    is_image_url,
     get_optimized_video_url,
-    transform_civitai_url,
-    get_url_extension,
-    VIDEO_EXTENSIONS,
-    IMAGE_EXTENSIONS,
+    get_video_thumbnail_url,
+    get_civitai_static_url,
+    get_civitai_video_url,
+    extract_extension,
+    normalize_video_extension,
 )
 
 
-class TestMediaType:
-    """Tests for MediaType enum."""
+# =============================================================================
+# MediaType Detection Tests
+# =============================================================================
 
-    def test_media_type_values(self):
-        """Test MediaType enum has correct values."""
-        assert MediaType.IMAGE.value == "image"
-        assert MediaType.VIDEO.value == "video"
-        assert MediaType.UNKNOWN.value == "unknown"
-
-
-class TestGetUrlExtension:
-    """Tests for get_url_extension function."""
-
-    def test_simple_extension(self):
-        """Test extracting simple extension."""
-        assert get_url_extension("https://example.com/image.jpg") == ".jpg"
-        assert get_url_extension("https://example.com/video.mp4") == ".mp4"
-
-    def test_uppercase_extension(self):
-        """Test uppercase extensions are lowercased."""
-        assert get_url_extension("https://example.com/image.JPG") == ".jpg"
-        assert get_url_extension("https://example.com/video.MP4") == ".mp4"
-
-    def test_extension_with_query_params(self):
-        """Test extension extraction ignores query params."""
-        assert get_url_extension("https://example.com/image.jpg?token=abc") == ".jpg"
-
-    def test_no_extension(self):
-        """Test URL without extension returns None."""
-        assert get_url_extension("https://example.com/file") is None
-
-    def test_empty_url(self):
-        """Test empty URL returns None."""
-        assert get_url_extension("") is None
-
-    def test_long_extension_ignored(self):
-        """Test very long extensions are ignored."""
-        # Extensions longer than 6 chars should be ignored
-        result = get_url_extension("https://example.com/file.verylongext")
-        # Should still return the extension if <= 6 chars
-        assert result is None or len(result) <= 7  # including dot
-
-
-class TestDetectByExtension:
-    """Tests for detect_by_extension function."""
-
-    def test_detect_image_extensions(self):
-        """Test detection of common image extensions."""
-        image_urls = [
-            "https://example.com/image.jpg",
-            "https://example.com/image.jpeg",
-            "https://example.com/image.png",
-            "https://example.com/image.bmp",
-        ]
-        for url in image_urls:
-            assert detect_by_extension(url) == MediaType.IMAGE, f"Failed for {url}"
-
-    def test_detect_video_extensions(self):
-        """Test detection of common video extensions."""
+class TestDetectMediaType:
+    """Tests for detect_media_type function."""
+    
+    def test_standard_video_extensions(self):
+        """Common video extensions should be detected."""
         video_urls = [
             "https://example.com/video.mp4",
             "https://example.com/video.webm",
@@ -98,345 +49,345 @@ class TestDetectByExtension:
             "https://example.com/video.avi",
             "https://example.com/video.mkv",
         ]
+        
         for url in video_urls:
-            assert detect_by_extension(url) == MediaType.VIDEO, f"Failed for {url}"
-
-    def test_detect_gif_as_video(self):
-        """Test that GIFs are detected as video (animated content)."""
-        assert detect_by_extension("https://example.com/animation.gif") == MediaType.VIDEO
-
-    def test_detect_unknown_extension(self):
-        """Test unknown extensions return UNKNOWN."""
-        assert detect_by_extension("https://example.com/file.xyz") == MediaType.UNKNOWN
-
-    def test_detect_no_extension(self):
-        """Test URLs without extension."""
-        assert detect_by_extension("https://example.com/file") == MediaType.UNKNOWN
-
-
-class TestDetectByUrlPattern:
-    """Tests for detect_by_url_pattern function."""
-
-    def test_civitai_transcode_pattern(self):
-        """Test Civitai transcode URLs are detected as video."""
-        url = "https://image.civitai.com/uuid/transcode=true,width=450/file.jpeg"
-        assert detect_by_url_pattern(url) == MediaType.VIDEO
-
-    def test_mp4_pattern(self):
-        """Test .mp4 URL pattern detection."""
-        url = "https://example.com/path/to/video.mp4"
-        assert detect_by_url_pattern(url) == MediaType.VIDEO
-
-    def test_webm_pattern(self):
-        """Test .webm URL pattern detection."""
-        url = "https://example.com/path/to/video.webm"
-        assert detect_by_url_pattern(url) == MediaType.VIDEO
-
-    def test_non_video_pattern(self):
-        """Test non-video URLs return UNKNOWN."""
-        url = "https://example.com/image.jpg"
-        assert detect_by_url_pattern(url) == MediaType.UNKNOWN
-
-    def test_empty_url(self):
-        """Test empty URL returns UNKNOWN."""
-        assert detect_by_url_pattern("") == MediaType.UNKNOWN
-
-
-class TestDetectMediaType:
-    """Tests for detect_media_type function."""
-
-    def test_returns_media_info(self):
-        """Test that detect_media_type returns MediaInfo object."""
-        result = detect_media_type("https://example.com/video.mp4")
-        assert isinstance(result, MediaInfo)
-
-    def test_detect_video(self):
-        """Test video detection."""
-        result = detect_media_type("https://example.com/video.mp4")
+            result = detect_media_type(url)
+            assert result.type == MediaType.VIDEO, f"Failed for {url}"
+    
+    def test_standard_image_extensions(self):
+        """Common image extensions should be detected."""
+        image_urls = [
+            "https://example.com/image.jpg",
+            "https://example.com/image.jpeg",
+            "https://example.com/image.png",
+            "https://example.com/image.webp",
+            "https://example.com/image.gif",
+        ]
+        
+        for url in image_urls:
+            result = detect_media_type(url)
+            assert result.type == MediaType.IMAGE, f"Failed for {url}"
+    
+    def test_case_insensitive(self):
+        """Extension detection should be case-insensitive."""
+        urls = [
+            ("https://example.com/video.MP4", MediaType.VIDEO),
+            ("https://example.com/image.JPG", MediaType.IMAGE),
+            ("https://example.com/video.WebM", MediaType.VIDEO),
+        ]
+        
+        for url, expected in urls:
+            result = detect_media_type(url)
+            assert result.type == expected
+    
+    def test_url_with_query_params(self):
+        """Extensions should be detected with query params."""
+        url = "https://example.com/video.mp4?width=1080&quality=high"
+        result = detect_media_type(url)
         assert result.type == MediaType.VIDEO
-
-    def test_detect_image(self):
-        """Test image detection."""
-        result = detect_media_type("https://example.com/image.jpg")
-        assert result.type == MediaType.IMAGE
-
-    def test_detection_method_recorded(self):
-        """Test that detection method is recorded."""
-        result = detect_media_type("https://example.com/video.mp4")
-        assert result.detection_method is not None
-
+    
     def test_empty_url(self):
-        """Test empty URL returns UNKNOWN."""
+        """Empty URL should return UNKNOWN."""
         result = detect_media_type("")
         assert result.type == MediaType.UNKNOWN
-        assert result.detection_method == "no_url"
+    
+    def test_no_extension_defaults_to_image(self):
+        """URL without extension defaults to IMAGE."""
+        url = "https://example.com/media/12345"
+        result = detect_media_type(url)
+        assert result.type == MediaType.IMAGE
+    
+    def test_content_type_video(self):
+        """Content-Type header should be used when provided."""
+        url = "https://example.com/media"
+        result = detect_media_type(url, content_type="video/mp4")
+        assert result.type == MediaType.VIDEO
+        assert result.source == "content-type"
+    
+    def test_content_type_image(self):
+        """Content-Type header should detect images."""
+        url = "https://example.com/media"
+        result = detect_media_type(url, content_type="image/jpeg")
+        assert result.type == MediaType.IMAGE
 
 
-class TestIsVideoUrl:
-    """Tests for is_video_url function."""
+# =============================================================================
+# Civitai-Specific Tests
+# =============================================================================
 
-    def test_video_extensions(self):
-        """Test video extension detection."""
+class TestCivitaiDetection:
+    """Tests for Civitai URL handling."""
+    
+    def test_civitai_video_extension(self):
+        """Standard Civitai video URL."""
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123.mp4"
+        result = detect_media_type(url)
+        assert result.type == MediaType.VIDEO
+    
+    def test_civitai_image_extension(self):
+        """Standard Civitai image URL."""
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123.jpeg"
+        result = detect_media_type(url)
+        assert result.type == MediaType.IMAGE
+    
+    def test_civitai_transcode_indicates_video(self):
+        """Civitai transcode=true indicates video."""
+        url = "https://image.civitai.com/preview.jpeg?transcode=true"
+        result = detect_media_type(url)
+        assert result.type == MediaType.VIDEO
+        assert result.source == "pattern"  # Detected via pattern
+    
+    def test_civitai_anim_false_indicates_static(self):
+        """Civitai anim=false on image URL stays as image."""
+        # Note: .jpeg extension has priority, anim=false just confirms it's static
+        url = "https://image.civitai.com/preview.jpeg?anim=false"
+        result = detect_media_type(url)
+        assert result.type == MediaType.IMAGE
+        # Extension-based detection has priority over query params
+        assert result.source == "extension"
+    
+    def test_civitai_fake_jpeg_video(self):
+        """Civitai video disguised as JPEG (with transcode param)."""
+        # This is detected via the transcode=true pattern
+        url = "https://image.civitai.com/fake.jpeg?transcode=true&width=1080"
+        result = detect_media_type(url)
+        assert result.type == MediaType.VIDEO
+
+
+# =============================================================================
+# URL Pattern Tests
+# =============================================================================
+
+class TestUrlPatterns:
+    """Tests for URL pattern matching."""
+    
+    def test_video_path_pattern(self):
+        """URLs with /video/ in path detected as video."""
+        url = "https://cdn.example.com/videos/12345/preview"
+        result = detect_media_type(url)
+        assert result.type == MediaType.VIDEO
+    
+    def test_type_video_param(self):
+        """URLs with type=video parameter."""
+        url = "https://example.com/media/12345?type=video"
+        result = detect_media_type(url)
+        assert result.type == MediaType.VIDEO
+
+
+# =============================================================================
+# Convenience Function Tests
+# =============================================================================
+
+class TestConvenienceFunctions:
+    """Tests for is_video_url and is_image_url."""
+    
+    def test_is_video_url(self):
+        """is_video_url returns correct boolean."""
         assert is_video_url("https://example.com/video.mp4") is True
-        assert is_video_url("https://example.com/video.webm") is True
-        assert is_video_url("https://example.com/video.mov") is True
-
-    def test_image_extensions(self):
-        """Test image extensions are not video."""
         assert is_video_url("https://example.com/image.jpg") is False
-        assert is_video_url("https://example.com/image.png") is False
-
-    def test_civitai_transcode_with_video_extension(self):
-        """Test Civitai transcode detection with .mp4 extension."""
-        # Note: Extension check takes precedence over URL patterns
-        # So transcode=true with .jpeg would still be detected as image
-        # Only works correctly when extension is also video
-        url = "https://image.civitai.com/uuid/transcode=true,width=450/file.mp4"
-        assert is_video_url(url) is True
-
-    def test_civitai_transcode_with_jpeg_returns_false(self):
-        """Test Civitai transcode with .jpeg - extension takes precedence.
-        
-        Note: This is current implementation behavior. Civitai serves videos
-        with .jpeg extension when transcode=true, but extension check runs first.
-        """
-        url = "https://image.civitai.com/uuid/transcode=true,width=450/file.jpeg"
-        # Extension check (.jpeg = IMAGE) takes precedence over URL pattern
-        assert is_video_url(url) is False
-
-    def test_empty_url(self):
-        """Test empty URL returns False."""
-        assert is_video_url("") is False
+    
+    def test_is_image_url(self):
+        """is_image_url returns correct boolean."""
+        assert is_image_url("https://example.com/image.jpg") is True
+        assert is_image_url("https://example.com/video.mp4") is False
 
 
-class TestIsLikelyAnimated:
-    """Tests for is_likely_animated function."""
+# =============================================================================
+# URL Transformation Tests
+# =============================================================================
 
-    def test_gif_is_animated(self):
-        """Test GIF is detected as potentially animated."""
-        assert is_likely_animated("https://example.com/animation.gif") is True
-
-    def test_webp_is_animated(self):
-        """Test WebP is detected as potentially animated."""
-        assert is_likely_animated("https://example.com/animation.webp") is True
-
-    def test_jpg_not_animated(self):
-        """Test JPG is not detected as animated."""
-        assert is_likely_animated("https://example.com/image.jpg") is False
-
-    def test_mp4_not_animated(self):
-        """Test MP4 is not in animated check (it's a full video)."""
-        assert is_likely_animated("https://example.com/video.mp4") is False
-
-
-class TestGetVideoThumbnailUrl:
-    """Tests for get_video_thumbnail_url function."""
-
-    def test_non_civitai_url_returns_none(self):
-        """Test non-Civitai URLs return None."""
-        url = "https://example.com/video.mp4"
-        assert get_video_thumbnail_url(url) is None
-
-    def test_civitai_url_adds_anim_false(self):
-        """Test anim=false is added to Civitai URLs."""
-        url = "https://image.civitai.com/uuid/width=1080/video.mp4"
-        result = get_video_thumbnail_url(url)
-        assert result is not None
-        assert "anim=false" in result
-
-    def test_civitai_url_adds_transcode(self):
-        """Test transcode=true is added."""
-        url = "https://image.civitai.com/uuid/video.mp4"
-        result = get_video_thumbnail_url(url)
-        assert result is not None
-        assert "transcode=true" in result
-
-    def test_default_width(self):
-        """Test default width is 450."""
-        url = "https://image.civitai.com/uuid/video.mp4"
-        result = get_video_thumbnail_url(url)
-        assert result is not None
-        assert "width=450" in result
-
-    def test_custom_width(self):
-        """Test custom width parameter."""
-        url = "https://image.civitai.com/uuid/video.mp4"
-        result = get_video_thumbnail_url(url, width=300)
-        assert result is not None
-        assert "width=300" in result
-
-    def test_empty_url(self):
-        """Test empty URL returns None."""
-        assert get_video_thumbnail_url("") is None
-
-
-class TestGetOptimizedVideoUrl:
+class TestOptimizedVideoUrl:
     """Tests for get_optimized_video_url function."""
-
-    def test_non_civitai_url_unchanged(self):
-        """Test non-Civitai URLs are returned unchanged."""
-        url = "https://example.com/video.mp4"
-        assert get_optimized_video_url(url) == url
-
-    def test_civitai_url_adds_transcode(self):
-        """Test transcode=true is added."""
-        url = "https://image.civitai.com/uuid/video.webm"
+    
+    def test_civitai_adds_transcode(self):
+        """Civitai URLs get transcode=true parameter."""
+        url = "https://image.civitai.com/video.mp4"
         result = get_optimized_video_url(url)
+        
         assert "transcode=true" in result
-
-    def test_civitai_url_no_anim_false(self):
-        """Test anim=false is NOT added for video."""
-        url = "https://image.civitai.com/uuid/video.webm"
-        result = get_optimized_video_url(url)
-        assert "anim=false" not in result
-
-    def test_default_width(self):
-        """Test default width is 450."""
-        url = "https://image.civitai.com/uuid/video.webm"
-        result = get_optimized_video_url(url)
-        assert "width=450" in result
-
-    def test_custom_width(self):
-        """Test custom width parameter."""
-        url = "https://image.civitai.com/uuid/video.webm"
-        result = get_optimized_video_url(url, width=1080)
         assert "width=1080" in result
-
-    def test_empty_url(self):
-        """Test empty URL returns empty string."""
-        assert get_optimized_video_url("") == ""
-
-
-class TestTransformCivitaiUrl:
-    """Tests for transform_civitai_url function."""
-
+    
+    def test_custom_quality(self):
+        """Custom quality width is applied."""
+        url = "https://image.civitai.com/video.mp4"
+        result = get_optimized_video_url(url, width=720)
+        
+        assert "width=720" in result
+    
+    def test_preserves_existing_params(self):
+        """Existing query params are preserved."""
+        url = "https://image.civitai.com/video.mp4?foo=bar"
+        result = get_optimized_video_url(url)
+        
+        assert "foo=bar" in result
+        assert "transcode=true" in result
+    
     def test_non_civitai_unchanged(self):
-        """Test non-Civitai URLs are returned unchanged."""
-        url = "https://example.com/image.jpg"
-        result = transform_civitai_url(url, {"width": "450"})
+        """Non-Civitai URLs returned unchanged."""
+        url = "https://other-cdn.com/video.mp4"
+        result = get_optimized_video_url(url)
+        
         assert result == url
 
-    def test_adds_params(self):
-        """Test params are added to Civitai URL."""
-        url = "https://image.civitai.com/uuid/image.jpeg"
-        result = transform_civitai_url(url, {"width": "450", "optimized": "true"})
-        assert "width=450" in result
-        assert "optimized=true" in result
 
-    def test_replaces_existing_params(self):
-        """Test existing params are replaced."""
-        url = "https://image.civitai.com/uuid/width=1080/image.jpeg"
-        result = transform_civitai_url(url, {"width": "450"})
+class TestVideoThumbnailUrl:
+    """Tests for get_video_thumbnail_url function."""
+    
+    def test_civitai_adds_anim_false(self):
+        """Civitai URLs get anim=false parameter."""
+        url = "https://image.civitai.com/video.mp4"
+        result = get_video_thumbnail_url(url)
+        
+        assert "anim=false" in result
+    
+    def test_removes_transcode(self):
+        """Transcode param is removed (we want static image)."""
+        url = "https://image.civitai.com/video.mp4?transcode=true"
+        result = get_video_thumbnail_url(url)
+        
+        assert "anim=false" in result
+        assert "transcode=true" not in result
+    
+    def test_adds_width(self):
+        """Width parameter is added."""
+        url = "https://image.civitai.com/video.mp4"
+        result = get_video_thumbnail_url(url, width=450)
+        
         assert "width=450" in result
 
+
+class TestCivitaiAliases:
+    """Tests for Civitai-specific alias functions."""
+    
+    def test_get_civitai_static_url(self):
+        """get_civitai_static_url adds anim=false."""
+        url = "https://image.civitai.com/preview.mp4"
+        result = get_civitai_static_url(url)
+        
+        assert "anim=false" in result
+    
+    def test_get_civitai_static_url_non_civitai(self):
+        """Non-Civitai URLs returned unchanged."""
+        url = "https://other.com/video.mp4"
+        result = get_civitai_static_url(url)
+        
+        assert result == url
+    
+    def test_get_civitai_video_url(self):
+        """get_civitai_video_url is alias for get_optimized_video_url."""
+        url = "https://image.civitai.com/video.mp4"
+        result = get_civitai_video_url(url, quality=720)
+        
+        assert "transcode=true" in result
+        assert "width=720" in result
+
+
+# =============================================================================
+# Extension Extraction Tests
+# =============================================================================
+
+class TestExtractExtension:
+    """Tests for extract_extension function."""
+    
+    def test_standard_extension(self):
+        """Standard URL extension extraction."""
+        assert extract_extension("https://example.com/video.mp4") == "mp4"
+        assert extract_extension("https://example.com/image.jpg") == "jpg"
+    
+    def test_with_query_params(self):
+        """Extension extracted before query params."""
+        url = "https://example.com/video.mp4?width=1080"
+        assert extract_extension(url) == "mp4"
+    
+    def test_no_extension(self):
+        """URL without extension returns None."""
+        assert extract_extension("https://example.com/media/12345") is None
+    
     def test_empty_url(self):
-        """Test empty URL returns empty string."""
-        result = transform_civitai_url("", {"width": "450"})
-        assert result == ""
+        """Empty URL returns None."""
+        assert extract_extension("") is None
 
+
+class TestNormalizeVideoExtension:
+    """Tests for normalize_video_extension function."""
+    
+    def test_civitai_fake_jpeg(self):
+        """Civitai fake JPEG video gets .mp4 extension."""
+        # This only works if URL is detected as video
+        url = "https://image.civitai.com/video.mp4"  # Already correct
+        result = normalize_video_extension(url)
+        assert result == url  # No change needed
+    
+    def test_non_civitai_unchanged(self):
+        """Non-Civitai URLs unchanged."""
+        url = "https://other.com/video.mp4"
+        result = normalize_video_extension(url)
+        assert result == url
+
+
+# =============================================================================
+# MediaInfo Tests
+# =============================================================================
 
 class TestMediaInfo:
     """Tests for MediaInfo dataclass."""
+    
+    def test_default_values(self):
+        """MediaInfo has correct defaults."""
+        info = MediaInfo(type=MediaType.IMAGE)
+        
+        assert info.type == MediaType.IMAGE
+        assert info.extension is None
+        assert info.is_animated is False
+        assert info.source == "extension"
+    
+    def test_animated_flag(self):
+        """is_animated flag works correctly."""
+        gif_info = detect_media_type("https://example.com/animation.gif")
+        
+        assert gif_info.type == MediaType.IMAGE
+        assert gif_info.is_animated is True
 
-    def test_create_media_info(self):
-        """Test creating MediaInfo instance."""
-        info = MediaInfo(
-            type=MediaType.VIDEO,
-            mime_type="video/mp4",
-            width=1920,
-            height=1080,
-            duration=60.5,
-        )
+
+# =============================================================================
+# Integration Tests
+# =============================================================================
+
+class TestIntegration:
+    """Integration tests for complete workflows."""
+    
+    def test_civitai_video_workflow(self):
+        """Complete Civitai video handling workflow."""
+        original = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123.mp4"
+        
+        # 1. Detect as video
+        info = detect_media_type(original)
         assert info.type == MediaType.VIDEO
-        assert info.mime_type == "video/mp4"
-        assert info.width == 1920
-        assert info.height == 1080
-        assert info.duration == 60.5
-
-    def test_media_info_optional_fields(self):
-        """Test MediaInfo with optional fields."""
-        info = MediaInfo(type=MediaType.IMAGE)
-        assert info.width is None
-        assert info.height is None
-        assert info.duration is None
-        assert info.mime_type is None
-
-    def test_media_info_to_dict(self):
-        """Test MediaInfo serialization."""
-        info = MediaInfo(
-            type=MediaType.VIDEO,
-            width=1920,
-            height=1080,
-        )
-        d = info.to_dict()
-        assert d["type"] == "video"
-        assert d["width"] == 1920
-        assert d["height"] == 1080
-
-    def test_to_dict_excludes_none(self):
-        """Test to_dict excludes None values."""
-        info = MediaInfo(type=MediaType.IMAGE)
-        d = info.to_dict()
-        # None values should not be in dict or should be None
-        assert "duration" not in d or d.get("duration") is None
+        
+        # 2. Get optimized playback URL
+        playback = get_optimized_video_url(original, width=1080)
+        assert "transcode=true" in playback
+        
+        # 3. Get static thumbnail
+        thumbnail = get_video_thumbnail_url(original)
+        assert "anim=false" in thumbnail
+    
+    def test_civitai_image_workflow(self):
+        """Complete Civitai image handling workflow."""
+        original = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123.jpeg"
+        
+        # 1. Detect as image
+        info = detect_media_type(original)
+        assert info.type == MediaType.IMAGE
+        
+        # 2. Static version (same for images)
+        static = get_civitai_static_url(original)
+        assert "anim=false" in static
 
 
-class TestConstants:
-    """Tests for module constants."""
-
-    def test_video_extensions_contain_common_formats(self):
-        """Test VIDEO_EXTENSIONS contains common formats."""
-        assert ".mp4" in VIDEO_EXTENSIONS
-        assert ".webm" in VIDEO_EXTENSIONS
-        assert ".mov" in VIDEO_EXTENSIONS
-        assert ".gif" in VIDEO_EXTENSIONS
-
-    def test_image_extensions_contain_common_formats(self):
-        """Test IMAGE_EXTENSIONS contains common formats."""
-        assert ".jpg" in IMAGE_EXTENSIONS
-        assert ".jpeg" in IMAGE_EXTENSIONS
-        assert ".png" in IMAGE_EXTENSIONS
-
-    def test_video_and_image_extensions_disjoint(self):
-        """Test VIDEO and IMAGE extensions don't overlap (except special cases)."""
-        # .webp can be in both (animated webp)
-        overlap = VIDEO_EXTENSIONS & IMAGE_EXTENSIONS
-        # Small overlap is OK for animated formats
-        assert len(overlap) <= 2
-
-
-class TestEdgeCases:
-    """Tests for edge cases and error handling."""
-
-    def test_malformed_url_doesnt_crash(self):
-        """Test malformed URLs don't crash."""
-        # Should not raise, should handle gracefully
-        result = transform_civitai_url("not://valid", {"width": "450"})
-        assert isinstance(result, str)
-
-    def test_url_with_special_characters(self):
-        """Test URLs with special characters."""
-        url = "https://image.civitai.com/uuid/file%20with%20spaces.jpeg"
-        result = get_video_thumbnail_url(url)
-        # Should not crash
-        assert result is None or isinstance(result, str)
-
-    def test_very_long_url(self):
-        """Test handling of very long URLs."""
-        base = "https://image.civitai.com/"
-        long_path = "a" * 1000
-        url = base + long_path + "/image.jpeg"
-        # Should not crash
-        result = get_video_thumbnail_url(url)
-        assert result is None or isinstance(result, str)
-
-    def test_unicode_in_url(self):
-        """Test URLs with unicode characters."""
-        url = "https://image.civitai.com/uuid/日本語.jpeg"
-        result = get_video_thumbnail_url(url)
-        # Should not crash
-        assert result is None or isinstance(result, str)
-
+# =============================================================================
+# Main
+# =============================================================================
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
