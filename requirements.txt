@@ -1,4 +1,4 @@
-# Synapse v2.0.0 - Main requirements
+# Synapse v2.1.8 - Main requirements
 # Install with: pip install -r requirements.txt
 
 # Core dependencies

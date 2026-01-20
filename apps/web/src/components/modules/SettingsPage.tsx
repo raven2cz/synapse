@@ -41,7 +41,7 @@ export function SettingsPage() {
   const [hfToken, setHfToken] = useState('')
   const [showCivitaiToken, setShowCivitaiToken] = useState(false)
   const [showHfToken, setShowHfToken] = useState(false)
-  
+
   // Store v2 settings
   const [storeRoot, setStoreRoot] = useState('~/.synapse/store')
   const [storeUiRoots, setStoreUiRoots] = useState({
@@ -51,7 +51,7 @@ export function SettingsPage() {
     sdnext: '~/sdnext',
   })
   const [storeDefaultUiSet, setStoreDefaultUiSet] = useState('local')
-  
+
   const { data: settings } = useQuery<SettingsResponse>({
     queryKey: ['settings'],
     queryFn: async () => {
@@ -60,7 +60,7 @@ export function SettingsPage() {
       return res.json()
     },
   })
-  
+
   useEffect(() => {
     if (settings) {
       setComfyuiPath(settings.comfyui_path || '~/ComfyUI')
@@ -70,7 +70,7 @@ export function SettingsPage() {
       if (settings.store_default_ui_set) setStoreDefaultUiSet(settings.store_default_ui_set)
     }
   }, [settings])
-  
+
   const { data: diagnostics, refetch: runDiagnostics, isFetching: isRunningDiagnostics } = useQuery<DiagnosticsResponse>({
     queryKey: ['diagnostics'],
     queryFn: async () => {
@@ -79,7 +79,7 @@ export function SettingsPage() {
       return res.json()
     },
   })
-  
+
   const updateSettingsMutation = useMutation({
     mutationFn: async (updates: Partial<SettingsResponse> & { civitai_token?: string; huggingface_token?: string }) => {
       const res = await fetch('/api/system/settings', {
@@ -98,10 +98,10 @@ export function SettingsPage() {
       setHfToken('')
     },
   })
-  
+
   const handleSave = () => {
     const updates: any = {
-      comfyui_path: comfyuiPath,
+      comfyui_path: storeUiRoots.comfyui || comfyuiPath, // Fallback to comfyuiPath if not set in UI roots
       nsfw_blur_enabled: nsfwBlurEnabled,
       // Store v2 settings
       store_root: storeRoot,
@@ -112,17 +112,23 @@ export function SettingsPage() {
     if (hfToken) updates.huggingface_token = hfToken
     updateSettingsMutation.mutate(updates)
   }
-  
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
-        <p className="text-slate-400 mt-1">
-          Configure Synapse settings and run diagnostics
-        </p>
+      {/* Header */}
+      <div className="mb-6 flex items-center gap-4">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <Zap className="w-7 h-7 text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100">Settings</h1>
+          <p className="text-slate-400">
+            Configure Synapse settings and run diagnostics
+          </p>
+        </div>
       </div>
-      
+
       <div className="space-y-6">
         {/* Paths */}
         <Card>
@@ -130,22 +136,11 @@ export function SettingsPage() {
             <FolderOpen className="w-5 h-5 inline-block mr-2 text-indigo-400" />
             Paths
           </CardTitle>
-          <CardDescription>Configure ComfyUI and data paths</CardDescription>
-          
+          <CardDescription>Configure data storage location</CardDescription>
+
           <div className="mt-4 space-y-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-2">
-                ComfyUI Path
-              </label>
-              <input
-                type="text"
-                value={comfyuiPath}
-                onChange={(e) => setComfyuiPath(e.target.value)}
-                placeholder="~/ComfyUI"
-                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50"
-              />
-            </div>
-            
+
+
             <div>
               <label className="block text-sm text-slate-400 mb-2">
                 Synapse Data Path
@@ -162,7 +157,7 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
-        
+
         {/* API Tokens */}
         <Card>
           <CardTitle>
@@ -170,7 +165,7 @@ export function SettingsPage() {
             API Tokens
           </CardTitle>
           <CardDescription>Configure API tokens for model downloads</CardDescription>
-          
+
           <div className="mt-4 space-y-4">
             {/* Civitai Token */}
             <div>
@@ -210,7 +205,7 @@ export function SettingsPage() {
                 Get your token from <a href="https://civitai.com/user/account" target="_blank" rel="noopener" className="text-indigo-400 hover:underline">civitai.com/user/account</a>
               </p>
             </div>
-            
+
             {/* HuggingFace Token */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -251,7 +246,7 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
-        
+
         {/* UI Settings */}
         <Card>
           <CardTitle>
@@ -259,7 +254,7 @@ export function SettingsPage() {
             Display
           </CardTitle>
           <CardDescription>UI preferences</CardDescription>
-          
+
           <div className="mt-4">
             <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
               <div>
@@ -270,20 +265,18 @@ export function SettingsPage() {
               </div>
               <button
                 onClick={() => setNsfwBlur(!nsfwBlurEnabled)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  nsfwBlurEnabled ? 'bg-indigo-500' : 'bg-slate-700'
-                }`}
+                className={`relative w-12 h-6 rounded-full transition-colors ${nsfwBlurEnabled ? 'bg-indigo-500' : 'bg-slate-700'
+                  }`}
               >
                 <span
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
-                    nsfwBlurEnabled ? 'left-7' : 'left-1'
-                  }`}
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${nsfwBlurEnabled ? 'left-7' : 'left-1'
+                    }`}
                 />
               </button>
             </div>
           </div>
         </Card>
-        
+
         {/* Store v2 Configuration */}
         <Card>
           <CardTitle>
@@ -291,7 +284,7 @@ export function SettingsPage() {
             Store Configuration
           </CardTitle>
           <CardDescription>Configure Store v2 paths and UI targets</CardDescription>
-          
+
           <div className="mt-4 space-y-4">
             {/* Store Root */}
             <div>
@@ -309,7 +302,7 @@ export function SettingsPage() {
                 Location for pack state and blob data
               </p>
             </div>
-            
+
             {/* Default UI Set */}
             <div>
               <label className="block text-sm text-slate-400 mb-2">
@@ -327,7 +320,7 @@ export function SettingsPage() {
                 ))}
               </select>
             </div>
-            
+
             {/* UI Roots */}
             <div>
               <label className="block text-sm text-slate-400 mb-2">
@@ -349,7 +342,7 @@ export function SettingsPage() {
                 ))}
               </div>
             </div>
-            
+
             {/* Store Actions */}
             <div className="flex gap-2 pt-2">
               <Button
@@ -358,7 +351,7 @@ export function SettingsPage() {
                 leftIcon={<Zap className="w-4 h-4" />}
                 onClick={async () => {
                   try {
-                    const res = await fetch('/api/store/init', { 
+                    const res = await fetch('/api/store/init', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ force: false })
@@ -384,7 +377,7 @@ export function SettingsPage() {
                 leftIcon={<Wrench className="w-4 h-4" />}
                 onClick={async () => {
                   try {
-                    const res = await fetch('/api/store/doctor', { 
+                    const res = await fetch('/api/store/doctor', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ rebuild_views: true })
@@ -409,7 +402,7 @@ export function SettingsPage() {
                 leftIcon={<Trash2 className="w-4 h-4" />}
                 onClick={async () => {
                   try {
-                    const res = await fetch('/api/store/clean', { 
+                    const res = await fetch('/api/store/clean', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ tmp: true, partial: true })
@@ -430,7 +423,7 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
-        
+
         {/* Diagnostics */}
         <Card>
           <div className="flex items-center justify-between">
@@ -451,7 +444,7 @@ export function SettingsPage() {
               Run
             </Button>
           </div>
-          
+
           {diagnostics && (
             <div className="mt-4 space-y-3">
               {/* ComfyUI status */}
@@ -471,7 +464,7 @@ export function SettingsPage() {
                   )}
                 </span>
               </div>
-              
+
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-3 bg-slate-800/30 rounded-lg text-center">
@@ -493,7 +486,7 @@ export function SettingsPage() {
                   <p className="text-xs text-slate-500">Custom Nodes</p>
                 </div>
               </div>
-              
+
               {/* Issues */}
               {diagnostics.issues.length > 0 && (
                 <div className="space-y-2">
@@ -501,17 +494,15 @@ export function SettingsPage() {
                   {diagnostics.issues.map((issue, i) => (
                     <div
                       key={i}
-                      className={`p-3 rounded-lg ${
-                        issue.level === 'error' || issue.level === 'critical'
-                          ? 'bg-red-500/10 border border-red-500/20'
-                          : 'bg-amber-500/10 border border-amber-500/20'
-                      }`}
+                      className={`p-3 rounded-lg ${issue.level === 'error' || issue.level === 'critical'
+                        ? 'bg-red-500/10 border border-red-500/20'
+                        : 'bg-amber-500/10 border border-amber-500/20'
+                        }`}
                     >
-                      <p className={`text-sm ${
-                        issue.level === 'error' || issue.level === 'critical'
-                          ? 'text-red-400'
-                          : 'text-amber-400'
-                      }`}>
+                      <p className={`text-sm ${issue.level === 'error' || issue.level === 'critical'
+                        ? 'text-red-400'
+                        : 'text-amber-400'
+                        }`}>
                         {issue.message}
                       </p>
                       {issue.suggestion && (
@@ -526,7 +517,7 @@ export function SettingsPage() {
             </div>
           )}
         </Card>
-        
+
         {/* Save button */}
         <div className="flex justify-end">
           <Button

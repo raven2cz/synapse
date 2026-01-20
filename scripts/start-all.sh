@@ -1,26 +1,31 @@
 #!/bin/bash
 #
-# Synapse v2.0 - Start All Services
+# ⬢ Synapse - Start All Services
 #
-# ComfyUI Asset & Workflow Manager with Store v2
-# Multi-UI support: ComfyUI, Forge, A1111, SD.Next
+# Pack-first model manager for generative UIs
+# Unified hub for ComfyUI, Forge/Forge-Neo, A1111, and SD.Next
 #
 # Usage: ./scripts/start-all.sh
 #
 
 set -e
 
-VERSION="2.0.0"
+VERSION="2.1.8"
 API_PORT=8000
 WEB_PORT=5173
 
 # Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-NC='\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'
+MAGENTA=$'\033[0;35m'
+BOLD_MAGENTA=$'\033[1;35m'
+BOLD=$'\033[1m'
+NC=$'\033[0m'
+
+# Synapse icon
+HEX_ICON="⬢"
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,15 +35,15 @@ cd "$PROJECT_ROOT"
 echo -e "${MAGENTA}"
 echo "╔════════════════════════════════════════════════════════════════════╗"
 echo "║                                                                    ║"
-echo "║  ███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗      ║"
-echo "║  ██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝      ║"
-echo "║  ███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗        ║"
-echo "║  ╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝        ║"
-echo "║  ███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗      ║"
-echo "║  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝      ║"
+echo "║  ███████╗██╗   ██╗███╗   ██╗ █████╗ ██████╗ ███████╗███████╗       ║"
+echo "║  ██╔════╝╚██╗ ██╔╝████╗  ██║██╔══██╗██╔══██╗██╔════╝██╔════╝       ║"
+echo "║  ███████╗ ╚████╔╝ ██╔██╗ ██║███████║██████╔╝███████╗█████╗         ║"
+echo "║  ╚════██║  ╚██╔╝  ██║╚██╗██║██╔══██║██╔═══╝ ╚════██║██╔══╝         ║"
+echo "║  ███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗       ║"
+echo "║  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝       ║"
 echo "║                                                                    ║"
-echo "║            Local AI Media Studio v${VERSION}                          ║"
-echo "║         ComfyUI Asset & Workflow Manager                          ║"
+echo "║            ${BOLD_MAGENTA}⬢${MAGENTA} Synapse: Pack-First Model Manager v${VERSION}              ║"
+echo "║          ComfyUI • Forge/Forge-Neo • A1111 • SD.Next               ║"
 echo "║                                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -47,7 +52,7 @@ echo -e "${NC}"
 # Prerequisites Check
 # ============================================================================
 
-echo -e "${CYAN}[1/5] Checking prerequisites...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Checking prerequisites...${NC}"
 
 # Check uv (preferred) or pip
 USE_UV=false
@@ -94,7 +99,7 @@ echo ""
 # Python Environment Setup
 # ============================================================================
 
-echo -e "${CYAN}[2/5] Setting up Python environment...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Setting up Python environment...${NC}"
 
 # Clear Python cache to avoid stale bytecode
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
@@ -132,7 +137,7 @@ echo ""
 # Node.js Dependencies
 # ============================================================================
 
-echo -e "${CYAN}[3/5] Setting up Node.js dependencies...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Setting up Node.js dependencies...${NC}"
 
 cd "$PROJECT_ROOT/apps/web"
 if [ ! -d "node_modules" ]; then
@@ -170,7 +175,7 @@ trap cleanup SIGINT SIGTERM EXIT
 # Start API Server
 # ============================================================================
 
-echo -e "${CYAN}[4/5] Starting API server...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Starting API server...${NC}"
 
 export PYTHONPATH="$PROJECT_ROOT"
 $PYTHON_BIN -m uvicorn apps.api.src.main:app --host 0.0.0.0 --port $API_PORT --log-level warning &
@@ -190,7 +195,7 @@ echo ""
 # Start Web Server
 # ============================================================================
 
-echo -e "${CYAN}[5/5] Starting Web server...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Starting Web server...${NC}"
 
 cd "$PROJECT_ROOT/apps/web"
 npm run dev --silent &
@@ -212,15 +217,15 @@ cd "$PROJECT_ROOT"
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
-echo -e "${GREEN}║   🚀 Synapse v${VERSION} is ready!                                     ║${NC}"
+echo -e "${GREEN}║   ${BOLD_MAGENTA}⬢${NC} ${GREEN}Synapse v${VERSION} is ready!                                       ║${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
-echo -e "${GREEN}║   ${CYAN}Frontend:${NC}  ${GREEN}http://localhost:${WEB_PORT}                              ║${NC}"
-echo -e "${GREEN}║   ${CYAN}API:${NC}       ${GREEN}http://localhost:${API_PORT}                               ║${NC}"
-echo -e "${GREEN}║   ${CYAN}API Docs:${NC}  ${GREEN}http://localhost:${API_PORT}/docs                          ║${NC}"
+echo -e "${GREEN}║   ${CYAN}Frontend:${NC}  ${GREEN}http://localhost:${WEB_PORT}                                 ║${NC}"
+echo -e "${GREEN}║   ${CYAN}API:${NC}       ${GREEN}http://localhost:${API_PORT}                                 ║${NC}"
+echo -e "${GREEN}║   ${CYAN}API Docs:${NC}  ${GREEN}http://localhost:${API_PORT}/docs                            ║${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
-echo -e "${GREEN}║   ${YELLOW}Press Ctrl+C to stop all services${NC}                           ${GREEN}║${NC}"
+echo -e "${GREEN}║   ${YELLOW}Press Ctrl+C to stop all services${NC}                                ${GREEN}║${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""

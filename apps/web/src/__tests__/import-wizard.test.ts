@@ -45,7 +45,7 @@ interface ImportOptions {
   downloadImages: boolean
   downloadVideos: boolean
   includeNsfw: boolean
-  downloadFromAllVersions: boolean
+  downloadFromAllVersions?: boolean
 }
 
 // ============================================================================

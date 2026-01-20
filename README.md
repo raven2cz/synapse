@@ -1,6 +1,6 @@
-# Synapse (Store v2)
+# ⬢ Synapse (Store v2)
 
-Synapse is a **pack-first model manager** for generative UIs like **ComfyUI, Forge, Automatic1111 (A1111), and SD.Next**.
+**⬢ Synapse** is a **pack-first model manager** for generative UIs like **ComfyUI, Forge, Automatic1111 (A1111), and SD.Next**.
 
 It helps you:
 

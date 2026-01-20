@@ -69,7 +69,7 @@ logging.getLogger("uvicorn.access").addFilter(StatusEndpointFilter())
 # Create FastAPI app
 app = FastAPI(
     title="Synapse API v2",
-    description="ComfyUI Asset & Workflow Manager - Store v2",
+    description="The Pack-First Model Manager. Unified hub for ComfyUI, Forge, A1111, and SD.Next.",
     version="2.1.8",
 )
 

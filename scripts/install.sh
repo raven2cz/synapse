@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Synapse v2.0 - Installation Script
+# ⬢ Synapse - Installation Script
 #
 # This script installs all dependencies for Synapse:
 # - Python packages (using uv or pip)
@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="2.0.0"
+VERSION="2.1.8"
 
 # Colors
 RED='\033[0;31m'
@@ -20,7 +20,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
+BOLD_MAGENTA='\033[1;35m'
+BOLD='\033[1m'
 NC='\033[0m'
+
+# Synapse icon
+HEX_ICON="⬢"
 
 # Get script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,7 +42,7 @@ echo "║  ╚════██║  ╚██╔╝  ██║╚██╗█�
 echo "║  ███████║   ██║   ██║ ╚████║██║  ██║██║     ███████║███████╗      ║"
 echo "║  ╚══════╝   ╚═╝   ╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     ╚══════╝╚══════╝      ║"
 echo "║                                                                    ║"
-echo "║                    Installation v${VERSION}                           ║"
+echo "║                    ${BOLD_MAGENTA}⬢${MAGENTA} Installation v${VERSION}                           ║"
 echo "║                                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -47,7 +52,7 @@ echo ""
 # Prerequisites Check
 # ============================================================================
 
-echo -e "${CYAN}[1/4] Checking prerequisites...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Checking prerequisites...${NC}"
 echo ""
 
 MISSING_DEPS=0
@@ -105,7 +110,7 @@ fi
 # Python Dependencies
 # ============================================================================
 
-echo -e "${CYAN}[2/4] Installing Python dependencies...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Installing Python dependencies...${NC}"
 echo ""
 
 if [ "$USE_UV" = true ]; then
@@ -151,7 +156,7 @@ echo ""
 # Node.js Dependencies
 # ============================================================================
 
-echo -e "${CYAN}[3/4] Installing Node.js dependencies...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Installing Node.js dependencies...${NC}"
 echo ""
 
 cd "$PROJECT_ROOT/apps/web"
@@ -173,7 +178,7 @@ echo ""
 # Initialize Synapse
 # ============================================================================
 
-echo -e "${CYAN}[4/4] Initializing Synapse...${NC}"
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Initializing Synapse...${NC}"
 echo ""
 
 # Create data directory
@@ -189,7 +194,7 @@ echo ""
 
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
-echo -e "${GREEN}║   ✅ Installation complete!                                        ║${NC}"
+echo -e "${GREEN}║   ${BOLD_MAGENTA}⬢${NC} ${GREEN}Installation complete!                                        ║${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║                                                                    ║${NC}"

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { usePacksStore } from '@/stores/packsStore'
 import { MediaPreview } from '../ui/MediaPreview'
 
 interface PackSummary {
@@ -60,8 +61,7 @@ type CardSize = keyof typeof CARD_WIDTHS
 
 export function PacksPage() {
   const { nsfwBlurEnabled } = useSettingsStore()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedTag, setSelectedTag] = useState('')
+  const { searchQuery, selectedTag, setSearchQuery, setSelectedTag } = usePacksStore()
   const [cardSize, setCardSize] = useState<CardSize>('md')
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
 
@@ -72,26 +72,26 @@ export function PacksPage() {
       console.log('[PacksPage] Fetching packs from /api/packs...')
       const res = await fetch('/api/packs/')
       console.log('[PacksPage] Response status:', res.status)
-      
+
       if (!res.ok) {
         const errText = await res.text()
         console.error('[PacksPage] Error response:', errText)
         throw new Error(`Failed to fetch packs: ${res.status}`)
       }
-      
+
       const data = await res.json()
       console.log('[PacksPage] Received data:', data)
-      
+
       // v2 API returns { packs: [...] }
       const packsList = data.packs || data || []
       console.log('[PacksPage] Packs count:', packsList.length)
-      
+
       // Debug first pack
       if (packsList.length > 0) {
         console.log('[PacksPage] First pack:', JSON.stringify(packsList[0], null, 2))
         console.log('[PacksPage] First pack thumbnail:', packsList[0].thumbnail)
       }
-      
+
       return packsList
     },
   })
@@ -141,19 +141,19 @@ export function PacksPage() {
     <div className="space-y-6">
       {/* Fullscreen image viewer */}
       {fullscreenImage && (
-        <div 
+        <div
           className="fixed inset-0 bg-black z-[90] flex items-center justify-center"
           onClick={() => setFullscreenImage(null)}
         >
-          <button 
+          <button
             className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
             onClick={(e) => { e.stopPropagation(); setFullscreenImage(null) }}
           >
             <X className="w-8 h-8 text-white" />
           </button>
-          <img 
-            src={fullscreenImage} 
-            alt="Fullscreen preview" 
+          <img
+            src={fullscreenImage}
+            alt="Fullscreen preview"
             className="max-w-[95vw] max-h-[95vh] object-contain"
             onClick={(e) => e.stopPropagation()}
           />
@@ -171,7 +171,7 @@ export function PacksPage() {
             {packs.length} packs installed
           </p>
         </div>
-        
+
         {/* Zoom controls */}
         <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
           <button
@@ -268,7 +268,7 @@ export function PacksPage() {
           const isNsfwPack = pack.is_nsfw || pack.user_tags?.includes('nsfw-pack') || pack.nsfw_previews_count > 0
 
           console.log(`[PacksPage] Rendering pack: ${pack.name}, thumbnail: ${thumbnailUrl}, nsfw: ${isNsfwPack}`)
-          
+
           return (
             <Link
               key={pack.name}
@@ -302,27 +302,27 @@ export function PacksPage() {
                     <Package className="w-16 h-16 text-slate-mid" />
                   </div>
                 )}
-                
+
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
-                
+
                 {/* Top badges */}
                 <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap max-w-[80%]">
                   <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold">
                     {pack.assets_count} assets
                   </span>
                 </div>
-                
+
                 {/* Unresolved warning */}
                 {pack.has_unresolved && (
                   <div className="absolute top-3 right-3">
-                    <span className="px-2 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-xs text-white font-semibold flex items-center gap-1">
+                    <span className="px-2 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-xs text-white font-semibold flex items-center gap-1 animate-breathe">
                       <AlertTriangle className="w-3 h-3" />
                       Needs Setup
                     </span>
                   </div>
                 )}
-                
+
                 {/* User tags with special colors */}
                 {pack.user_tags && pack.user_tags.length > 0 && (
                   <div className="absolute top-12 left-3 flex gap-1 flex-wrap max-w-[90%]">
@@ -339,14 +339,14 @@ export function PacksPage() {
                     ))}
                   </div>
                 )}
-                
+
                 {/* Bottom content */}
                 <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
                   {/* Title */}
                   <h3 className="font-bold text-white text-sm leading-tight line-clamp-2 drop-shadow-lg">
                     {pack.name}
                   </h3>
-                  
+
                   {/* Model type and base model badges */}
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {pack.model_type && (
@@ -375,7 +375,7 @@ export function PacksPage() {
         <div className="text-center py-12">
           <Package className="w-16 h-16 text-slate-mid mx-auto mb-4" />
           <p className="text-text-muted">
-            {packs.length === 0 
+            {packs.length === 0
               ? 'No packs installed yet. Import models from Browse Civitai.'
               : 'No packs match your filters.'}
           </p>

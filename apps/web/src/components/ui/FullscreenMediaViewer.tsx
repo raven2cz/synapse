@@ -143,7 +143,7 @@ export function FullscreenMediaViewer({
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const controlsTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const thumbnailsRef = useRef<HTMLDivElement>(null)
   const thumbRefs = useRef<Map<number, HTMLButtonElement>>(new Map())
 

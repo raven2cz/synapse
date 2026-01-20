@@ -100,19 +100,19 @@ describe('Metadata Panel State', () => {
 describe('Keyboard Shortcut - I key', () => {
   describe('Key detection', () => {
     it('should recognize lowercase i', () => {
-      const key = 'i'
+      const key: string = 'i'
       const isInfoKey = key === 'i' || key === 'I'
       expect(isInfoKey).toBe(true)
     })
 
     it('should recognize uppercase I', () => {
-      const key = 'I'
+      const key: string = 'I'
       const isInfoKey = key === 'i' || key === 'I'
       expect(isInfoKey).toBe(true)
     })
 
     it('should not trigger on other keys', () => {
-      const key = 'j'
+      const key: string = 'j'
       const isInfoKey = key === 'i' || key === 'I'
       expect(isInfoKey).toBe(false)
     })
@@ -365,8 +365,8 @@ describe('Panel Content Sections', () => {
     it('should show parameters when any are available', () => {
       const meta: GenerationMeta = { steps: 30, cfgScale: 7 }
       const hasParams = meta.steps !== undefined ||
-                        meta.cfgScale !== undefined ||
-                        meta.sampler !== undefined
+        meta.cfgScale !== undefined ||
+        meta.sampler !== undefined
 
       expect(hasParams).toBe(true)
     })
@@ -435,11 +435,9 @@ describe('React Hooks Order (Regression)', () => {
 
   it('should have copyToClipboard callback before early return', () => {
     // copyToClipboard is a useCallback that must be defined before early return
-    let copiedField: string | null = null
-
     // This function must be defined on every render
-    const copyToClipboard = async (text: string, fieldName: string) => {
-      copiedField = fieldName
+    const copyToClipboard = async (_text: string, _fieldName: string) => {
+      // no-op
     }
 
     // It should be callable even when component is "closed"

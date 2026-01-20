@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Header - Varianta 6 Refinement</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #64748b;
+            margin-bottom: 3rem;
+            font-size: 1rem;
+        }
+
+        .variant-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
+            gap: 2rem;
+        }
+
+        .variant-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .variant-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25);
+            border-color: #6366f1;
+        }
+
+        .variant-header {
+            background: #0f172a;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #334155;
+        }
+
+        .variant-number {
+            color: #6366f1;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .variant-name {
+            color: #e2e8f0;
+            font-size: 1rem;
+            margin-top: 0.25rem;
+        }
+
+        .header-preview {
+            height: 64px;
+            background: linear-gradient(to bottom, #0f172a, #1e293b);
+            border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .description {
+            padding: 1rem 1.5rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+
+        .text-container h2 {
+            color: #f1f5f9;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .text-container .version {
+            color: #64748b;
+            font-size: 0.75rem;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Variant-specific styles */
+        .v1 .logo-box { margin-right: 10px; }
+        .v2 .logo-box { margin-right: 8px; }
+        .v3 .logo-box { margin-right: 12px; }
+        .v4 .logo-box { margin-right: 10px; }
+        .v5 .logo-box { margin-right: 14px; }
+        .v6 .logo-box { margin-right: 8px; }
+        .v7 .logo-box { margin-right: 6px; }
+        .v8 .logo-box { margin-right: 10px; }
+
+        .inline-version {
+            color: #64748b;
+            font-size: 0.875rem;
+            margin-left: 8px;
+            font-weight: 400;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⬢ Synapse Header - Varianta 6</h1>
+        <p class="subtitle">8 refinovaných podvariant s optimálními mezerami a styly</p>
+
+        <div class="variant-grid">
+
+            <!-- Podvarianta 1: Tight spacing, verze dole -->
+            <div class="variant-card v1">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.1</div>
+                    <div class="variant-name">Těsná mezera (10px) - verze pod názvem</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container">
+                        <div class="logo-box">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g1)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g1)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g1)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g1)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g1)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g1)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g1)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g1)"/>
+                            </svg>
+                        </div>
+                        <div class="text-container">
+                            <h2 class="gradient-text" style="font-size: 1.375rem;">Synapse</h2>
+                            <span class="version">v2.1.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="description">Logo 48px s 10px mezerou. Gradient text, verze pod názvem.</div>
+            </div>
+
+            <!-- Podvarianta 2: Very tight, verze dole -->
+            <div class="variant-card v2">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.2</div>
+                    <div class="variant-name">Velmi těsná mezera (8px) - verze pod</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container">
+                        <div class="logo-box">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g2)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g2)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g2)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g2)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g2)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g2)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g2)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g2)"/>
+                            </svg>
+                        </div>
+                        <div class="text-container">
+                            <h2 class="gradient-text" style="font-size: 1.375rem;">Synapse</h2>
+                            <span class="version">v2.1.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="description">Minimální mezera 8px. Logo těsně u textu. Kompaktní.</div>
+            </div>
+
+            <!-- Podvarianta 3: Medium spacing, bigger text -->
+            <div class="variant-card v3">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.3</div>
+                    <div class="variant-name">Střední mezera (12px) - větší text</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container">
+                        <div class="logo-box">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g3)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g3)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g3)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g3)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g3)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g3)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g3)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g3)"/>
+                            </svg>
+                        </div>
+                        <div class="text-container">
+                            <h2 class="gradient-text" style="font-size: 1.5rem;">Synapse</h2>
+                            <span class="version">v2.1.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="description">Mezera 12px, větší název (1.5rem). Vyvážené.</div>
+            </div>
+
+            <!-- Podvarianta 4: Tight, inline version -->
+            <div class="variant-card v4">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.4</div>
+                    <div class="variant-name">Těsná mezera (10px) - verze inline</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container" style="align-items: baseline;">
+                        <div class="logo-box" style="align-self: center;">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g4" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g4)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g4)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g4)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g4)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g4)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g4)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g4)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g4)"/>
+                            </svg>
+                        </div>
+                        <h2 class="gradient-text" style="font-size: 1.375rem; font-weight: 700;">Synapse</h2>
+                        <span class="inline-version">v2.1.8</span>
+                    </div>
+                </div>
+                <div class="description">Verze inline vedle názvu. Čistší, kompaktnější.</div>
+            </div>
+
+            <!-- Podvarianta 5: Slightly bigger logo -->
+            <div class="variant-card v5">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.5</div>
+                    <div class="variant-name">Větší logo (52px) - mezera 14px</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container">
+                        <div class="logo-box">
+                            <svg width="52" height="52" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g5" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g5)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g5)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g5)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g5)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g5)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g5)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g5)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g5)"/>
+                            </svg>
+                        </div>
+                        <div class="text-container">
+                            <h2 class="gradient-text" style="font-size: 1.5rem;">Synapse</h2>
+                            <span class="version">v2.1.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="description">Největší logo 52px s proporcionální mezerou. Prémiový.</div>
+            </div>
+
+            <!-- Podvarianta 6: Very tight, inline version -->
+            <div class="variant-card v6">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.6</div>
+                    <div class="variant-name">Velmi těsná (8px) - verze inline - DOPORUČENÁ</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container" style="align-items: baseline;">
+                        <div class="logo-box" style="align-self: center;">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g6" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g6)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g6)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g6)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g6)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g6)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g6)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g6)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g6)"/>
+                            </svg>
+                        </div>
+                        <h2 class="gradient-text" style="font-size: 1.375rem; font-weight: 700;">Synapse</h2>
+                        <span class="inline-version">v2.1.8</span>
+                    </div>
+                </div>
+                <div class="description">⭐ NEJLEPŠÍ - Těsná mezera, verze inline, kompaktní a elegantní!</div>
+            </div>
+
+            <!-- Podvarianta 7: Ultra tight -->
+            <div class="variant-card v7">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.7</div>
+                    <div class="variant-name">Ultra těsná (6px) - minimalistická</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container" style="align-items: baseline;">
+                        <div class="logo-box" style="align-self: center;">
+                            <svg width="48" height="48" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g7" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g7)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g7)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g7)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g7)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g7)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g7)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g7)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g7)"/>
+                            </svg>
+                        </div>
+                        <h2 class="gradient-text" style="font-size: 1.375rem; font-weight: 700;">Synapse</h2>
+                        <span class="inline-version">v2.1.8</span>
+                    </div>
+                </div>
+                <div class="description">Nejmenší mezera 6px. Logo a text velmi blízko. Ultra kompaktní.</div>
+            </div>
+
+            <!-- Podvarianta 8: Slightly smaller logo, tight -->
+            <div class="variant-card v8">
+                <div class="variant-header">
+                    <div class="variant-number">Podvarianta 6.8</div>
+                    <div class="variant-name">Menší logo (44px) - mezera 10px</div>
+                </div>
+                <div class="header-preview">
+                    <div class="logo-container">
+                        <div class="logo-box">
+                            <svg width="44" height="44" viewBox="0 0 120 120" fill="none">
+                                <defs>
+                                    <linearGradient id="g8" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#6366f1"/>
+                                        <stop offset="100%" stop-color="#8b5cf6"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#g8)" stroke-width="3" fill="none"/>
+                                <line x1="60" y1="20" x2="60" y2="50" stroke="url(#g8)" stroke-width="2.5"/>
+                                <line x1="85" y1="35" x2="65" y2="50" stroke="url(#g8)" stroke-width="2.5"/>
+                                <line x1="85" y1="65" x2="65" y2="55" stroke="url(#g8)" stroke-width="2.5"/>
+                                <line x1="60" y1="80" x2="60" y2="55" stroke="url(#g8)" stroke-width="2.5"/>
+                                <line x1="35" y1="65" x2="55" y2="55" stroke="url(#g8)" stroke-width="2.5"/>
+                                <line x1="35" y1="35" x2="55" y2="50" stroke="url(#g8)" stroke-width="2.5"/>
+                                <circle cx="60" cy="52.5" r="8" fill="url(#g8)"/>
+                            </svg>
+                        </div>
+                        <div class="text-container">
+                            <h2 class="gradient-text" style="font-size: 1.25rem;">Synapse</h2>
+                            <span class="version">v2.1.8</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="description">Trochu menší logo 44px, proporcionální text. Jemný vzhled.</div>
+            </div>
+
+        </div>
+
+        <div style="margin-top: 3rem; text-align: center; color: #64748b; border-top: 1px solid #334155; padding-top: 2rem;">
+            <p style="font-size: 1.1rem; color: #6366f1; font-weight: 600;">⭐ DOPORUČENÍ: Podvarianta 6.6</p>
+            <p style="margin-top: 0.75rem; color: #94a3b8;">Logo 48px, mezera 8px, verze inline - perfektní balance!</p>
+            <p style="margin-top: 1.5rem; font-size: 0.85rem;">Vyber číslo podvarianty (6.1 - 6.8) a implementuji ji</p>
+        </div>
+    </div>
+</body>
+</html>

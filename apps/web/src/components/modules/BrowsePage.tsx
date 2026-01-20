@@ -11,7 +11,7 @@ import { clsx } from 'clsx'
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { ImportWizardModal } from '@/components/ui/ImportWizardModal'
-import type { ModelVersion as WizardModelVersion } from '@/components/ui/ImportWizardModal'
+
 import type { MediaType } from '@/lib/media'
 
 interface ModelPreview {

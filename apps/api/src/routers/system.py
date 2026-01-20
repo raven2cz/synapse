@@ -16,7 +16,7 @@ from src.store.api import get_store, reset_store
 router = APIRouter()
 
 # Centralized version - update this for releases
-VERSION = "2.0.8"
+VERSION = "2.1.8"
 
 
 class StatusResponse(BaseModel):

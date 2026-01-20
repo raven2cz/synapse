@@ -33,11 +33,33 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'pulse-glow': 'pulseGlow 2s ease-in-out infinite',
+        'breathe': 'breathe 3s ease-in-out infinite',
         'slide-in': 'slideIn 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
         'fade-in': 'fadeIn 0.2s ease-out',
       },
       keyframes: {
+        pulseGlow: {
+          '0%, 100%': {
+            boxShadow: '0 0 8px rgba(34, 197, 94, 0.5)',
+            opacity: '1'
+          },
+          '50%': {
+            boxShadow: '0 0 12px rgba(34, 197, 94, 0.8)',
+            opacity: '0.8'
+          },
+        },
+        breathe: {
+          '0%, 100%': {
+            opacity: '0.6',
+            transform: 'scale(1)'
+          },
+          '50%': {
+            opacity: '0.95',
+            transform: 'scale(1.05)'
+          },
+        },
         slideIn: {
           '0%': { transform: 'translateX(100%)', opacity: '0' },
           '100%': { transform: 'translateX(0)', opacity: '1' },

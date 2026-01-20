@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Synapse CLI - ComfyUI Asset & Workflow Manager
+Synapse CLI - The Pack-First Model Manager
 
-Command-line interface for managing ComfyUI assets and workflows.
+Command-line interface for managing assets and workflows across ComfyUI, Forge, A1111, and SD.Next.
 
 Usage:
     synapse init                          Initialize Synapse configuration
@@ -34,7 +34,7 @@ from src.core.pack_builder import PackBuilder
 from src.core.installer import PackInstaller, InstallStatus
 from src.core.registry import PackRegistry
 from src.core.validator import PackValidator, SynapseDoctor
-from src.workflows.generator import DerivedWorkflowGenerator
+# from src.workflows.generator import DerivedWorkflowGenerator
 from src.workflows.scanner import WorkflowScanner
 
 
@@ -48,13 +48,17 @@ class Colors:
     BLUE = "\033[94m"
     MAGENTA = "\033[95m"
     CYAN = "\033[96m"
+    BOLD_MAGENTA = "\033[1;35m"
+
+
+# Synapse CLI icon
+HEX_ICON = "⬢"
     
 
 def print_header(text: str) -> None:
     """Print a styled header."""
-    print(f"\n{Colors.CYAN}{Colors.BOLD}{'='*60}{Colors.RESET}")
-    print(f"{Colors.CYAN}{Colors.BOLD} {text}{Colors.RESET}")
-    print(f"{Colors.CYAN}{Colors.BOLD}{'='*60}{Colors.RESET}\n")
+    print(f"\n{Colors.BOLD_MAGENTA}{HEX_ICON}{Colors.RESET} {Colors.BOLD}{text}{Colors.RESET}")
+    print(f"{Colors.CYAN}{'─'*60}{Colors.RESET}\n")
 
 
 def print_success(text: str) -> None:
@@ -74,7 +78,7 @@ def print_warning(text: str) -> None:
 
 def print_info(text: str) -> None:
     """Print info message."""
-    print(f"{Colors.BLUE}ℹ {text}{Colors.RESET}")
+    print(f"{Colors.BOLD_MAGENTA}{HEX_ICON}{Colors.RESET} {text}")
 
 
 def progress_callback(message: str, progress: float) -> None:
@@ -518,32 +522,33 @@ def cmd_run(args: argparse.Namespace) -> int:
     with open(workflow_path, 'r', encoding='utf-8') as f:
         workflow = json.load(f)
     
-    # Generate derived workflow
-    generator = DerivedWorkflowGenerator(config)
+
+    # generator = DerivedWorkflowGenerator(config)
     
-    run_config = pack.run_config
-    if args.prefix:
-        run_config.output_prefix = args.prefix
-    if args.subfolder:
-        run_config.output_subfolder = args.subfolder
+    # run_config = pack.run_config
+    # if args.prefix:
+    #     run_config.output_prefix = args.prefix
+    # if args.subfolder:
+    #     run_config.output_subfolder = args.subfolder
     
-    result = generator.generate_derived(workflow, pack, run_config)
+    # result = generator.generate_derived(workflow, pack, run_config)
     
-    # Save derived workflow
-    output_path = pack_dir / "workflows" / f"derived_{workflow_info.filename}"
-    generator.save_derived(result, output_path)
+    # # Save derived workflow
+    # output_path = pack_dir / "workflows" / f"derived_{workflow_info.filename}"
+    # generator.save_derived(result, output_path)
     
-    print_success(f"Generated: {output_path}")
+    # print_success(f"Generated: {output_path}")
     
-    # Show patches applied
-    if result.patches:
-        print(f"\n{Colors.BOLD}Patches Applied:{Colors.RESET}")
-        for patch in result.patches:
-            print(f"  • {patch.node_id}: {patch.original_value} → {patch.new_value}")
+    # # Show patches applied
+    # if result.patches:
+    #     print(f"\n{Colors.BOLD}Patches Applied:{Colors.RESET}")
+    #     for patch in result.patches:
+    #         print(f"  • {patch.node_id}: {patch.original_value} → {patch.new_value}")
     
-    print_info(f"\nLoad in ComfyUI: {output_path}")
+    # print_info(f"\nLoad in ComfyUI: {output_path}")
     
-    return 0
+    print_error("Derived workflow generation is currently unavailable (DerivedWorkflowGenerator missing).")
+    return 1
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -607,14 +612,14 @@ def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser."""
     parser = argparse.ArgumentParser(
         prog="synapse",
-        description="Synapse - ComfyUI Asset & Workflow Manager",
+        description=f"{Colors.BOLD_MAGENTA}{HEX_ICON}{Colors.RESET} {Colors.BOLD}Synapse{Colors.RESET} - Pack-first model manager for generative UIs",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    
+
     parser.add_argument(
         "--version", "-v",
         action="version",
-        version="Synapse 1.0.0"
+        version=f"{Colors.BOLD_MAGENTA}{HEX_ICON}{Colors.RESET} {Colors.BOLD}Synapse{Colors.RESET} v2.1.8"
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Commands")

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Logo Proposals - Hexagon Concept</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            padding: 40px 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #94a3b8;
+            margin-bottom: 3rem;
+            font-size: 1.1rem;
+        }
+
+        .section {
+            margin-bottom: 4rem;
+        }
+
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 2rem;
+            color: #cbd5e1;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 0.5rem;
+        }
+
+        .logo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .logo-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .logo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.3);
+            border-color: #6366f1;
+        }
+
+        .logo-display {
+            width: 100%;
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            background: #0f172a;
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logo-display::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+        }
+
+        .logo-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #e2e8f0;
+        }
+
+        .logo-description {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+
+        .logo-svg {
+            width: 120px;
+            height: 120px;
+        }
+
+        /* Icon Section */
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .icon-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .icon-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(99, 102, 241, 0.25);
+            border-color: #6366f1;
+        }
+
+        .icon-symbol {
+            font-size: 4rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            line-height: 1;
+        }
+
+        .icon-name {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #cbd5e1;
+            margin-bottom: 0.5rem;
+        }
+
+        .icon-usage {
+            font-size: 0.85rem;
+            color: #64748b;
+            font-family: 'Courier New', monospace;
+            background: #0f172a;
+            padding: 0.5rem;
+            border-radius: 6px;
+        }
+
+        /* Example Section */
+        .example-box {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-top: 2rem;
+        }
+
+        .example-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #cbd5e1;
+        }
+
+        .example-content {
+            background: #0f172a;
+            border-radius: 8px;
+            padding: 1.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            line-height: 1.8;
+            color: #6366f1;
+        }
+
+        .highlight {
+            color: #8b5cf6;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⬡ Synapse Logo Proposals</h1>
+        <p class="subtitle">Hexagon Concept Variations - Pack-first model manager</p>
+
+        <!-- Graphical Logos - Hexagon Theme -->
+        <section class="section">
+            <h2 class="section-title">Hexagonal Logo Concepts (Main Branding)</h2>
+            <div class="logo-grid">
+
+                <!-- Logo 1: Classic Hexagon Hub -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#grad1)" stroke-width="3" fill="none"/>
+                            <polygon points="60,35 75,43.75 75,61.25 60,70 45,61.25 45,43.75" fill="url(#grad1)" opacity="0.8"/>
+                            <circle cx="35" cy="35" r="4" fill="#a78bfa"/>
+                            <circle cx="85" cy="35" r="4" fill="#a78bfa"/>
+                            <circle cx="85" cy="65" r="4" fill="#a78bfa"/>
+                            <circle cx="60" cy="80" r="4" fill="#a78bfa"/>
+                            <circle cx="35" cy="65" r="4" fill="#a78bfa"/>
+                            <circle cx="60" cy="20" r="4" fill="#a78bfa"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">1. Classic Hub</div>
+                    <div class="logo-description">Original hexagon hub with connection nodes - clean, technical, represents pack organization</div>
+                </div>
+
+                <!-- Logo 2: Layered Hexagons -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,15 90,32.5 90,67.5 60,85 30,67.5 30,32.5" stroke="url(#grad2)" stroke-width="2.5" fill="none" opacity="0.4"/>
+                            <polygon points="60,28 82,40 82,64 60,76 38,64 38,40" stroke="url(#grad2)" stroke-width="2.5" fill="none" opacity="0.6"/>
+                            <polygon points="60,40 74,48 74,60 60,68 46,60 46,48" fill="url(#grad2)" opacity="0.9"/>
+                            <circle cx="60" cy="54" r="5" fill="#a78bfa"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">2. Layered Stack</div>
+                    <div class="logo-description">Three-layer hexagons - symbolizes profile stacking and "last wins" override system</div>
+                </div>
+
+                <!-- Logo 3: Hex Grid -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <!-- Center hex -->
+                            <polygon points="60,35 75,43.75 75,61.25 60,70 45,61.25 45,43.75" fill="url(#grad3)" opacity="0.9"/>
+                            <!-- Surrounding hexes -->
+                            <polygon points="30,35 40,40.625 40,51.875 30,57.5 20,51.875 20,40.625" stroke="url(#grad3)" stroke-width="2" fill="none" opacity="0.5"/>
+                            <polygon points="90,35 100,40.625 100,51.875 90,57.5 80,51.875 80,40.625" stroke="url(#grad3)" stroke-width="2" fill="none" opacity="0.5"/>
+                            <polygon points="60,70 70,75.625 70,86.875 60,92.5 50,86.875 50,75.625" stroke="url(#grad3)" stroke-width="2" fill="none" opacity="0.5"/>
+                            <polygon points="60,10 70,15.625 70,26.875 60,32.5 50,26.875 50,15.625" stroke="url(#grad3)" stroke-width="2" fill="none" opacity="0.5"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">3. Hex Grid</div>
+                    <div class="logo-description">Honeycomb pattern with central focus - represents distributed pack ecosystem</div>
+                </div>
+
+                <!-- Logo 4: 3D Hex Cube -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad4" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                                <linearGradient id="grad4b" x1="100%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#6366f1;stop-opacity:0.6" />
+                                </linearGradient>
+                            </defs>
+                            <!-- Top face -->
+                            <polygon points="60,30 85,42.5 60,55 35,42.5" fill="url(#grad4)" opacity="0.9"/>
+                            <!-- Right face -->
+                            <polygon points="85,42.5 85,70 60,82.5 60,55" fill="url(#grad4b)" opacity="0.7"/>
+                            <!-- Left face -->
+                            <polygon points="35,42.5 35,70 60,82.5 60,55" fill="url(#grad4)" opacity="0.5"/>
+                            <circle cx="60" cy="55" r="4" fill="#a78bfa"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">4. 3D Cube</div>
+                    <div class="logo-description">Isometric hexagonal cube - depth and dimension, blob storage architecture</div>
+                </div>
+
+                <!-- Logo 5: Hex Star -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,20 85,35 85,65 60,80 35,65 35,35" stroke="url(#grad5)" stroke-width="3" fill="none"/>
+                            <line x1="60" y1="20" x2="60" y2="50" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <line x1="85" y1="35" x2="65" y2="50" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <line x1="85" y1="65" x2="65" y2="55" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <line x1="60" y1="80" x2="60" y2="55" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <line x1="35" y1="65" x2="55" y2="55" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <line x1="35" y1="35" x2="55" y2="50" stroke="url(#grad5)" stroke-width="2.5"/>
+                            <circle cx="60" cy="52.5" r="8" fill="url(#grad5)"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">5. Hex Star</div>
+                    <div class="logo-description">Central hub with radiating connections - synapse firing, neural network activity</div>
+                </div>
+
+                <!-- Logo 6: Split Hex -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad6" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,20 85,35 85,50 60,65 35,50 35,35" fill="url(#grad6)" opacity="0.8"/>
+                            <polygon points="60,55 85,70 85,85 60,100 35,85 35,70" fill="url(#grad6)" opacity="0.6"/>
+                            <line x1="35" y1="50" x2="35" y2="70" stroke="#a78bfa" stroke-width="2.5"/>
+                            <line x1="85" y1="50" x2="85" y2="70" stroke="#a78bfa" stroke-width="2.5"/>
+                            <line x1="60" y1="65" x2="60" y2="55" stroke="#a78bfa" stroke-width="2.5"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">6. Split Storage</div>
+                    <div class="logo-description">Divided hexagons - represents state/data split in Store v2 architecture</div>
+                </div>
+
+                <!-- Logo 7: Hex Circuit -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad7" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,25 82,37.5 82,62.5 60,75 38,62.5 38,37.5" stroke="url(#grad7)" stroke-width="3" fill="none"/>
+                            <circle cx="38" cy="37.5" r="5" fill="url(#grad7)"/>
+                            <circle cx="82" cy="37.5" r="5" fill="url(#grad7)"/>
+                            <circle cx="82" cy="62.5" r="5" fill="url(#grad7)"/>
+                            <circle cx="60" cy="75" r="5" fill="url(#grad7)"/>
+                            <circle cx="38" cy="62.5" r="5" fill="url(#grad7)"/>
+                            <circle cx="60" cy="25" r="5" fill="url(#grad7)"/>
+                            <rect x="54" y="44" width="12" height="12" fill="#a78bfa" rx="2"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">7. Circuit Nodes</div>
+                    <div class="logo-description">Electronic circuit style - technical precision, connection points for UI systems</div>
+                </div>
+
+                <!-- Logo 8: Minimal Outline -->
+                <div class="logo-card">
+                    <div class="logo-display">
+                        <svg class="logo-svg" viewBox="0 0 120 120" fill="none">
+                            <defs>
+                                <linearGradient id="grad8" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                            <polygon points="60,25 82,37.5 82,62.5 60,75 38,62.5 38,37.5" stroke="url(#grad8)" stroke-width="4" fill="none" stroke-linejoin="round"/>
+                            <polygon points="60,42 70,47.5 70,58.5 60,64 50,58.5 50,47.5" fill="url(#grad8)"/>
+                        </svg>
+                    </div>
+                    <div class="logo-name">8. Minimal Clean</div>
+                    <div class="logo-description">Simple, elegant outline - modern minimalism, scales perfectly at any size</div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Text Icons -->
+        <section class="section">
+            <h2 class="section-title">Text Icons (Single Character - Pro CLI & Inline Use)</h2>
+            <div class="icon-grid">
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⬡</div>
+                    <div class="icon-name">White Hexagon</div>
+                    <div class="icon-usage">⬡ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⬢</div>
+                    <div class="icon-name">Black Hexagon</div>
+                    <div class="icon-usage">⬢ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⎔</div>
+                    <div class="icon-name">Hexagon Bold</div>
+                    <div class="icon-usage">⎔ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⌬</div>
+                    <div class="icon-name">Benzene Ring</div>
+                    <div class="icon-usage">⌬ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">◬</div>
+                    <div class="icon-name">Hex with Dot</div>
+                    <div class="icon-usage">◬ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⬣</div>
+                    <div class="icon-name">Horizontal Hex</div>
+                    <div class="icon-usage">⬣ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⎈</div>
+                    <div class="icon-name">Helm Symbol</div>
+                    <div class="icon-usage">⎈ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">◆</div>
+                    <div class="icon-name">Diamond (Alt)</div>
+                    <div class="icon-usage">◆ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⟁</div>
+                    <div class="icon-name">Star Operator</div>
+                    <div class="icon-usage">⟁ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⌘</div>
+                    <div class="icon-name">Command Key</div>
+                    <div class="icon-usage">⌘ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">✦</div>
+                    <div class="icon-name">Four Point Star</div>
+                    <div class="icon-usage">✦ Synapse</div>
+                </div>
+
+                <div class="icon-card">
+                    <div class="icon-symbol">⬢</div>
+                    <div class="icon-name">Filled Hex</div>
+                    <div class="icon-usage">⬢ Synapse</div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Usage Examples -->
+        <section class="section">
+            <h2 class="section-title">Real-World Usage Examples</h2>
+
+            <div class="example-box">
+                <div class="example-title">CLI Startup Banner</div>
+                <div class="example-content">
+⬡ <span class="highlight">Synapse</span> v2.1.8
+Pack-first model manager for generative UIs
+
+Store: ~/.synapse/store
+Active profile: work__MyPack (3 packs)
+Connected to: ComfyUI, Forge
+                </div>
+            </div>
+
+            <div class="example-box">
+                <div class="example-title">CLI Progress Output</div>
+                <div class="example-content">
+⬡ Importing pack from Civitai...
+  → Downloading previews... 15/20
+  → Processing metadata...
+  → Building lock file...
+<span class="highlight">✓</span> Import complete: MyAwesomePack
+                </div>
+            </div>
+
+            <div class="example-box">
+                <div class="example-title">Script Headers</div>
+                <div class="example-content">
+#!/bin/bash
+# ⬡ Synapse - Start All Services
+# Pack-first model manager
+
+echo "⬡ Starting Synapse services..."
+                </div>
+            </div>
+
+            <div class="example-box">
+                <div class="example-title">Documentation/Marketing</div>
+                <div class="example-content" style="color: #e2e8f0;">
+<span class="highlight">⬡ Synapse</span> is a pack-first model manager
+
+Features:
+  ⬢ Import from Civitai & Hugging Face
+  ⬢ Content-addressed blob store (SHA256)
+  ⬢ Profile stacking with "last wins"
+  ⬢ Multi-UI support (ComfyUI, Forge, A1111, SD.Next)
+                </div>
+            </div>
+
+            <div class="example-box">
+                <div class="example-title">System Notifications</div>
+                <div class="example-content">
+⬡ Pack update available: CoolPack v2.1.0 → v2.2.0
+⬡ 3 new models added to store
+⬡ Profile synced successfully
+                </div>
+            </div>
+
+        </section>
+
+        <footer style="text-align: center; margin-top: 4rem; padding: 2rem; color: #64748b; border-top: 1px solid #334155;">
+            <p>⬡ Synapse Logo Proposals • Hexagon Concept Series</p>
+            <p style="margin-top: 0.5rem; font-size: 0.9rem;">Colors: Indigo (#6366f1) → Violet (#8b5cf6)</p>
+            <p style="margin-top: 0.5rem; font-size: 0.85rem; font-style: italic;">Choose your favorite logo number (1-8) and icon symbol</p>
+        </footer>
+    </div>
+</body>
+</html>
