@@ -232,52 +232,61 @@ class TestOptimizedVideoUrl:
 
 class TestVideoThumbnailUrl:
     """Tests for get_video_thumbnail_url function."""
-    
+
     def test_civitai_adds_anim_false(self):
-        """Civitai URLs get anim=false parameter."""
-        url = "https://image.civitai.com/video.mp4"
+        """Civitai URLs get anim=false in path parameters."""
+        # Use realistic Civitai URL structure
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123/width=450/video.mp4"
         result = get_video_thumbnail_url(url)
-        
+
+        # Civitai uses path-based params: /anim=false,transcode=true,.../
         assert "anim=false" in result
-    
-    def test_removes_transcode(self):
-        """Transcode param is removed (we want static image)."""
-        url = "https://image.civitai.com/video.mp4?transcode=true"
+
+    def test_civitai_path_based_params(self):
+        """Civitai uses path-based parameters, not query params."""
+        # Use realistic Civitai URL structure
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123/transcode=true/video.mp4"
         result = get_video_thumbnail_url(url)
-        
+
+        # Path should contain params
         assert "anim=false" in result
-        assert "transcode=true" not in result
-    
+        # Query string should be cleared (Civitai uses path params)
+        assert "?" not in result
+
     def test_adds_width(self):
-        """Width parameter is added."""
-        url = "https://image.civitai.com/video.mp4"
+        """Width parameter is added to path."""
+        # Use realistic Civitai URL structure
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123/width=720/video.mp4"
         result = get_video_thumbnail_url(url, width=450)
-        
+
         assert "width=450" in result
 
 
 class TestCivitaiAliases:
     """Tests for Civitai-specific alias functions."""
-    
+
     def test_get_civitai_static_url(self):
-        """get_civitai_static_url adds anim=false."""
-        url = "https://image.civitai.com/preview.mp4"
+        """get_civitai_static_url adds anim=false in path."""
+        # Use realistic Civitai URL structure
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/abc123/width=450/preview.mp4"
         result = get_civitai_static_url(url)
-        
+
+        # Path-based params for Civitai
         assert "anim=false" in result
-    
+
     def test_get_civitai_static_url_non_civitai(self):
-        """Non-Civitai URLs returned unchanged."""
+        """Non-Civitai URLs get .jpg extension replacement."""
         url = "https://other.com/video.mp4"
         result = get_civitai_static_url(url)
-        
-        assert result == url
-    
+
+        # Non-Civitai: try common thumbnail pattern (video.mp4 -> video.jpg)
+        assert result == "https://other.com/video.jpg"
+
     def test_get_civitai_video_url(self):
         """get_civitai_video_url is alias for get_optimized_video_url."""
         url = "https://image.civitai.com/video.mp4"
         result = get_civitai_video_url(url, quality=720)
-        
+
         assert "transcode=true" in result
         assert "width=720" in result
 

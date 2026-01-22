@@ -181,24 +181,32 @@ class TestGetOptimizedVideoUrl:
 class TestGetCivitaiStaticUrl:
     """Tests for get_civitai_static_url function."""
 
-    def test_adds_anim_false(self):
+    def test_adds_anim_false_in_path(self):
+        """Civitai URLs get anim=false in path parameters."""
         url = "https://image.civitai.com/abc/preview.jpeg"
         static = get_civitai_static_url(url)
         assert "anim=false" in static
 
-    def test_uses_ampersand_with_existing_params(self):
+    def test_clears_query_params_uses_path(self):
+        """Civitai uses path-based params, query string is cleared."""
         url = "https://image.civitai.com/abc/preview.jpeg?width=450"
         static = get_civitai_static_url(url)
-        assert "&anim=false" in static
+        # Path-based params, no query string
+        assert "anim=false" in static
+        assert "?" not in static
 
-    def test_uses_question_without_params(self):
+    def test_path_params_format(self):
+        """Params are in path format: /anim=false,transcode=true,.../"""
         url = "https://image.civitai.com/abc/preview.jpeg"
         static = get_civitai_static_url(url)
-        assert "?anim=false" in static
+        # Should have comma-separated params in path
+        assert "anim=false,transcode=true" in static
 
-    def test_non_civitai_unchanged(self):
+    def test_non_civitai_gets_jpg_extension(self):
+        """Non-Civitai URLs with image extension stay unchanged."""
         url = "https://example.com/image.jpg"
         static = get_civitai_static_url(url)
+        # .jpg is not a video extension, so no replacement happens
         assert static == url
 
 
@@ -254,8 +262,10 @@ class TestCivitaiQuirks:
         """Getting static thumbnail from video URL."""
         url = "https://image.civitai.com/abc/video.mp4?transcode=true&width=720"
         thumb = get_video_thumbnail_url(url)
+        # anim=false is added for static thumbnail
         assert "anim=false" in thumb
-        assert "transcode" not in thumb
+        # Query params are cleared - Civitai uses path-based params
+        assert "?" not in thumb
 
     def test_video_quality_levels(self):
         """Test different quality levels for video URLs."""

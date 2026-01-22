@@ -8,7 +8,7 @@
 - **Dokumentace:** Anglicky (pokud uživatel neurčí jinak)
 
 ### Jediný zdroj pravdy
-**`PLAN-packs-video-import-TRACKED.md`** je JEDINÝ soubor, který určuje:
+**`plans/PLAN-Internal-Search-trpc.md`** je JEDINÝ soubor, který určuje:
 - Co je implementováno
 - Co je INTEGROVÁNO (kritické! implementace ≠ integrace)
 - Co ještě chybí
@@ -42,6 +42,9 @@ synapse/
 │   ├── store/        # Pack storage (pack_service.py, api.py)
 │   ├── utils/        # Utilities (media_detection.py)
 │   └── clients/      # External API clients (civitai.py)
+├── plans/            # PLAN soubory pro jednotlivé fáze
+│   ├── PLAN-Phase-4.md              # ✅ DOKONČENO - Packs Video & Import
+│   └── PLAN-Internal-Search-trpc.md # 🚧 AKTIVNÍ - Interní vyhledávání
 ├── tests/            # Python tests (pytest)
 │   ├── unit/
 │   └── integration/
@@ -93,6 +96,7 @@ pnpm build
 | `src/store/pack_service.py` | CRUD operace nad packy |
 | `src/store/api.py` | FastAPI routery pro packy (v2) |
 | `src/utils/media_detection.py` | Detekce typu média (image/video), URL transformace |
+| `src/clients/civitai_client.py` | Civitai API client |
 
 ### Frontend
 | Soubor | Účel |
@@ -100,9 +104,9 @@ pnpm build
 | `MediaPreview.tsx` | **HLAVNÍ** komponenta pro zobrazení obrázků/videí s autoPlay |
 | `FullscreenMediaViewer.tsx` | Fullscreen galerie s navigací, quality selector |
 | `GenerationDataPanel.tsx` | Panel s metadata (prompt, seed, model, atd.) |
-| `BrowsePage.tsx` | **VZOR** - správná implementace video autoPlay |
-| `PacksPage.tsx` | Seznam packů - CÍL integrace |
-| `PackDetailPage.tsx` | Detail packu - CÍL integrace |
+| `BrowsePage.tsx` | Browse Civitai - **CÍL PHASE 5** |
+| `PacksPage.tsx` | Seznam packů - hotovo |
+| `PackDetailPage.tsx` | Detail packu - hotovo |
 | `ImportWizardModal.tsx` | Wizard pro import s výběrem verzí |
 
 ---
@@ -168,25 +172,35 @@ pytest tests/unit/test_media_detection.py -v
 
 ---
 
-## 📋 Aktuální práce: Fáze 4 - Packs Video & Import Upgrade
+## 📋 Aktuální práce: Phase 5 - Internal Civitai Search (tRPC)
 
-**Viz:** `PLAN-packs-video-import-TRACKED.md`
+**Viz:** `plans/PLAN-Internal-Search-trpc.md`
 
 ### Hlavní cíle:
-1. ✅/⚠️ Backend video stahování při importu
-2. ✅/⚠️ Import Wizard modal
-3. ⚠️ PacksPage video podpora (MediaPreview + FullscreenViewer)
-4. ⚠️ Metadata panel ve FullscreenViewer
-5. ⚠️ PackDetailPage verifikace
+1. ❌ Backend search router (`/api/search/models`)
+2. ❌ Search service s cachováním
+3. ❌ Frontend API client
+4. ❌ BrowsePage integrace
+5. ❌ Local pack enrichment
+6. ❌ Offline fallback
 
-**STAV NUTNO OVĚŘIT** - viz audit níže
+**STATUS:** 🚧 PLANNING
+
+---
+
+## 📚 Archiv fází
+
+| Fáze | Soubor | Stav |
+|------|--------|------|
+| Phase 4 | `plans/PLAN-Phase-4.md` | ✅ DOKONČENO |
+| Phase 5 | `plans/PLAN-Internal-Search-trpc.md` | 🚧 AKTIVNÍ |
 
 ---
 
 ## 🔄 Workflow při nové session
 
 1. **Přečíst CLAUDE.md** (automaticky)
-2. **Přečíst PLAN-packs-video-import-TRACKED.md** - zjistit aktuální stav
+2. **Přečíst aktivní PLAN soubor** - zjistit aktuální stav
 3. **Pokračovat od prvního ❌ nebo ⚠️ bodu**
 4. **Po dokončení tasku:**
    - Aktualizovat PLAN (aditivně!)
@@ -203,6 +217,7 @@ pytest tests/unit/test_media_detection.py -v
 - ❌ Nepřeskakovat integraci - implementace bez integrace = nefunkční
 - ❌ Nezapomínat na testy
 - ❌ Neměnit existující API kontrakty bez migrace
+- ❌ NEPRACOVAT na Phase 4 - ta je dokončena!
 
 ---
 
@@ -227,5 +242,5 @@ pytest tests/unit/test_media_detection.py -v
 
 ---
 
-*Poslední aktualizace: 2026-01-20*
-*Stav: Audit implementace probíhá*
+*Poslední aktualizace: 2026-01-22*
+*Aktivní fáze: Phase 5 - Internal Search (tRPC)*
