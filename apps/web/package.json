@@ -1,6 +1,6 @@
 {
   "name": "synapse-web",
-  "version": "2.1.8",
+  "version": "2.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

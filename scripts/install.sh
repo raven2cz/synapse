@@ -12,7 +12,7 @@
 
 set -e
 
-VERSION="2.1.8"
+VERSION="2.6.0"
 
 # Colors
 RED='\033[0;31m'

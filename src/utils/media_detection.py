@@ -447,6 +447,30 @@ def normalize_video_extension(url: str) -> str:
     return url
 
 
+def format_file_size(size_bytes: int) -> str:
+    """
+    Format bytes to human readable string.
+
+    Args:
+        size_bytes: Size in bytes
+
+    Returns:
+        Human readable size string (e.g., "5.0 MB", "2.00 GB")
+
+    Example:
+        >>> format_file_size(5 * 1024 * 1024)
+        '5.0 MB'
+    """
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
+
+
 # =============================================================================
 # Testing Helpers
 # =============================================================================

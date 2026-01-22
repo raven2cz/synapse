@@ -16,6 +16,7 @@ from .media_detection import (
     get_civitai_video_url,
     extract_extension,
     normalize_video_extension,
+    format_file_size,
 )
 
 __all__ = [
@@ -37,4 +38,5 @@ __all__ = [
     # Utilities
     'extract_extension',
     'normalize_video_extension',
+    'format_file_size',
 ]
