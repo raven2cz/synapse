@@ -149,6 +149,34 @@ cd "$PROJECT_ROOT"
 echo ""
 
 # ============================================================================
+# Kill Existing Processes on Ports
+# ============================================================================
+
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Checking for existing processes...${NC}"
+
+# Kill any process using API port
+if lsof -ti:$API_PORT &>/dev/null; then
+    echo -e "${YELLOW}  Killing existing process on port $API_PORT...${NC}"
+    lsof -ti:$API_PORT | xargs kill -9 2>/dev/null || true
+    sleep 1
+    echo -e "${GREEN}  ✓ Port $API_PORT freed${NC}"
+else
+    echo -e "${GREEN}  ✓ Port $API_PORT available${NC}"
+fi
+
+# Kill any process using Web port
+if lsof -ti:$WEB_PORT &>/dev/null; then
+    echo -e "${YELLOW}  Killing existing process on port $WEB_PORT...${NC}"
+    lsof -ti:$WEB_PORT | xargs kill -9 2>/dev/null || true
+    sleep 1
+    echo -e "${GREEN}  ✓ Port $WEB_PORT freed${NC}"
+else
+    echo -e "${GREEN}  ✓ Port $WEB_PORT available${NC}"
+fi
+
+echo ""
+
+# ============================================================================
 # Cleanup Function
 # ============================================================================
 

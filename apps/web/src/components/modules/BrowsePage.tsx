@@ -11,8 +11,11 @@ import { clsx } from 'clsx'
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { ImportWizardModal } from '@/components/ui/ImportWizardModal'
+import { SearchFilters } from '@/components/ui/SearchFilters'
 
 import type { MediaType } from '@/lib/media'
+import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
+import { getAdapter, isProviderAvailable, getDefaultProvider } from '@/lib/api/searchAdapters'
 
 interface ModelPreview {
   url: string
@@ -120,7 +123,29 @@ export function BrowsePage() {
   const [activeSearch, setActiveSearch] = useState('')
   const [selectedType, setSelectedType] = useState('')
   const [includeNsfw] = useState(true)
-  const [useCivArchive, setUseCivArchive] = useState(false)
+
+  // Phase 5: Search provider and filters
+  const [searchProvider, setSearchProvider] = useState<SearchProvider>(() => {
+    // Try to restore from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('synapse-search-provider')
+      if (saved && ['rest', 'archive', 'trpc'].includes(saved)) {
+        if (isProviderAvailable(saved as SearchProvider)) {
+          return saved as SearchProvider
+        }
+      }
+    }
+    return getDefaultProvider()
+  })
+  const [sortBy, setSortBy] = useState<SortOption>('Most Downloaded')
+  const [period, setPeriod] = useState<PeriodOption>('AllTime')
+  const [baseModel, setBaseModel] = useState<string>('')
+
+  // Persist provider choice
+  useEffect(() => {
+    localStorage.setItem('synapse-search-provider', searchProvider)
+  }, [searchProvider])
+
   const [selectedModel, setSelectedModel] = useState<number | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
 
@@ -152,105 +177,64 @@ export function BrowsePage() {
   // Check if search is a special query
   const isSpecialQuery = activeSearch.startsWith('tag:') || activeSearch.startsWith('url:') || activeSearch.startsWith('https://')
 
-  // Search query
+  // Phase 5: Search query with adapter pattern
   const { data: searchResults, isLoading, error, isFetching } = useQuery({
-    queryKey: ['civitai-search', activeSearch, selectedType, includeNsfw, currentCursor, useCivArchive],
-    queryFn: async () => {
-      // Use CivArchive for regular queries when toggle is on
-      if (useCivArchive && activeSearch && !isSpecialQuery) {
-        console.log('[BrowsePage] Using CivArchive search for:', activeSearch)
+    queryKey: [
+      'civitai-search',
+      activeSearch,
+      selectedType,
+      searchProvider,
+      sortBy,
+      period,
+      baseModel,
+      currentCursor,
+    ],
+    queryFn: async ({ signal }) => {
+      // Get the adapter for current provider
+      let adapter = getAdapter(searchProvider)
 
-        const params = new URLSearchParams()
-        params.append('query', activeSearch)
-        params.append('limit', '20')
-
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 90000)
-
-        try {
-          const res = await fetch(`/api/browse/search-civarchive?${params}`, {
-            signal: controller.signal
-          })
-          clearTimeout(timeoutId)
-
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}))
-            throw new Error(errData.detail || 'CivArchive search failed')
-          }
-
-          const civarchiveData = await res.json()
-          console.log('[BrowsePage] CivArchive results:', civarchiveData.results?.length)
-
-          const transformedItems = (civarchiveData.results || []).map((r: any) => ({
-            id: r.model_id,
-            name: r.model_name,
-            type: r.model_type || 'Unknown',
-            nsfw: r.nsfw || false,
-            tags: [],
-            creator: r.creator,
-            stats: {
-              downloadCount: r.download_count,
-              rating: r.rating,
-            },
-            versions: [{
-              id: r.version_id,
-              name: r.version_name || 'Default',
-              base_model: r.base_model,
-              download_url: r.download_url,
-              file_size: r.file_size,
-              trained_words: [],
-              files: r.file_name ? [{
-                id: 0,
-                name: r.file_name,
-                size_kb: r.file_size ? r.file_size / 1024 : undefined,
-                download_url: r.download_url,
-              }] : [],
-            }],
-            // CHANGED: Use previews array directly from backend
-            // This preserves media_type, thumbnail_url, and other fields for video support
-            previews: r.previews || [],
-          }))
-
-          return {
-            items: transformedItems,
-            next_cursor: null, // CivArchive doesn't support pagination yet
-          }
-        } catch (err: any) {
-          if (err.name === 'AbortError') {
-            throw new Error('CivArchive search timed out. Try a more specific query.')
-          }
-          throw err
-        }
+      // Fallback if tRPC not available
+      if (!adapter.isAvailable() && searchProvider === 'trpc') {
+        console.warn('[BrowsePage] tRPC bridge not available, falling back to REST')
+        adapter = getAdapter('rest')
       }
 
-      // Standard Civitai search
-      const params = new URLSearchParams()
-      if (activeSearch) params.append('query', activeSearch)
-      if (selectedType) params.append('types', selectedType)
-      if (includeNsfw) params.append('nsfw', 'true')
-      if (currentCursor) params.append('cursor', currentCursor)
-      params.append('limit', '20')
+      // For special queries (tag:, url:, https://), always use REST
+      if (isSpecialQuery) {
+        adapter = getAdapter('rest')
+      }
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000)
+      // CivArchive requires a search query
+      if (searchProvider === 'archive' && !activeSearch) {
+        return { items: [], next_cursor: undefined }
+      }
 
-      try {
-        const res = await fetch(`/api/browse/search?${params}`, {
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
+      const result = await adapter.search(
+        {
+          query: activeSearch || undefined,
+          types: selectedType ? [selectedType] : undefined,
+          baseModels: baseModel ? [baseModel] : undefined,
+          sort: sortBy,
+          period,
+          nsfw: includeNsfw,
+          limit: 20,
+          cursor: currentCursor,
+        },
+        signal
+      )
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}))
-          throw new Error(errData.detail || 'Search failed')
-        }
+      // Log for debugging
+      console.log(`[BrowsePage] Search via ${result.metadata?.source}:`, {
+        items: result.items.length,
+        hasMore: result.hasMore,
+        cached: result.metadata?.cached,
+        time: result.metadata?.responseTime,
+      })
 
-        return res.json()
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-          throw new Error('Search timed out. Try a more specific query.')
-        }
-        throw err
+      // Transform to expected format
+      return {
+        items: result.items,
+        next_cursor: result.nextCursor,
       }
     },
     enabled: true,
@@ -548,29 +532,47 @@ export function BrowsePage() {
         </Button>
       </form>
 
-      {/* CivArchive toggle */}
+      {/* Phase 5: Search Filters - Floating Chips */}
       {!isSpecialQuery && (
-        <div className="flex items-center gap-3 text-sm">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useCivArchive}
-              onChange={e => {
-                setUseCivArchive(e.target.checked)
-                // Reset on toggle
-                isLoadingMore.current = false
-                setAllModels([])
-                setCurrentCursor(undefined)
-                setNextCursor(undefined)
-              }}
-              className="w-4 h-4 rounded border-slate-mid bg-slate-dark text-synapse focus:ring-synapse"
-            />
-            <span className="text-text-secondary">Use CivArchive</span>
-          </label>
-          <span className="text-text-muted">
-            Slower but searches descriptions.
-          </span>
-        </div>
+        <SearchFilters
+          provider={searchProvider}
+          onProviderChange={(provider) => {
+            setSearchProvider(provider)
+            // Reset on provider change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          sortBy={sortBy}
+          onSortChange={(sort) => {
+            setSortBy(sort)
+            // Reset on sort change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          period={period}
+          onPeriodChange={(p) => {
+            setPeriod(p)
+            // Reset on period change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          baseModel={baseModel}
+          onBaseModelChange={(model) => {
+            setBaseModel(model)
+            // Reset on base model change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          isLoading={isLoading && !isFetching}
+        />
       )}
 
       {/* Error display */}

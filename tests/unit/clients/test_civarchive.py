@@ -43,24 +43,34 @@ SAMPLE_HTML_FALLBACK = """
 
 def test_extract_civitai_id_primary():
     """Test extraction from __NEXT_DATA__ (primary path)."""
-    with patch("requests.get") as mock_get:
+    with patch("requests.Session") as mock_session_class:
         mock_resp = MagicMock()
         mock_resp.text = SAMPLE_HTML_NEXT_DATA
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
-        
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session.headers = MagicMock()
+        mock_session_class.return_value = mock_session
+
         # Should prefer version.civitai_model_id if present
         model_id = _extract_civitai_id_from_civarchive("http://example.com")
         assert model_id == 1001
 
 def test_extract_civitai_id_fallback():
     """Test extraction from Civitai link in HTML."""
-    with patch("requests.get") as mock_get:
+    with patch("requests.Session") as mock_session_class:
         mock_resp = MagicMock()
         mock_resp.text = SAMPLE_HTML_FALLBACK
         mock_resp.status_code = 200
-        mock_get.return_value = mock_resp
-        
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session.headers = MagicMock()
+        mock_session_class.return_value = mock_session
+
         model_id = _extract_civitai_id_from_civarchive("http://example.com")
         assert model_id == 9999
 

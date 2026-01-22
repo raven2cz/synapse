@@ -1096,83 +1096,109 @@ class CivArchiveResult(BaseModel):
 class CivArchiveSearchResponse(BaseModel):
     """Response from CivArchive search."""
     model_config = ConfigDict(protected_namespaces=())
-    
+
     results: List[CivArchiveResult]
     total_found: int
     query: str
+    # Phase 5: Pagination support
+    has_more: bool = False
+    current_page: int = 1
 
 
-def _search_civarchive(query: str, limit: int = 20) -> List[str]:
-    """Search CivArchive.com and return list of model URLs."""
+def _search_civarchive(
+    query: str,
+    limit: int = 20,
+    page: int = 1,
+) -> tuple[List[str], bool]:
+    """
+    Search CivArchive.com and return list of model URLs.
+
+    ONE page per request - simulates normal user behavior.
+    User clicks "Load More" → next page is fetched.
+
+    Args:
+        query: Search query
+        limit: Max results to return
+        page: CivArchive page number (1-indexed)
+
+    Returns:
+        Tuple of (model_urls, has_more)
+    """
     import requests
     from urllib.parse import urljoin
-    import concurrent.futures
-    
-    # Fetch first 3 pages to ensure enough unique models are found
-    # (CivArchive often returns many versions of the same model)
-    pages_to_fetch = [1, 2, 3]
-    
+
+    # Full browser-like headers to avoid being blocked
+    # Note: Do NOT include Accept-Encoding - let requests handle it automatically
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
     }
-    
-    def fetch_page(page_num: int) -> List[str]:
-        search_url = f"https://civarchive.com/search?q={query.replace(' ', '+')}&rating=all&page={page_num}"
-        logger.info(f"[civarchive] Searching page {page_num}: {search_url}")
-        print(f"[civarchive] Searching page {page_num}: {search_url}")
-        
-        try:
-            resp = requests.get(search_url, headers=headers, timeout=30)
-            resp.raise_for_status()
-        except Exception as e:
-            logger.error(f"[civarchive] Search failed page {page_num}: {e}")
-            print(f"[civarchive] Search failed page {page_num}: {e}")
-            return []
-        
-        try:
-            from bs4 import BeautifulSoup
-        except ImportError:
-            return []
-        
-        soup = BeautifulSoup(resp.text, "html.parser")
-        
-        # Find all model links
-        page_links: List[str] = []
-        for a in soup.select('a[href^="/models/"]'):
-            href = a.get("href") or ""
-            if not re.match(r"^/models/[0-9]+", href):
-                continue
-            full_url = urljoin("https://civarchive.com", href)
-            if full_url not in page_links:
-                page_links.append(full_url)
-        return page_links
 
-    all_links: List[str] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        results = executor.map(fetch_page, pages_to_fetch)
-        for res in results:
-            for link in res:
-                if link not in all_links:
-                    all_links.append(link)
-    
-    print(f"[civarchive] Found {len(all_links)} total model links from {len(pages_to_fetch)} pages")
-    # Return more candidates than requested limit since many will resolve to same model ID
-    return all_links[:limit * 5]
+    search_url = f"https://civarchive.com/search?q={query.replace(' ', '+')}&rating=all&page={page}"
+    logger.info(f"[civarchive] Searching page {page}: {search_url}")
+
+    try:
+        # Use session for connection pooling
+        session = requests.Session()
+        session.headers.update(headers)
+        resp = session.get(search_url, timeout=30)
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error(f"[civarchive] Search failed page {page}: {e}")
+        print(f"[civarchive] Search failed page {page}: {e}")
+        return [], False
+
+    try:
+        from bs4 import BeautifulSoup
+    except ImportError:
+        return [], False
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Find all model links - use *= selector for robustness
+    links: List[str] = []
+    for a in soup.select('a[href*="/models/"]'):
+        href = a.get("href") or ""
+        if not re.match(r"^/models/[0-9]+", href):
+            continue
+        full_url = urljoin("https://civarchive.com", href)
+        if full_url not in links:
+            links.append(full_url)
+
+    logger.info(f"[civarchive] Found {len(links)} model links on page {page}")
+
+    # has_more = True if we found results (there might be more pages)
+    has_more = len(links) > 0
+
+    return links[:limit * 3], has_more
 
 
 def _extract_civitai_id_from_civarchive(civarchive_url: str) -> Optional[int]:
     """Extract Civitai model ID from CivArchive page."""
     import requests
     import json
-    
+
+    # Full browser-like headers to avoid being blocked
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
     }
-    
+
     try:
-        resp = requests.get(civarchive_url, headers=headers, timeout=15)
+        session = requests.Session()
+        session.headers.update(headers)
+        resp = session.get(civarchive_url, timeout=15)
         resp.raise_for_status()
     except Exception as e:
         logger.warning(f"[civarchive] Failed to fetch {civarchive_url}: {e}")
@@ -1289,13 +1315,19 @@ def _fetch_civitai_model_for_civarchive(model_id: int, civarchive_url: str, clie
 async def search_via_civarchive(
     query: str = Query(..., min_length=2, description="Search query"),
     limit: int = Query(10, ge=1, le=30, description="Max results"),
+    page: int = Query(1, ge=1, le=50, description="Page number for pagination"),
 ):
     """
     Search models via CivArchive.com for better search quality.
-    
+
     CivArchive indexes Civitai descriptions and provides better full-text search.
-    Uses parallel processing for faster results.
-    
+    One page per request - click "Load More" for next page.
+
+    Phase 5: Added pagination support with page and pages_per_request parameters.
+    - page=1, pages_per_request=3 → fetches CivArchive pages 1-3
+    - page=2, pages_per_request=3 → fetches CivArchive pages 4-6
+    - etc.
+
     Returns results with full preview information including video detection.
     """
     import concurrent.futures
@@ -1306,14 +1338,24 @@ async def search_via_civarchive(
     config = get_config()
     client = CivitaiClient(api_key=config.api.civitai_token)
     
-    # Step 1: Search CivArchive (fetch many candidates to handle version deduplication)
-    civarchive_urls = _search_civarchive(query, limit=limit * 10)
-    
+    # Step 1: Search CivArchive - ONE page per request
+    civarchive_urls, has_more = _search_civarchive(
+        query,
+        limit=limit * 3,
+        page=page,
+    )
+
     if not civarchive_urls:
-        return CivArchiveSearchResponse(results=[], total_found=0, query=query)
+        return CivArchiveSearchResponse(
+            results=[],
+            total_found=0,
+            query=query,
+            has_more=False,
+            current_page=page,
+        )
     
     print(f"[civarchive] Extracting Civitai IDs from {len(civarchive_urls)} URLs (parallel)...")
-    
+
     # Step 2: Extract Civitai IDs in parallel
     url_to_id: Dict[str, Optional[int]] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -1367,4 +1409,6 @@ async def search_via_civarchive(
         results=results,
         total_found=len(results),
         query=query,
+        has_more=has_more,
+        current_page=page,
     )

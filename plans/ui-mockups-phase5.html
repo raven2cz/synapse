@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 5 - UI Mockups - Search Filters</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'synapse': '#8B5CF6',
+                        'pulse': '#EC4899',
+                        'slate-dark': '#1E293B',
+                        'slate-darker': '#0F172A',
+                        'slate-mid': '#334155',
+                        'slate-light': '#475569',
+                        'text-primary': '#F8FAFC',
+                        'text-secondary': '#CBD5E1',
+                        'text-muted': '#64748B',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html {
+            background-color: #0F172A;
+        }
+        body {
+            background-color: #0F172A;
+            background-image: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            color: #F8FAFC;
+        }
+        .glass {
+            backdrop-filter: blur(12px);
+            background: rgba(30, 41, 59, 0.7);
+        }
+        .glow-synapse {
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+        }
+        .glow-pulse {
+            box-shadow: 0 0 20px rgba(236, 72, 153, 0.3);
+        }
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.2em 1.2em;
+            padding-right: 2.5rem;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse-dot {
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+        .chip-dropdown {
+            position: relative;
+        }
+        .chip-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 4px;
+            min-width: 160px;
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 4px;
+            z-index: 50;
+            display: none;
+        }
+        .chip-dropdown:hover .chip-dropdown-menu,
+        .chip-dropdown:focus-within .chip-dropdown-menu {
+            display: block;
+        }
+        .chip-dropdown-menu button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            color: #CBD5E1;
+        }
+        .chip-dropdown-menu button:hover {
+            background: #334155;
+            color: #F8FAFC;
+        }
+    </style>
+</head>
+<body class="p-8 text-text-primary">
+    <div class="max-w-5xl mx-auto space-y-12">
+
+        <!-- Header -->
+        <div class="text-center space-y-4">
+            <h1 class="text-4xl font-bold bg-gradient-to-r from-synapse to-pulse bg-clip-text text-transparent">
+                Phase 5 - UI Mockups
+            </h1>
+            <p class="text-text-secondary text-lg">Search Provider & Filter Components</p>
+            <p class="text-text-muted text-sm">Vyber variantu, kterou chceš použít v BrowsePage</p>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- VARIANTA A: Kompaktní řada -->
+        <!-- ============================================ -->
+        <section class="space-y-4">
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 bg-synapse/20 text-synapse text-sm font-bold rounded-full">A</span>
+                <h2 class="text-2xl font-semibold text-text-primary">Kompaktní řada</h2>
+            </div>
+            <p class="text-text-muted">Jednoduchá horizontální řada. Provider zvýrazněný gradientem, ostatní filtry neutrální.</p>
+
+            <!-- Mockup A -->
+            <div class="p-6 bg-slate-darker rounded-2xl border border-slate-mid/30">
+                <div class="flex flex-wrap items-center gap-3 p-3 bg-slate-dark/50 rounded-xl border border-slate-mid/30">
+                    <!-- Provider - zvýrazněný -->
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-text-muted uppercase tracking-wider font-medium">Via</span>
+                        <select class="appearance-none bg-gradient-to-r from-synapse/20 to-pulse/20 border border-synapse/40 rounded-lg px-3 py-2 pr-10 text-sm text-synapse font-medium cursor-pointer hover:border-synapse/60 transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                            <option>⚡ Internal tRPC</option>
+                            <option>🌐 REST API</option>
+                            <option>📦 CivArchive</option>
+                        </select>
+                    </div>
+
+                    <div class="w-px h-8 bg-slate-mid/50"></div>
+
+                    <!-- Sort -->
+                    <select class="appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2 pr-10 text-sm text-text-primary cursor-pointer hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                        <option>Most Downloaded</option>
+                        <option>Highest Rated</option>
+                        <option>Newest</option>
+                        <option>Most Discussed</option>
+                        <option>Most Collected</option>
+                    </select>
+
+                    <!-- Period -->
+                    <select class="appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2 pr-10 text-sm text-text-primary cursor-pointer hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                        <option>All Time</option>
+                        <option>This Year</option>
+                        <option>This Month</option>
+                        <option>This Week</option>
+                        <option>Today</option>
+                    </select>
+
+                    <!-- Base Model -->
+                    <select class="appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2 pr-10 text-sm text-text-primary cursor-pointer hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                        <option>All Models</option>
+                        <option>SDXL 1.0</option>
+                        <option>SD 1.5</option>
+                        <option>Pony</option>
+                        <option>Flux.1 Dev</option>
+                        <option>Illustrious</option>
+                    </select>
+
+                    <!-- Status indicator -->
+                    <div class="ml-auto flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                        <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot"></div>
+                        <span class="text-xs text-emerald-400 font-medium">Ready</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Varianta A - Alternativní stavy -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- REST API selected -->
+                <div class="p-4 bg-slate-darker rounded-xl border border-slate-mid/30">
+                    <p class="text-xs text-text-muted mb-3">REST API vybraný:</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-text-muted uppercase">Via</span>
+                        <select class="appearance-none bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-1.5 pr-8 text-sm text-blue-400 font-medium">
+                            <option>🌐 REST API</option>
+                        </select>
+                        <div class="ml-auto flex items-center gap-1.5 text-xs text-emerald-400">
+                            <div class="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                            Stable
+                        </div>
+                    </div>
+                </div>
+                <!-- CivArchive selected -->
+                <div class="p-4 bg-slate-darker rounded-xl border border-slate-mid/30">
+                    <p class="text-xs text-text-muted mb-3">CivArchive vybraný:</p>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-text-muted uppercase">Via</span>
+                        <select class="appearance-none bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-1.5 pr-8 text-sm text-amber-400 font-medium">
+                            <option>📦 CivArchive</option>
+                        </select>
+                        <div class="ml-auto flex items-center gap-1.5 text-xs text-amber-400">
+                            <div class="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                            External
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- VARIANTA B: Tab-style + Expandable -->
+        <!-- ============================================ -->
+        <section class="space-y-4">
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 bg-pulse/20 text-pulse text-sm font-bold rounded-full">B</span>
+                <h2 class="text-2xl font-semibold text-text-primary">Tab-style + Expandable Panel</h2>
+            </div>
+            <p class="text-text-muted">Provider jako vizuální tabs, filtry v rozbalovacím panelu pod nimi.</p>
+
+            <!-- Mockup B -->
+            <div class="p-6 bg-slate-darker rounded-2xl border border-slate-mid/30 space-y-3">
+                <!-- Provider Tabs -->
+                <div class="flex items-center gap-1 p-1.5 bg-slate-dark rounded-xl border border-slate-mid/30">
+                    <button class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-synapse to-pulse rounded-lg text-white text-sm font-medium shadow-lg shadow-synapse/25 transition-all">
+                        <span>⚡</span>
+                        <span>Internal tRPC</span>
+                    </button>
+                    <button class="px-5 py-2.5 text-text-secondary text-sm hover:text-text-primary hover:bg-slate-mid/50 rounded-lg transition-all">
+                        <span>🌐</span>
+                        <span class="ml-1.5">REST API</span>
+                    </button>
+                    <button class="px-5 py-2.5 text-text-secondary text-sm hover:text-text-primary hover:bg-slate-mid/50 rounded-lg transition-all">
+                        <span>📦</span>
+                        <span class="ml-1.5">CivArchive</span>
+                    </button>
+
+                    <div class="flex-1"></div>
+
+                    <!-- Filters toggle -->
+                    <button class="flex items-center gap-2 px-4 py-2 text-text-muted text-sm hover:text-text-primary rounded-lg hover:bg-slate-mid/30 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+                        </svg>
+                        <span>Filters</span>
+                        <span class="px-1.5 py-0.5 bg-synapse/20 text-synapse text-xs rounded font-medium">3</span>
+                    </button>
+
+                    <!-- Status -->
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 rounded-lg">
+                        <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot"></div>
+                        <span class="text-xs text-emerald-400">Connected</span>
+                    </div>
+                </div>
+
+                <!-- Expandable Filters Panel -->
+                <div class="grid grid-cols-3 gap-4 p-4 bg-slate-dark/30 rounded-xl border border-slate-mid/20">
+                    <div class="space-y-2">
+                        <label class="text-xs text-text-muted uppercase tracking-wider font-medium">Sort By</label>
+                        <select class="w-full appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2.5 pr-10 text-sm text-text-primary hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                            <option>Most Downloaded</option>
+                            <option>Highest Rated</option>
+                            <option>Newest</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-xs text-text-muted uppercase tracking-wider font-medium">Period</label>
+                        <select class="w-full appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2.5 pr-10 text-sm text-text-primary hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                            <option>All Time</option>
+                            <option>This Month</option>
+                            <option>This Week</option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-xs text-text-muted uppercase tracking-wider font-medium">Base Model</label>
+                        <select class="w-full appearance-none bg-slate-dark border border-slate-mid rounded-lg px-3 py-2.5 pr-10 text-sm text-text-primary hover:border-slate-light transition-all focus:outline-none focus:ring-2 focus:ring-synapse/50">
+                            <option>All Base Models</option>
+                            <option>SDXL 1.0</option>
+                            <option>Pony</option>
+                            <option>Flux.1</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Varianta B - Collapsed state -->
+            <div class="p-4 bg-slate-darker rounded-xl border border-slate-mid/30">
+                <p class="text-xs text-text-muted mb-3">Sbalený stav (filtry skryté):</p>
+                <div class="flex items-center gap-1 p-1.5 bg-slate-dark rounded-xl border border-slate-mid/30">
+                    <button class="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-synapse to-pulse rounded-lg text-white text-sm font-medium shadow-lg shadow-synapse/25">
+                        ⚡ Internal tRPC
+                    </button>
+                    <button class="px-5 py-2.5 text-text-secondary text-sm rounded-lg">🌐 REST API</button>
+                    <button class="px-5 py-2.5 text-text-secondary text-sm rounded-lg">📦 CivArchive</button>
+                    <div class="flex-1"></div>
+                    <button class="flex items-center gap-2 px-4 py-2 text-text-muted text-sm rounded-lg">
+                        <span>Filters</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- VARIANTA C: Floating Chips -->
+        <!-- ============================================ -->
+        <section class="space-y-4">
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-sm font-bold rounded-full">C</span>
+                <h2 class="text-2xl font-semibold text-text-primary">Floating Chips</h2>
+            </div>
+            <p class="text-text-muted">Minimalistické "pilulky" s dropdown menu. Aktivní filtry zvýrazněné. Kliknutím otevřou výběr.</p>
+
+            <!-- Mockup C -->
+            <div class="p-6 bg-slate-darker rounded-2xl border border-slate-mid/30">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <!-- Provider chip - special gradient -->
+                    <div class="chip-dropdown">
+                        <button class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-synapse/15 to-pulse/15 border border-synapse/40 rounded-full text-sm hover:border-synapse/60 transition-all group">
+                            <span class="w-2 h-2 rounded-full bg-synapse animate-pulse-dot"></span>
+                            <span class="text-synapse font-medium">tRPC</span>
+                            <svg class="w-3.5 h-3.5 text-synapse/60 group-hover:text-synapse transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="chip-dropdown-menu">
+                            <button class="text-synapse">⚡ Internal tRPC</button>
+                            <button>🌐 REST API</button>
+                            <button>📦 CivArchive</button>
+                        </div>
+                    </div>
+
+                    <!-- Divider dot -->
+                    <span class="w-1 h-1 rounded-full bg-slate-mid"></span>
+
+                    <!-- Sort chip -->
+                    <div class="chip-dropdown">
+                        <button class="flex items-center gap-2 px-4 py-2 bg-slate-dark border border-slate-mid rounded-full text-sm text-text-secondary hover:border-slate-light hover:text-text-primary transition-all group">
+                            <span>Most Downloaded</span>
+                            <svg class="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="chip-dropdown-menu">
+                            <button>Most Downloaded</button>
+                            <button>Highest Rated</button>
+                            <button>Newest</button>
+                            <button>Most Discussed</button>
+                        </div>
+                    </div>
+
+                    <!-- Period chip -->
+                    <div class="chip-dropdown">
+                        <button class="flex items-center gap-2 px-4 py-2 bg-slate-dark border border-slate-mid rounded-full text-sm text-text-secondary hover:border-slate-light hover:text-text-primary transition-all group">
+                            <span>All Time</span>
+                            <svg class="w-3.5 h-3.5 opacity-50 group-hover:opacity-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="chip-dropdown-menu">
+                            <button>All Time</button>
+                            <button>This Year</button>
+                            <button>This Month</button>
+                            <button>This Week</button>
+                        </div>
+                    </div>
+
+                    <!-- Active filter chip (has X to remove) -->
+                    <button class="flex items-center gap-2 px-4 py-2 bg-synapse/10 border border-synapse/30 rounded-full text-sm text-synapse hover:bg-synapse/20 transition-all group">
+                        <span>SDXL 1.0</span>
+                        <span class="w-4 h-4 flex items-center justify-center rounded-full hover:bg-synapse/30 transition-colors">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- Add filter button -->
+                    <button class="flex items-center gap-1.5 px-3 py-2 text-text-muted text-sm hover:text-text-primary transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        <span>Add filter</span>
+                    </button>
+
+                    <!-- Status badge - right aligned -->
+                    <div class="ml-auto">
+                        <div class="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot"></div>
+                            <span class="text-xs text-emerald-400 font-medium">Live</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Varianta C - States -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Multiple filters active -->
+                <div class="p-4 bg-slate-darker rounded-xl border border-slate-mid/30">
+                    <p class="text-xs text-text-muted mb-3">Více aktivních filtrů:</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button class="flex items-center gap-2 px-3 py-1.5 bg-synapse/10 border border-synapse/30 rounded-full text-xs text-synapse">
+                            <span class="w-1.5 h-1.5 rounded-full bg-synapse"></span>
+                            tRPC
+                        </button>
+                        <button class="px-3 py-1.5 bg-synapse/10 border border-synapse/30 rounded-full text-xs text-synapse">
+                            SDXL 1.0 ✕
+                        </button>
+                        <button class="px-3 py-1.5 bg-synapse/10 border border-synapse/30 rounded-full text-xs text-synapse">
+                            This Month ✕
+                        </button>
+                        <button class="px-3 py-1.5 bg-synapse/10 border border-synapse/30 rounded-full text-xs text-synapse">
+                            Highest Rated ✕
+                        </button>
+                    </div>
+                </div>
+                <!-- REST API variant -->
+                <div class="p-4 bg-slate-darker rounded-xl border border-slate-mid/30">
+                    <p class="text-xs text-text-muted mb-3">REST API stav:</p>
+                    <div class="flex items-center gap-2">
+                        <button class="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 border border-blue-500/30 rounded-full text-xs text-blue-400">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                            REST
+                        </button>
+                        <button class="px-3 py-1.5 bg-slate-dark border border-slate-mid rounded-full text-xs text-text-secondary">
+                            Most Downloaded ▼
+                        </button>
+                        <div class="ml-auto px-2 py-1 bg-blue-500/10 rounded-full">
+                            <span class="text-xs text-blue-400">● Stable</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- COMPARISON TABLE -->
+        <!-- ============================================ -->
+        <section class="space-y-4">
+            <h2 class="text-2xl font-semibold text-text-primary">Srovnání variant</h2>
+
+            <div class="overflow-hidden rounded-xl border border-slate-mid/30">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-dark">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-text-muted font-medium">Vlastnost</th>
+                            <th class="px-4 py-3 text-center text-synapse font-medium">A - Kompaktní</th>
+                            <th class="px-4 py-3 text-center text-pulse font-medium">B - Tabs</th>
+                            <th class="px-4 py-3 text-center text-emerald-400 font-medium">C - Chips</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-mid/30">
+                        <tr class="bg-slate-darker">
+                            <td class="px-4 py-3 text-text-secondary">Vertikální prostor</td>
+                            <td class="px-4 py-3 text-center">🟢 Minimální</td>
+                            <td class="px-4 py-3 text-center">🟡 Střední (rozbalitelný)</td>
+                            <td class="px-4 py-3 text-center">🟢 Minimální</td>
+                        </tr>
+                        <tr class="bg-slate-dark/50">
+                            <td class="px-4 py-3 text-text-secondary">Přehlednost</td>
+                            <td class="px-4 py-3 text-center">🟢 Vše viditelné</td>
+                            <td class="px-4 py-3 text-center">🟢 Provider jasný</td>
+                            <td class="px-4 py-3 text-center">🟡 Dropdown skryté</td>
+                        </tr>
+                        <tr class="bg-slate-darker">
+                            <td class="px-4 py-3 text-text-secondary">Rozšiřitelnost</td>
+                            <td class="px-4 py-3 text-center">🟡 Omezená</td>
+                            <td class="px-4 py-3 text-center">🟢 Panel může růst</td>
+                            <td class="px-4 py-3 text-center">🟢 Flexibilní</td>
+                        </tr>
+                        <tr class="bg-slate-dark/50">
+                            <td class="px-4 py-3 text-text-secondary">Mobilní zobrazení</td>
+                            <td class="px-4 py-3 text-center">🟡 Wrap potřeba</td>
+                            <td class="px-4 py-3 text-center">🟢 Stacks well</td>
+                            <td class="px-4 py-3 text-center">🟢 Natural wrap</td>
+                        </tr>
+                        <tr class="bg-slate-darker">
+                            <td class="px-4 py-3 text-text-secondary">Vizuální atraktivita</td>
+                            <td class="px-4 py-3 text-center">⭐⭐⭐</td>
+                            <td class="px-4 py-3 text-center">⭐⭐⭐⭐</td>
+                            <td class="px-4 py-3 text-center">⭐⭐⭐⭐⭐</td>
+                        </tr>
+                        <tr class="bg-slate-dark/50">
+                            <td class="px-4 py-3 text-text-secondary">Implementační složitost</td>
+                            <td class="px-4 py-3 text-center">🟢 Jednoduchá</td>
+                            <td class="px-4 py-3 text-center">🟡 Střední</td>
+                            <td class="px-4 py-3 text-center">🟡 Střední</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- RECOMMENDATION -->
+        <!-- ============================================ -->
+        <section class="p-6 bg-gradient-to-r from-synapse/10 to-pulse/10 rounded-2xl border border-synapse/30">
+            <h3 class="text-lg font-semibold text-text-primary mb-3">💡 Moje doporučení</h3>
+            <p class="text-text-secondary mb-4">
+                <strong class="text-emerald-400">Varianta C (Chips)</strong> - Moderní, flexibilní, vizuálně atraktivní.
+                Aktivní filtry jsou jasně vidět, snadno se přidávají/odebírají. Dobře škáluje na mobilu.
+            </p>
+            <p class="text-text-muted text-sm">
+                Alternativa: <strong class="text-pulse">B (Tabs)</strong> pokud preferuješ jasnou vizuální hierarchii providera nad filtry.
+            </p>
+        </section>
+
+        <!-- Footer -->
+        <div class="text-center text-text-muted text-sm py-8">
+            <p>Phase 5 - Internal Civitai Search (tRPC)</p>
+            <p class="mt-1">Synapse 2026</p>
+        </div>
+    </div>
+
+    <script>
+        // Simple interactivity for demo
+        document.querySelectorAll('button, select').forEach(el => {
+            el.addEventListener('click', (e) => {
+                // Prevent actual navigation
+                if (el.tagName === 'BUTTON') {
+                    e.preventDefault();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

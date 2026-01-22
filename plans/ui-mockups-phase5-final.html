@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phase 5 - Final UI - Floating Chips</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'synapse': '#8B5CF6',
+                        'synapse-light': '#A78BFA',
+                        'synapse-dark': '#7C3AED',
+                        'pulse': '#EC4899',
+                        'pulse-light': '#F472B6',
+                        'cyber': '#06B6D4',
+                        'neon': '#22D3EE',
+                        'slate-dark': '#1E293B',
+                        'slate-darker': '#0F172A',
+                        'slate-darkest': '#020617',
+                        'slate-mid': '#334155',
+                        'slate-light': '#475569',
+                        'text-primary': '#F8FAFC',
+                        'text-secondary': '#CBD5E1',
+                        'text-muted': '#64748B',
+                    },
+                    animation: {
+                        'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
+                        'shimmer': 'shimmer 2s linear infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                        'slide-up': 'slide-up 0.2s ease-out',
+                        'slide-down': 'slide-down 0.15s ease-out',
+                        'scale-in': 'scale-in 0.15s ease-out',
+                        'fade-in': 'fade-in 0.2s ease-out',
+                    },
+                    keyframes: {
+                        'glow-pulse': {
+                            '0%, 100%': { opacity: '1', filter: 'brightness(1)' },
+                            '50%': { opacity: '0.8', filter: 'brightness(1.2)' },
+                        },
+                        'shimmer': {
+                            '0%': { backgroundPosition: '-200% 0' },
+                            '100%': { backgroundPosition: '200% 0' },
+                        },
+                        'float': {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-2px)' },
+                        },
+                        'slide-up': {
+                            '0%': { opacity: '0', transform: 'translateY(8px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        'slide-down': {
+                            '0%': { opacity: '0', transform: 'translateY(-4px) scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+                        },
+                        'scale-in': {
+                            '0%': { opacity: '0', transform: 'scale(0.9)' },
+                            '100%': { opacity: '1', transform: 'scale(1)' },
+                        },
+                        'fade-in': {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        html {
+            background-color: #020617;
+        }
+
+        body {
+            background-color: #020617;
+            background-image: linear-gradient(145deg, #020617 0%, #0F172A 50%, #1E293B 100%);
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #F8FAFC;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* ===== GLASS MORPHISM ===== */
+        .glass {
+            backdrop-filter: blur(16px) saturate(180%);
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .glass-light {
+            backdrop-filter: blur(12px);
+            background: rgba(30, 41, 59, 0.6);
+        }
+
+        /* ===== GLOW EFFECTS ===== */
+        .glow-synapse {
+            box-shadow:
+                0 0 20px rgba(139, 92, 246, 0.3),
+                0 0 40px rgba(139, 92, 246, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .glow-synapse-intense {
+            box-shadow:
+                0 0 30px rgba(139, 92, 246, 0.5),
+                0 0 60px rgba(139, 92, 246, 0.2),
+                0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .glow-cyber {
+            box-shadow:
+                0 0 20px rgba(6, 182, 212, 0.3),
+                0 0 40px rgba(6, 182, 212, 0.1);
+        }
+
+        .glow-success {
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+
+        /* ===== GRADIENT BORDERS ===== */
+        .border-gradient {
+            position: relative;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(236, 72, 153, 0.1));
+        }
+
+        .border-gradient::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            padding: 1px;
+            border-radius: inherit;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(236, 72, 153, 0.5));
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+        }
+
+        /* ===== SHIMMER EFFECT ===== */
+        .shimmer {
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.05) 50%,
+                transparent 100%
+            );
+            background-size: 200% 100%;
+            animation: shimmer 3s linear infinite;
+        }
+
+        /* ===== CHIP BASE ===== */
+        .chip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+
+        .chip:active {
+            transform: scale(0.97);
+        }
+
+        /* ===== PROVIDER CHIP (Special) ===== */
+        .chip-provider {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(236, 72, 153, 0.15) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            color: #A78BFA;
+        }
+
+        .chip-provider:hover {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(236, 72, 153, 0.25) 100%);
+            border-color: rgba(139, 92, 246, 0.6);
+            box-shadow:
+                0 0 20px rgba(139, 92, 246, 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .chip-provider.active {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.3) 100%);
+            box-shadow:
+                0 0 25px rgba(139, 92, 246, 0.4),
+                0 4px 16px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        /* ===== FILTER CHIP (Default) ===== */
+        .chip-filter {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            color: #CBD5E1;
+        }
+
+        .chip-filter:hover {
+            background: rgba(51, 65, 85, 0.8);
+            border-color: rgba(100, 116, 139, 0.6);
+            color: #F8FAFC;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        /* ===== ACTIVE FILTER CHIP ===== */
+        .chip-active {
+            background: rgba(139, 92, 246, 0.15);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+            color: #A78BFA;
+        }
+
+        .chip-active:hover {
+            background: rgba(139, 92, 246, 0.25);
+            border-color: rgba(139, 92, 246, 0.6);
+        }
+
+        .chip-active .chip-remove {
+            opacity: 0.6;
+            transition: all 0.15s ease;
+        }
+
+        .chip-active:hover .chip-remove {
+            opacity: 1;
+        }
+
+        .chip-active .chip-remove:hover {
+            background: rgba(239, 68, 68, 0.3);
+            color: #FCA5A5;
+        }
+
+        /* ===== ADD FILTER CHIP ===== */
+        .chip-add {
+            background: transparent;
+            border: 1px dashed rgba(71, 85, 105, 0.5);
+            color: #64748B;
+        }
+
+        .chip-add:hover {
+            background: rgba(51, 65, 85, 0.3);
+            border-color: rgba(139, 92, 246, 0.4);
+            border-style: solid;
+            color: #A78BFA;
+        }
+
+        /* ===== STATUS BADGE ===== */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.375rem 0.875rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .status-live {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #4ADE80;
+        }
+
+        .status-live .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #4ADE80;
+            box-shadow: 0 0 8px #4ADE80;
+            animation: glow-pulse 2s ease-in-out infinite;
+        }
+
+        /* ===== DROPDOWN MENU ===== */
+        .dropdown {
+            position: relative;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) scale(0.95);
+            min-width: 180px;
+            padding: 6px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 12px;
+            box-shadow:
+                0 20px 40px rgba(0, 0, 0, 0.4),
+                0 0 1px rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+        }
+
+        .dropdown.open .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) scale(1);
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            width: 100%;
+            padding: 0.625rem 0.875rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            color: #CBD5E1;
+            transition: all 0.15s ease;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            text-align: left;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(139, 92, 246, 0.15);
+            color: #F8FAFC;
+        }
+
+        .dropdown-item.selected {
+            background: rgba(139, 92, 246, 0.2);
+            color: #A78BFA;
+        }
+
+        .dropdown-item .check {
+            width: 16px;
+            height: 16px;
+            opacity: 0;
+            color: #A78BFA;
+        }
+
+        .dropdown-item.selected .check {
+            opacity: 1;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: rgba(71, 85, 105, 0.3);
+            margin: 4px 8px;
+        }
+
+        /* ===== PROVIDER ICONS ===== */
+        .provider-icon {
+            width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        /* ===== FILTER BAR CONTAINER ===== */
+        .filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            flex-wrap: wrap;
+            padding: 0.75rem;
+        }
+
+        .filter-divider {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: rgba(71, 85, 105, 0.5);
+        }
+
+        /* ===== TOOLTIP ===== */
+        .tooltip {
+            position: relative;
+        }
+
+        .tooltip::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            padding: 0.5rem 0.75rem;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(71, 85, 105, 0.3);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: #CBD5E1;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.15s ease;
+            pointer-events: none;
+            z-index: 50;
+        }
+
+        .tooltip:hover::after {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) scale(1);
+        }
+
+        /* ===== LOADING STATE ===== */
+        .chip-loading {
+            pointer-events: none;
+        }
+
+        .chip-loading .chip-text {
+            opacity: 0.5;
+        }
+
+        .spinner {
+            width: 14px;
+            height: 14px;
+            border: 2px solid rgba(139, 92, 246, 0.3);
+            border-top-color: #A78BFA;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 640px) {
+            .filter-bar {
+                gap: 0.5rem;
+            }
+
+            .chip {
+                padding: 0.4rem 0.75rem;
+                font-size: 0.8125rem;
+            }
+
+            .dropdown-menu {
+                min-width: 160px;
+            }
+
+            .status-badge {
+                padding: 0.25rem 0.625rem;
+            }
+        }
+
+        /* ===== SELECTION HIGHLIGHT ===== */
+        .chip::selection,
+        .dropdown-item::selection {
+            background: rgba(139, 92, 246, 0.3);
+        }
+
+        /* ===== FOCUS STATES (Accessibility) ===== */
+        .chip:focus-visible,
+        .dropdown-item:focus-visible {
+            outline: 2px solid rgba(139, 92, 246, 0.5);
+            outline-offset: 2px;
+        }
+
+        /* ===== ENTRANCE ANIMATIONS ===== */
+        .filter-bar > * {
+            animation: slide-up 0.3s ease-out backwards;
+        }
+
+        .filter-bar > *:nth-child(1) { animation-delay: 0ms; }
+        .filter-bar > *:nth-child(2) { animation-delay: 30ms; }
+        .filter-bar > *:nth-child(3) { animation-delay: 60ms; }
+        .filter-bar > *:nth-child(4) { animation-delay: 90ms; }
+        .filter-bar > *:nth-child(5) { animation-delay: 120ms; }
+        .filter-bar > *:nth-child(6) { animation-delay: 150ms; }
+        .filter-bar > *:nth-child(7) { animation-delay: 180ms; }
+        .filter-bar > *:nth-child(8) { animation-delay: 210ms; }
+
+        /* ===== BACKGROUND GRID ===== */
+        .bg-grid {
+            background-color: #020617 !important;
+            background-image:
+                linear-gradient(145deg, #020617 0%, #0F172A 50%, #1E293B 100%),
+                linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px) !important;
+            background-size: 100% 100%, 40px 40px, 40px 40px !important;
+        }
+    </style>
+</head>
+<body class="bg-grid">
+    <div class="max-w-5xl mx-auto p-8 space-y-16">
+
+        <!-- Header -->
+        <header class="text-center space-y-4 pt-8">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 bg-synapse/10 border border-synapse/30 rounded-full text-synapse text-sm font-medium mb-4">
+                <span class="w-2 h-2 rounded-full bg-synapse animate-pulse"></span>
+                Phase 5 - Final Design
+            </div>
+            <h1 class="text-5xl font-bold">
+                <span class="bg-gradient-to-r from-synapse via-pulse to-cyber bg-clip-text text-transparent">
+                    Floating Chips
+                </span>
+            </h1>
+            <p class="text-text-secondary text-lg max-w-2xl mx-auto">
+                Premium filter komponenta pro BrowsePage.
+                Moderní, animovaná, rozšiřitelná.
+            </p>
+        </header>
+
+        <!-- ============================================ -->
+        <!-- MAIN DEMO - Full Interactive -->
+        <!-- ============================================ -->
+        <section class="space-y-6">
+            <h2 class="text-2xl font-semibold text-text-primary flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-synapse to-pulse flex items-center justify-center text-white text-sm">1</span>
+                Hlavní komponenta
+            </h2>
+
+            <!-- Filter Bar -->
+            <div class="glass rounded-2xl p-2 glow-synapse">
+                <div class="filter-bar">
+
+                    <!-- Provider Chip -->
+                    <div class="dropdown" id="provider-dropdown">
+                        <button class="chip chip-provider active" onclick="toggleDropdown('provider-dropdown')">
+                            <span class="status-dot" style="width:8px;height:8px;background:#A78BFA;border-radius:50%;box-shadow:0 0 10px #A78BFA;"></span>
+                            <span class="chip-text">tRPC</span>
+                            <svg class="w-4 h-4 opacity-60 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="dropdown-menu">
+                            <button class="dropdown-item selected">
+                                <span class="provider-icon">⚡</span>
+                                <span>Internal tRPC</span>
+                                <svg class="check ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                            <button class="dropdown-item">
+                                <span class="provider-icon">🌐</span>
+                                <span>REST API</span>
+                                <svg class="check ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                            <button class="dropdown-item">
+                                <span class="provider-icon">📦</span>
+                                <span>CivArchive</span>
+                                <svg class="check ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <span class="filter-divider"></span>
+
+                    <!-- Sort Chip -->
+                    <div class="dropdown" id="sort-dropdown">
+                        <button class="chip chip-filter" onclick="toggleDropdown('sort-dropdown')">
+                            <span class="chip-text">Most Downloaded</span>
+                            <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="dropdown-menu">
+                            <button class="dropdown-item selected">
+                                <span>Most Downloaded</span>
+                                <svg class="check ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                            <button class="dropdown-item">Highest Rated</button>
+                            <button class="dropdown-item">Newest</button>
+                            <button class="dropdown-item">Most Discussed</button>
+                            <button class="dropdown-item">Most Collected</button>
+                        </div>
+                    </div>
+
+                    <!-- Period Chip -->
+                    <div class="dropdown" id="period-dropdown">
+                        <button class="chip chip-filter" onclick="toggleDropdown('period-dropdown')">
+                            <span class="chip-text">All Time</span>
+                            <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <div class="dropdown-menu">
+                            <button class="dropdown-item selected">All Time</button>
+                            <button class="dropdown-item">This Year</button>
+                            <button class="dropdown-item">This Month</button>
+                            <button class="dropdown-item">This Week</button>
+                            <button class="dropdown-item">Today</button>
+                        </div>
+                    </div>
+
+                    <!-- Active Filter: Base Model -->
+                    <button class="chip chip-active group" onclick="removeChip(this)">
+                        <span class="chip-text">SDXL 1.0</span>
+                        <span class="chip-remove w-5 h-5 rounded-full flex items-center justify-center -mr-1 transition-all">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- Add Filter -->
+                    <div class="dropdown" id="add-dropdown">
+                        <button class="chip chip-add" onclick="toggleDropdown('add-dropdown')">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            <span class="chip-text">Add filter</span>
+                        </button>
+                        <div class="dropdown-menu">
+                            <div class="px-3 py-2 text-xs text-text-muted uppercase tracking-wider">Base Model</div>
+                            <button class="dropdown-item">SD 1.5</button>
+                            <button class="dropdown-item">Pony</button>
+                            <button class="dropdown-item">Flux.1 Dev</button>
+                            <button class="dropdown-item">Illustrious</button>
+                            <div class="dropdown-divider"></div>
+                            <div class="px-3 py-2 text-xs text-text-muted uppercase tracking-wider">Model Type</div>
+                            <button class="dropdown-item">LoRA</button>
+                            <button class="dropdown-item">Checkpoint</button>
+                            <button class="dropdown-item">Embedding</button>
+                        </div>
+                    </div>
+
+                    <!-- Spacer -->
+                    <div class="flex-1"></div>
+
+                    <!-- Status Badge -->
+                    <div class="status-badge status-live tooltip" data-tooltip="Connected to Civitai tRPC">
+                        <span class="status-dot"></span>
+                        <span>Live</span>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- STATES SHOWCASE -->
+        <!-- ============================================ -->
+        <section class="space-y-6">
+            <h2 class="text-2xl font-semibold text-text-primary flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyber to-neon flex items-center justify-center text-white text-sm">2</span>
+                Stavy a varianty
+            </h2>
+
+            <div class="grid md:grid-cols-2 gap-6">
+
+                <!-- REST API State -->
+                <div class="glass-light rounded-xl p-5 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-md font-medium">REST API</span>
+                        <span class="text-text-muted text-sm">Provider stav</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button class="chip" style="background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.4);color:#60A5FA;">
+                            <span style="width:8px;height:8px;background:#60A5FA;border-radius:50%;box-shadow:0 0 8px #60A5FA;"></span>
+                            <span>REST</span>
+                            <svg class="w-4 h-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <span class="filter-divider"></span>
+                        <button class="chip chip-filter">Most Downloaded</button>
+                        <div class="ml-auto status-badge" style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);color:#60A5FA;">
+                            <span style="width:6px;height:6px;background:#60A5FA;border-radius:50%;"></span>
+                            Stable
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CivArchive State -->
+                <div class="glass-light rounded-xl p-5 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-md font-medium">CivArchive</span>
+                        <span class="text-text-muted text-sm">Provider stav</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button class="chip" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#FBBF24;">
+                            <span style="width:8px;height:8px;background:#FBBF24;border-radius:50%;box-shadow:0 0 8px #FBBF24;"></span>
+                            <span>Archive</span>
+                            <svg class="w-4 h-4 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+                        <span class="filter-divider"></span>
+                        <button class="chip chip-filter">Search in descriptions</button>
+                        <div class="ml-auto status-badge" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#FBBF24;">
+                            <span style="width:6px;height:6px;background:#FBBF24;border-radius:50%;"></span>
+                            External
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="glass-light rounded-xl p-5 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 bg-synapse/20 text-synapse text-xs rounded-md font-medium">Loading</span>
+                        <span class="text-text-muted text-sm">Načítání dat</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button class="chip chip-provider chip-loading">
+                            <span class="spinner"></span>
+                            <span class="chip-text">tRPC</span>
+                        </button>
+                        <span class="filter-divider"></span>
+                        <button class="chip chip-filter chip-loading">
+                            <span class="chip-text" style="opacity:0.5;">Loading...</span>
+                        </button>
+                        <div class="ml-auto status-badge" style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);color:#A78BFA;">
+                            <span class="spinner" style="width:10px;height:10px;border-width:1.5px;"></span>
+                            Fetching
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error State -->
+                <div class="glass-light rounded-xl p-5 space-y-4">
+                    <div class="flex items-center gap-2">
+                        <span class="px-2 py-1 bg-red-500/20 text-red-400 text-xs rounded-md font-medium">Error</span>
+                        <span class="text-text-muted text-sm">Chyba připojení</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button class="chip" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.4);color:#F87171;">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                            <span>tRPC unavailable</span>
+                        </button>
+                        <button class="chip chip-add" style="border-color:rgba(239,68,68,0.3);color:#F87171;">
+                            <span>Switch to REST</span>
+                        </button>
+                        <div class="ml-auto status-badge" style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:#F87171;">
+                            <span style="width:6px;height:6px;background:#F87171;border-radius:50%;"></span>
+                            Offline
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- MULTIPLE FILTERS -->
+        <!-- ============================================ -->
+        <section class="space-y-6">
+            <h2 class="text-2xl font-semibold text-text-primary flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-pulse to-synapse flex items-center justify-center text-white text-sm">3</span>
+                Více aktivních filtrů
+            </h2>
+
+            <div class="glass rounded-2xl p-2">
+                <div class="filter-bar">
+                    <button class="chip chip-provider active">
+                        <span style="width:8px;height:8px;background:#A78BFA;border-radius:50%;box-shadow:0 0 10px #A78BFA;"></span>
+                        <span>tRPC</span>
+                    </button>
+
+                    <span class="filter-divider"></span>
+
+                    <button class="chip chip-active">
+                        <span>Highest Rated</span>
+                        <span class="chip-remove w-5 h-5 rounded-full flex items-center justify-center -mr-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <button class="chip chip-active">
+                        <span>This Month</span>
+                        <span class="chip-remove w-5 h-5 rounded-full flex items-center justify-center -mr-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <button class="chip chip-active">
+                        <span>SDXL 1.0</span>
+                        <span class="chip-remove w-5 h-5 rounded-full flex items-center justify-center -mr-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <button class="chip chip-active">
+                        <span>LoRA</span>
+                        <span class="chip-remove w-5 h-5 rounded-full flex items-center justify-center -mr-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </span>
+                    </button>
+
+                    <!-- Clear All -->
+                    <button class="chip chip-add" style="border-color:rgba(239,68,68,0.3);color:#F87171;">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span>Clear all</span>
+                    </button>
+
+                    <div class="flex-1"></div>
+
+                    <div class="status-badge status-live">
+                        <span class="status-dot"></span>
+                        <span>Live</span>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-text-muted text-sm">
+                💡 Aktivní filtry jsou zvýrazněny a mají tlačítko pro odstranění.
+                Při mnoha filtrech se objeví "Clear all".
+            </p>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- MOBILE RESPONSIVE -->
+        <!-- ============================================ -->
+        <section class="space-y-6">
+            <h2 class="text-2xl font-semibold text-text-primary flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-white text-sm">4</span>
+                Mobilní zobrazení
+            </h2>
+
+            <div class="max-w-sm mx-auto">
+                <div class="glass rounded-2xl p-2">
+                    <div class="filter-bar">
+                        <button class="chip chip-provider active" style="padding:0.4rem 0.75rem;font-size:0.8125rem;">
+                            <span style="width:6px;height:6px;background:#A78BFA;border-radius:50%;box-shadow:0 0 8px #A78BFA;"></span>
+                            <span>tRPC</span>
+                        </button>
+
+                        <button class="chip chip-filter" style="padding:0.4rem 0.75rem;font-size:0.8125rem;">
+                            <span>Downloaded</span>
+                        </button>
+
+                        <button class="chip chip-active" style="padding:0.4rem 0.75rem;font-size:0.8125rem;">
+                            <span>SDXL</span>
+                            <span class="chip-remove w-4 h-4 rounded-full flex items-center justify-center -mr-0.5">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </span>
+                        </button>
+
+                        <button class="chip chip-add" style="padding:0.4rem 0.75rem;font-size:0.8125rem;">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                        </button>
+
+                        <div class="status-badge status-live" style="padding:0.25rem 0.5rem;font-size:0.625rem;">
+                            <span class="status-dot" style="width:5px;height:5px;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-text-muted text-sm text-center">
+                Chips automaticky wrap na menších obrazovkách. Texty se zkracují.
+            </p>
+        </section>
+
+        <!-- ============================================ -->
+        <!-- ANIMATION DEMO -->
+        <!-- ============================================ -->
+        <section class="space-y-6">
+            <h2 class="text-2xl font-semibold text-text-primary flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center text-white text-sm">5</span>
+                Animace a interakce
+            </h2>
+
+            <div class="grid md:grid-cols-3 gap-6">
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">👆</div>
+                    <h3 class="font-medium text-text-primary">Hover efekt</h3>
+                    <p class="text-text-muted text-sm">Chip se zvedne, změní barvu borderu a přidá stín</p>
+                </div>
+
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">✨</div>
+                    <h3 class="font-medium text-text-primary">Glow pulsace</h3>
+                    <p class="text-text-muted text-sm">Status dot a provider chip jemně pulzují</p>
+                </div>
+
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">📥</div>
+                    <h3 class="font-medium text-text-primary">Dropdown slide</h3>
+                    <p class="text-text-muted text-sm">Menu se animovaně objeví s fade + scale</p>
+                </div>
+
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">🎯</div>
+                    <h3 class="font-medium text-text-primary">Active press</h3>
+                    <p class="text-text-muted text-sm">Při kliknutí se chip lehce zmenší (scale 0.97)</p>
+                </div>
+
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">🚀</div>
+                    <h3 class="font-medium text-text-primary">Staggered entrance</h3>
+                    <p class="text-text-muted text-sm">Chips se objeví postupně s delay</p>
+                </div>
+
+                <div class="glass-light rounded-xl p-5 space-y-3 text-center">
+                    <div class="text-3xl mb-2">❌</div>
+                    <h3 class="font-medium text-text-primary">Remove animation</h3>
+                    <p class="text-text-muted text-sm">Chip zmizí s fade + scale down</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center py-12 space-y-4">
+            <div class="inline-flex items-center gap-4">
+                <button class="px-6 py-3 bg-gradient-to-r from-synapse to-pulse text-white font-medium rounded-xl glow-synapse-intense hover:scale-105 transition-transform">
+                    ✅ Schválit design
+                </button>
+            </div>
+            <p class="text-text-muted text-sm">Phase 5 - Synapse 2026</p>
+        </footer>
+
+    </div>
+
+    <script>
+        // Dropdown toggle
+        function toggleDropdown(id) {
+            const dropdown = document.getElementById(id);
+            const wasOpen = dropdown.classList.contains('open');
+
+            // Close all dropdowns
+            document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
+
+            // Toggle this one
+            if (!wasOpen) {
+                dropdown.classList.add('open');
+            }
+        }
+
+        // Close dropdowns on outside click
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.dropdown')) {
+                document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
+            }
+        });
+
+        // Remove chip animation
+        function removeChip(chip) {
+            chip.style.transform = 'scale(0.8)';
+            chip.style.opacity = '0';
+            setTimeout(() => {
+                chip.style.display = 'none';
+            }, 150);
+        }
+
+        // Add entrance animation on load
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.filter-bar').forEach(bar => {
+                bar.style.opacity = '1';
+            });
+        });
+    </script>
+</body>
+</html>
