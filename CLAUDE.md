@@ -45,9 +45,18 @@ synapse/
 ├── plans/            # PLAN soubory pro jednotlivé fáze
 │   ├── PLAN-Phase-4.md              # ✅ DOKONČENO - Packs Video & Import
 │   └── PLAN-Internal-Search-trpc.md # 🚧 AKTIVNÍ - Interní vyhledávání
-├── tests/            # Python tests (pytest)
-│   ├── unit/
-│   └── integration/
+├── tests/            # Python tests (pytest) - viz sekce Testování
+│   ├── conftest.py   # Globální fixtures a markery
+│   ├── unit/         # Rychlé, izolované testy (zrcadlí src/)
+│   │   ├── core/     # src/core/ testy
+│   │   ├── clients/  # src/clients/ testy
+│   │   └── utils/    # src/utils/ testy
+│   ├── store/        # Store/API testy
+│   ├── integration/  # Multi-component testy
+│   ├── lint/         # Architecture enforcement
+│   └── helpers/      # Sdílené test fixtures
+├── scripts/          # Utility skripty
+│   └── verify.sh     # ⭐ HLAVNÍ verifikační skript
 └── config/           # Configuration files
 ```
 
@@ -55,34 +64,34 @@ synapse/
 
 ## 🔧 Důležité příkazy
 
+### ⭐ Verifikace projektu (VŽDY před commitem!)
+```bash
+./scripts/verify.sh            # Kompletní verifikace
+./scripts/verify.sh --quick    # Rychlá verifikace
+./scripts/verify.sh --help     # Zobrazit všechny možnosti
+```
+
 ### Backend (Python)
 ```bash
-# Spustit testy
-pytest tests/ -v
+# Testy přes verify.sh (doporučeno)
+./scripts/verify.sh --backend
 
-# Spustit konkrétní test
-pytest tests/unit/test_pack_builder_video.py -v
+# Přímé spuštění pytest
+uv run pytest tests/ -v
+uv run pytest tests/unit/core/test_pack_builder_video.py -v
 
 # Spustit backend server
-python -m uvicorn src.api.main:app --reload --port 8000
+uv run uvicorn src.store.api:app --reload --port 8000
 ```
 
 ### Frontend (Web)
 ```bash
-# Přejít do web složky
 cd apps/web
 
-# Instalace závislostí
-pnpm install
-
-# Spustit dev server
-pnpm dev
-
-# Spustit testy
-pnpm test
-
-# Build
-pnpm build
+pnpm install          # Instalace závislostí
+pnpm dev              # Dev server
+pnpm test --run       # Testy (single run)
+pnpm build            # Production build
 ```
 
 ---
@@ -151,24 +160,127 @@ interface FullscreenMediaItem {
 
 ---
 
-## 🧪 Testování
+## 🧪 Testování a Verifikace
 
-### Požadavky
-- Každá feature MUSÍ mít testy
-- Backend: pytest v `tests/unit/` nebo `tests/integration/`
-- Frontend: Vitest v `apps/web/src/__tests__/`
+### ⭐ Hlavní příkaz: verify.sh
 
-### Spuštění
+**VŽDY použij `./scripts/verify.sh` před commitem!**
+
 ```bash
-# Všechny Python testy
-pytest tests/ -v
+# Kompletní verifikace (doporučeno před commitem)
+./scripts/verify.sh
 
-# Všechny frontend testy
-cd apps/web && pnpm test
+# Rychlá verifikace (bez build, bez slow testů)
+./scripts/verify.sh --quick
 
-# Konkrétní test soubor
-pytest tests/unit/test_media_detection.py -v
+# Pouze backend testy
+./scripts/verify.sh --backend
+
+# Pouze frontend testy
+./scripts/verify.sh --frontend
+
+# Specifické test kategorie
+./scripts/verify.sh --backend --unit        # Pouze unit testy
+./scripts/verify.sh --backend --integration # Pouze integrační
+./scripts/verify.sh --backend --store       # Pouze store testy
+./scripts/verify.sh --lint                  # Architektura check
+
+# Verbose výstup
+./scripts/verify.sh --verbose
+
+# Nápověda
+./scripts/verify.sh --help
 ```
+
+### Struktura testů (Backend)
+
+```
+tests/
+├── conftest.py          # Globální fixtures + pytest markery
+├── helpers/
+│   └── fixtures.py      # FakeCivitaiClient, TestStoreContext, assertions
+├── unit/                # Rychlé, izolované testy
+│   ├── core/            # test_pack_builder_video.py, test_parameters.py
+│   ├── clients/         # test_civarchive.py
+│   └── utils/           # test_media_detection.py
+├── store/               # Store/API testy
+├── integration/         # Multi-component testy
+└── lint/                # Architecture enforcement (test_architecture.py)
+```
+
+### Pytest Markery
+
+```python
+@pytest.mark.slow         # Dlouhotrvající testy
+@pytest.mark.integration  # Vyžadují více komponent
+@pytest.mark.civitai      # Civitai API testy
+@pytest.mark.e2e          # End-to-end testy
+```
+
+Použití:
+```bash
+uv run pytest -m "not slow"           # Bez pomalých testů
+uv run pytest -m "integration"        # Pouze integrační
+uv run pytest -m "not integration"    # Bez integračních
+```
+
+### Jak psát testy
+
+#### 1. Umístění testů
+- `tests/unit/core/` → pro `src/core/`
+- `tests/unit/utils/` → pro `src/utils/`
+- `tests/unit/clients/` → pro `src/clients/`
+- `tests/integration/` → pro testy více komponent
+
+#### 2. Pojmenování
+```python
+# Soubor: test_<module_name>.py
+# Třída: Test<FeatureName>
+# Metoda: test_<what_it_tests>
+
+class TestMediaDetection:
+    def test_detect_video_by_extension(self):
+        ...
+```
+
+#### 3. Použití fixtures (z conftest.py)
+```python
+def test_with_fixtures(
+    fake_civitai_client,     # FakeCivitaiClient instance
+    test_store_context,      # Izolovaný test store
+    civitai_video_url,       # Sample Civitai video URL
+    temp_dir,                # Temporary directory
+):
+    ...
+```
+
+#### 4. Parametrizované testy
+```python
+@pytest.mark.parametrize("url,expected", [
+    ("https://example.com/video.mp4", MediaType.VIDEO),
+    ("https://example.com/image.jpg", MediaType.IMAGE),
+])
+def test_detect_media_type(url, expected):
+    assert detect_media_type(url).type == expected
+```
+
+### Frontend testy (Vitest)
+
+```bash
+cd apps/web
+pnpm test              # Watch mode
+pnpm test --run        # Single run (CI)
+pnpm test -- --ui      # UI mode
+```
+
+Umístění: `apps/web/src/__tests__/`
+
+### Požadavky na testy
+
+1. **Každá feature MUSÍ mít testy**
+2. **Testy musí projít před commitem** → `./scripts/verify.sh`
+3. **Nové soubory v src/ = nové testy v tests/**
+4. **Při bugfixu přidat test na regrese**
 
 ---
 
@@ -205,7 +317,18 @@ pytest tests/unit/test_media_detection.py -v
 4. **Po dokončení tasku:**
    - Aktualizovat PLAN (aditivně!)
    - Označit stav integrace
-   - Ověřit testy
+   - **Spustit `./scripts/verify.sh`** ← KRITICKÉ!
+
+### Workflow při vývoji feature
+
+```
+1. Implementovat feature
+2. Napsat/aktualizovat testy
+3. ./scripts/verify.sh --quick    # Rychlá kontrola
+4. Opravit případné chyby
+5. ./scripts/verify.sh            # Plná verifikace
+6. Commit pouze pokud projde
+```
 
 ---
 

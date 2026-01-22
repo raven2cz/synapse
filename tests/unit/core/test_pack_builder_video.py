@@ -21,14 +21,15 @@ from typing import List, Optional
 from unittest.mock import MagicMock, Mock, patch
 
 import sys
-# Add project root to path for absolute imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add project root to path for absolute imports (conftest.py handles this too)
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 # Import directly from module file to avoid __init__.py import chain
 import importlib.util
 spec = importlib.util.spec_from_file_location(
     "pack_builder",
-    Path(__file__).parent.parent.parent / "src" / "core" / "pack_builder.py"
+    project_root / "src" / "core" / "pack_builder.py"
 )
 pack_builder_module = importlib.util.module_from_spec(spec)
 sys.modules["pack_builder"] = pack_builder_module
