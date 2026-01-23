@@ -1482,6 +1482,10 @@ describe('transformTrpcModel', () => {
 | 2026-01-22 | 5.4 BrowsePage UI + SearchFilters DONE | Claude |
 | 2026-01-22 | 5.5 Testy DONE (75 tests) | Claude |
 | 2026-01-22 | **PHASE 5 KOMPLETNÍ** | Claude |
+| 2026-01-23 | 5.6 Meilisearch integration - analýza zachycených requestů | Claude |
+| 2026-01-23 | 5.6 Bridge v10.0.0 - hybrid Meilisearch + tRPC | Claude |
+| 2026-01-23 | 5.6 transformMeilisearchModel + testy | Claude |
+| 2026-01-23 | **PHASE 5.6 DOKONČENO** - 340 testů projít | Claude |
 
 ---
 
@@ -1505,6 +1509,98 @@ describe('transformTrpcModel', () => {
 
 ---
 
+---
+
+## 🚀 Phase 5.6: Performance Optimization - Meilisearch Integration
+
+**Status:** 🚧 IN PROGRESS (2026-01-23)
+
+### 5.6.1 Analýza zachycených síťových volání
+
+**Klíčový nález:** Civitai používá **Meilisearch** pro vyhledávání!
+
+**Endpoint:** `POST https://search-new.civitai.com/multi-search`
+
+**Request struktura:**
+```json
+{
+  "queries": [{
+    "q": "search query",
+    "indexUid": "models_v9",
+    "facets": ["category.name", "type", "version.baseModel", "fileFormats", "tags.name"],
+    "limit": 51,
+    "offset": 0,
+    "filter": ["(nsfwLevel=1 OR nsfwLevel=2 OR nsfwLevel=4 OR nsfwLevel=8 OR nsfwLevel=16)"]
+  }]
+}
+```
+
+**Headers:**
+- `Authorization: Bearer 8c46eb2508e21db1e9828a97968d91ab1ca1caa5f70a00e88a2ba1e286603b61`
+- `X-Meilisearch-Client: Meilisearch instant-meilisearch (v0.13.5)`
+
+**Výhody Meilisearch:**
+- Rychlejší než tRPC model.getAll (optimalizovaný full-text search)
+- Vrací facety pro statistiky filtrů
+- Nativní offset/limit pagination
+
+### 5.6.2 Optimalizace Bridge
+
+**Změny v `synapse-civitai-bridge.user.js`:**
+
+1. ✅ Přidat `searchMeilisearch()` metodu pro rychlé full-text vyhledávání
+2. ✅ Zachovat `search()` (tRPC) pro browse bez query
+3. ✅ Přidat `getModelImages()` pro image.getInfinite (již existuje)
+
+**Hybrid strategie:**
+- Query search → Meilisearch (rychlé)
+- Browse bez query → tRPC model.getAll (filtry)
+- Model detail → tRPC model.getById
+
+### 5.6.3 Image URL Optimization
+
+Civitai image.civitai.com používá **path-based parametry**:
+```
+/xG1nkqKTMzGDvpLrqFT7WA/{uuid}/width=450,original=false,optimized=true/{filename}
+```
+
+**NENÍ** query string (`?width=450`), ale cesta!
+
+### 5.6.4 Checklist
+
+- [x] Aktualizovat bridge pro Meilisearch ✅ (v10.0.0)
+- [x] Aktualizovat trpcBridgeAdapter pro hybrid search ✅
+- [x] Optimalizovat civitaiTransformers pro image URLs ✅
+- [x] Přidat testy ✅ (12 nových testů pro Meilisearch)
+- [x] Build a testy projít ✅ (340 testů)
+
+### 5.6.5 Implementované změny
+
+**Bridge v10.0.0 (`scripts/tampermonkey/synapse-civitai-bridge.user.js`):**
+- Nový endpoint `search-new.civitai.com/multi-search` pro Meilisearch
+- Hybrid strategie: query → Meilisearch (rychlé), browse → tRPC (filtry)
+- Nové metody: `searchMeilisearch()`, `searchTrpc()`, `search()` (auto-hybrid)
+- Test metoda testuje oba backendy
+- Timeout: 15s pro Meilisearch, 30s pro tRPC
+
+**trpcBridgeAdapter.ts:**
+- Automatická detekce source (meilisearch/trpc) z meta
+- Správný transformer dle source (`transformMeilisearchModel` vs `transformTrpcModel`)
+- Offset-based pagination pro Meilisearch
+- Cursor-based pagination pro tRPC
+
+**civitaiTransformers.ts:**
+- Nová funkce `transformMeilisearchModel()` pro jiný formát Meilisearch hitů
+- Optimalizované image URL konstruování pro Civitai CDN
+- Path-based parametry: `/uuid/width=450,optimized=true/filename`
+
+**Testy (civitai-transformers.test.ts):**
+- 12 nových testů pro Meilisearch transformaci
+- Testy kompatibility tRPC vs Meilisearch formátů
+- Celkem 52 testů v souboru
+
+---
+
 *Vytvořeno: 2026-01-22*
-*Poslední aktualizace: 2026-01-22*
-*Status: ✅ DOKONČENO*
+*Poslední aktualizace: 2026-01-23*
+*Status: ✅ Phase 5.6 DOKONČENO*

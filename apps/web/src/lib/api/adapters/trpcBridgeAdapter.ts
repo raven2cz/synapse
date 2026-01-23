@@ -1,10 +1,13 @@
 /**
  * tRPC Bridge Search Adapter
  *
- * Uses Tampermonkey bridge to call Civitai's internal tRPC API directly.
+ * Uses Tampermonkey bridge with HYBRID search strategy:
+ * - Meilisearch for full-text search (fast, when query provided)
+ * - tRPC model.getAll for browse without query (better sorting)
+ *
  * Bypasses CORS via GM_xmlhttpRequest.
  *
- * Requires: Synapse Civitai Bridge userscript installed in Tampermonkey.
+ * Requires: Synapse Civitai Bridge v10+ userscript installed in Tampermonkey.
  */
 
 import type {
@@ -13,7 +16,7 @@ import type {
   SearchResult,
   ModelDetail,
 } from '../searchTypes'
-import { transformTrpcModel } from '@/lib/utils/civitaiTransformers'
+import { transformTrpcModel, transformMeilisearchModel } from '@/lib/utils/civitaiTransformers'
 
 // =============================================================================
 // Bridge Type Declaration
@@ -24,6 +27,8 @@ interface BridgeSearchResult {
   data?: {
     items?: Record<string, unknown>[]
     nextCursor?: string
+    hasMore?: boolean
+    totalHits?: number
   }
   error?: {
     code: string
@@ -32,15 +37,53 @@ interface BridgeSearchResult {
   meta?: {
     durationMs: number
     cached: boolean
+    source: 'meilisearch' | 'trpc'
+    query?: string
   }
 }
 
 interface SynapseSearchBridge {
   version: string
   isEnabled(): boolean
-  getStatus(): { enabled: boolean; nsfw: boolean; version: string }
+  getStatus(): {
+    enabled: boolean
+    nsfw: boolean
+    version: string
+    cacheSize: number
+    features?: string[]
+  }
   configure?(updates: { enabled?: boolean; nsfw?: boolean }): void
+  // Hybrid search (auto-selects Meilisearch or tRPC)
   search(
+    request: {
+      q?: string
+      limit?: number
+      sort?: string
+      period?: string
+      cursor?: string
+      offset?: number
+      filters?: {
+        types?: string | string[]
+        baseModel?: string | string[]
+      }
+    },
+    opts?: { signal?: AbortSignal; noCache?: boolean; forceTrpc?: boolean }
+  ): Promise<BridgeSearchResult>
+  // Direct Meilisearch search
+  searchMeilisearch?(
+    request: {
+      q?: string
+      limit?: number
+      offset?: number
+      filters?: {
+        types?: string | string[]
+        baseModel?: string | string[]
+      }
+    },
+    opts?: { signal?: AbortSignal; noCache?: boolean }
+  ): Promise<BridgeSearchResult>
+  // Direct tRPC search
+  searchTrpc?(
     request: {
       q?: string
       limit?: number
@@ -54,7 +97,9 @@ interface SynapseSearchBridge {
     },
     opts?: { signal?: AbortSignal; noCache?: boolean }
   ): Promise<BridgeSearchResult>
-  test?(): Promise<BridgeSearchResult>
+  getModel?(modelId: number, opts?: Record<string, unknown>): Promise<BridgeSearchResult>
+  getModelImages?(modelId: number, opts?: Record<string, unknown>): Promise<BridgeSearchResult>
+  test?(): Promise<{ ok: boolean; results: { meilisearch: unknown; trpc: unknown } }>
 }
 
 declare global {
@@ -64,7 +109,7 @@ declare global {
 }
 
 // =============================================================================
-// tRPC Bridge Adapter
+// tRPC Bridge Adapter (Hybrid: Meilisearch + tRPC)
 // =============================================================================
 
 export class TrpcBridgeAdapter implements SearchAdapter {
@@ -73,9 +118,27 @@ export class TrpcBridgeAdapter implements SearchAdapter {
   readonly description = 'Fast, direct API via browser extension'
   readonly icon = 'Zap'
 
+  // Track current offset for Meilisearch pagination
+  private meilisearchOffset = 0
+
   isAvailable(): boolean {
     if (typeof window === 'undefined') return false
     return !!window.SynapseSearchBridge?.isEnabled?.()
+  }
+
+  /**
+   * Get bridge version info
+   */
+  getVersion(): string {
+    return window.SynapseSearchBridge?.version || 'unknown'
+  }
+
+  /**
+   * Check if bridge supports Meilisearch (v10+)
+   */
+  supportsMeilisearch(): boolean {
+    const status = window.SynapseSearchBridge?.getStatus?.()
+    return status?.features?.includes('meilisearch') ?? false
   }
 
   async search(
@@ -90,6 +153,11 @@ export class TrpcBridgeAdapter implements SearchAdapter {
 
     const startTime = Date.now()
 
+    // Reset offset on new search (no cursor = new search)
+    if (!params.cursor) {
+      this.meilisearchOffset = 0
+    }
+
     const result = await bridge.search(
       {
         q: params.query || '',
@@ -97,9 +165,11 @@ export class TrpcBridgeAdapter implements SearchAdapter {
         sort: params.sort || 'Most Downloaded',
         period: params.period || 'AllTime',
         cursor: params.cursor,
+        offset: this.meilisearchOffset,
         filters: {
-          types: params.types?.[0],
-          baseModel: params.baseModels?.[0],
+          // Support multiple types
+          types: params.types?.length ? params.types : undefined,
+          baseModel: params.baseModels?.length ? params.baseModels[0] : undefined,
         },
       },
       { signal }
@@ -109,18 +179,37 @@ export class TrpcBridgeAdapter implements SearchAdapter {
       throw new Error(result.error?.message || 'Search failed')
     }
 
-    // Transform with video detection
+    // Determine which transformer to use based on source
+    const isMeilisearch = result.meta?.source === 'meilisearch'
     const rawItems = result.data?.items || []
-    const items = rawItems.map((item) => transformTrpcModel(item))
+
+    // Transform items based on source
+    const items = rawItems.map((item) =>
+      isMeilisearch ? transformMeilisearchModel(item) : transformTrpcModel(item)
+    )
+
+    // Update offset for next Meilisearch request
+    if (isMeilisearch && result.data?.hasMore) {
+      this.meilisearchOffset += items.length
+    }
+
+    // For Meilisearch, we use offset-based pagination
+    // For tRPC, we use cursor-based pagination
+    const nextCursor = isMeilisearch
+      ? result.data?.hasMore
+        ? String(this.meilisearchOffset)
+        : undefined
+      : result.data?.nextCursor
 
     return {
       items,
-      nextCursor: result.data?.nextCursor,
-      hasMore: !!result.data?.nextCursor,
+      nextCursor,
+      hasMore: result.data?.hasMore ?? !!nextCursor,
       metadata: {
         source: 'trpc',
         cached: result.meta?.cached || false,
         responseTime: result.meta?.durationMs || Date.now() - startTime,
+        totalItems: result.data?.totalHits,
       },
     }
   }

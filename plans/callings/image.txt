@@ -1,0 +1,67 @@
+image
+
+{
+	"GET": {
+		"scheme": "https",
+		"host": "image.civitai.com",
+		"filename": "/xG1nkqKTMzGDvpLrqFT7WA/5cc3bc43-6d2e-49cd-8b58-b531e66ebd75/width=96,original=false,optimized=true/ComfyUI_temp_nkhki_00004_.jpeg"
+	}
+}
+
+GET /xG1nkqKTMzGDvpLrqFT7WA/5cc3bc43-6d2e-49cd-8b58-b531e66ebd75/width=96,original=false,optimized=true/ComfyUI_temp_nkhki_00004_.jpeg HTTP/1.1
+Host: image.civitai.com
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+Accept: image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5
+Accept-Language: cs,en-US;q=0.9,en;q=0.8
+Accept-Encoding: gzip, deflate, br, zstd
+Referer: https://civitai.com/
+
+
+
+
+{
+	"GET": {
+		"scheme": "https",
+		"host": "image.civitai.com",
+		"filename": "/xG1nkqKTMzGDvpLrqFT7WA/bd2e523d-2e5c-44ab-bfac-a5aab1931fb4/anim=false,transcode=true,width=450,original=false,optimized=true/bd2e523d-2e5c-44ab-bfac-a5aab1931fb4.jpeg",
+		"remote": {
+			"Address": "172.66.152.186:443"
+		}
+	}
+}
+
+HTTP/3 200 
+date: Fri, 23 Jan 2026 07:26:52 GMT
+content-type: image/webp
+content-length: 23336
+access-control-allow-origin: *
+access-control-expose-headers: content-disposition, content-type, cache-control, status, content-length
+cache-control: public, max-age=2592000
+etag: "7a6d655de43e9d5b7753cda3b5f788e2"
+vary: Accept, accept-encoding
+accept-ranges: bytes
+content-disposition: inline
+strict-transport-security: max-age=31536000; includeSubDomains
+priority: u=5,i
+age: 2146992
+cf-cache-status: HIT
+server: cloudflare
+cf-ray: 9c2590b8ea2ff99c-PRG
+alt-svc: h3=":443"; ma=86400
+server-timing: cfExtPri
+
+GET /xG1nkqKTMzGDvpLrqFT7WA/bd2e523d-2e5c-44ab-bfac-a5aab1931fb4/anim=false,transcode=true,width=450,original=false,optimized=true/bd2e523d-2e5c-44ab-bfac-a5aab1931fb4.jpeg HTTP/3
+Host: image.civitai.com
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+Accept: image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5
+Accept-Language: cs,en-US;q=0.9,en;q=0.8
+Accept-Encoding: gzip, deflate, br, zstd
+Alt-Used: image.civitai.com
+Connection: keep-alive
+Referer: https://civitai.com/
+Cookie: _ga_N6W8XF7DXE=GS2.1.s1769152386$o77$g1$t1769152431$j15$l0$h0; _ga=GA1.1.1676876038.1761142971; _sharedID=cc9407d1-10eb-413d-abd2-29bb3b4ec8dc; _sharedID_cst=PSytLDEsog%3D%3D; _sharedID_last=Fri%2C%2023%20Jan%202026%2007%3A13%3A06%20GMT; _cc_id=bb1ff0481cc49a4ea606a53627eacaa7; cto_bundle=0h2vRF9jVTBCMHBsZHFEYWhoVTMyWTBqcFh5QU9SUUk3ZWpyM2E3dFJmJTJGa0F6QlVMaFg2WjQ0ZFlTTjh4ZEElMkJZVmdkRzFuQU14c2FOcHV2UWklMkJRYWJSRUdjamUlMkJQNnFIRVFMMHAlMkZKNzZhNU5HUFFSSG5qeXduRkM0ZG11SENpJTJGTUtaVTVuN1hoQWlNV0UzeThybDJqTVM4STU0VlRPaFBGeEwxRDhyRzFjVHpxalUlM0Q; __gads=ID=94676099b0f38250:T=1761142978:RT=1769152392:S=ALNI_MZnaZcs6JzJ8u57ZL0ONRABDZFYTw; __gpi=UID=000012b3969e908b:T=1761142978:RT=1769152392:S=ALNI_MYOn7w--u-yBPqJkmcQSrqtxJhrKQ; __eoi=ID=4d5d6c005c2c32f9:T=1761142978:RT=1769152392:S=AA-AfjYvKCgh_ZcuKO7FPda_rUXl; __Secure-civitai-token=eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..1bVVtuqcMKvmPozz.cCrkIGBupgfLkmJdTG1uY00uGPQcopvbaIg7Htx--0xtVZ3sFse0k9FNKrgiDxYfUDAwJAvhvCkHbMYjHKOWV6CVLD3tqmHmk5khoEbLSseuCPA7AEfBB3Set8Uc3JW10TiQka2y-kj0hvuz0DfJxxFkkMRv_Q24zQ0ARhyqDZn2hIn6DNfOueT9EIWNpXqZpXIpk__DumWeh_fJJLqbnntvJbz0lv7qu6VGjKvxb1KVYcFx4F50FLhWfMrzbQI0AUGKXYaGnpjz4TjUU80M9-KnA2V1egN-nrOmwa2wTiF_grNZKEPxFw5h0GZqkSe56J-RRYRhYzj7TwlIwxf4anrKg8p3d3CdP1IWB7v6qYwLnFyVYZCxCsYikls2O8ToBdkLB4Rs01p3VxYp2Ol-8IczBbJVWBp058W7UYEvoh5m26CZ7AM3IG3vdrmrsLo6QvkE4AGHWeFXG0mpUpVvt0Mv6Z9o-JXJArh8EHw9f0I-Vj0T4bOTZdPaKz_iUwmsrVR_o0Mc0w5Kpn2_gMSBZeSZNg-eTA4eDPBdzg9guiHL104qpGYj3-PeTW8-xiW-9X6Uksc4rrPNDMaq9_6G3liwCAEhfLHo4Cyfpxatud6Dsp4-FWoO44Fi14lyJSyvD-wnFYpod_tQv87N9RUouokaxRSc4d7lL_802S5Kobo3CcZ8_qze5AwNhs0Pw59d1rJOTtSjaWbpfgenhGfC7ngeBiismohOzybJX664Jg_-K5GD958J1njiYx5TDLhcYZhx674V2tiJ89m_ZEoJfhTBIRfBhCf6GvawbkT_dQPv7GR2f-AnUZEEMhldwLAo0rbqtEYLAIUIR3h2jcxr3s9t3aDGXj9WSLVC8nk__V7CJDHThvDa4O3zCUmqlskP59xFcAMWAdUCGZMMNbaAJEW5ugrOguRAadGmUtDpaf8Q_Zn6hGy-0fJO5KF4dUc03Uy3ZzOczUFwHULbWuC1Cgel5iP-x6KSi3jgoQ4KWnNZLlB-KhFkFDBL-vHM3SaOPqlQm-xFKBpjrYN14a7bZngJzYm7MA2kGgIcbOWMpmbaPrNwLPnLis-6g7h2cadgzL3zW6dTuwk_KwqewgsthP9pGKaxG1Pde38zuJGPnt9LHB8SsiP1-WbVDYS-5h8OGN3njA-EJb0M5AhZxUbmLdzECpXERFeFdHwTml_i1beFzpAJH27AK4pRKkLPsbu9c4kJ3ns61dqZjHT8sImwQIkFG5L5TglGiA-2QjH-IfthAcO-z618ThwKAVa7zrRDV_PNHfTeYH8DpP-Pvr741l52.F0maCNoCSZFsnZGvxVglPA; __qca=P1-23f562b9-2a80-4a8f-9a69-cc0c7a50ccfc; panoramaId_expiry=1769494841219; panoramaId=7a25a1915267685c9b5d767b5ac7185ca02cf6a0e12b6fd4ece993cd2054c734; panoramaIdType=panoDevice
+Sec-Fetch-Dest: image
+Sec-Fetch-Mode: no-cors
+Sec-Fetch-Site: same-site
+Priority: u=5, i
+TE: trailers

@@ -1,0 +1,44 @@
+fetch
+
+{
+	"OPTIONS": {
+		"scheme": "https",
+		"host": "search-new.civitai.com",
+		"filename": "/multi-search",
+		"remote": {
+			"Address": "104.20.38.219:443"
+		}
+	}
+}
+
+HTTP/3 200 
+access-control-allow-credentials: true
+access-control-allow-headers: *,authorization,x-meilisearch-client,content-type,priority
+access-control-allow-methods: GET,POST,OPTIONS
+access-control-allow-origin: https://civitai.com
+access-control-max-age: 100
+content-length: 0
+date: Fri, 23 Jan 2026 07:26:51 GMT
+cf-cache-status: DYNAMIC
+server: cloudflare
+priority: u=4,i=?0
+cf-ray: 9c2590b1c9812774-PRG
+alt-svc: h3=":443"; ma=86400
+server-timing: cfExtPri
+
+OPTIONS /multi-search HTTP/3
+Host: search-new.civitai.com
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:148.0) Gecko/20100101 Firefox/148.0
+Accept: */*
+Accept-Language: cs,en-US;q=0.9,en;q=0.8
+Accept-Encoding: gzip, deflate, br, zstd
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization,content-type,x-meilisearch-client
+Referer: https://civitai.com/
+Origin: https://civitai.com
+Connection: keep-alive
+Sec-Fetch-Dest: empty
+Sec-Fetch-Mode: cors
+Sec-Fetch-Site: same-site
+Priority: u=4
+

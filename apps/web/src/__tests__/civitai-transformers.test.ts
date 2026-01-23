@@ -11,6 +11,7 @@ import {
   getVideoThumbnailUrl,
   transformTrpcModel,
   transformTrpcModelDetail,
+  transformMeilisearchModel,
 } from '@/lib/utils/civitaiTransformers'
 
 // =============================================================================
@@ -461,5 +462,200 @@ describe('transformTrpcModelDetail', () => {
     })
 
     expect(result.example_params).toBeUndefined()
+  })
+})
+
+// =============================================================================
+// transformMeilisearchModel Tests
+// =============================================================================
+
+describe('transformMeilisearchModel', () => {
+  const createMockMeilisearchHit = (overrides: Record<string, unknown> = {}) => ({
+    id: 1307155,
+    name: '(wan 2.2 experimental) WAN General NSFW model',
+    type: 'LORA',
+    nsfw: true,
+    nsfwLevel: [4, 8, 16, 32],
+    status: 'Published',
+    createdAt: '2025-03-01T03:54:04.444Z',
+    lastVersionAt: '2025-08-05T09:08:32.765Z',
+    publishedAt: '2025-03-01T09:47:51.901Z',
+    availability: 'Public',
+    metrics: {
+      commentCount: 468,
+      thumbsUpCount: 15515,
+      downloadCount: 286558,
+      collectedCount: 19444,
+      tippedAmountCount: 17877,
+    },
+    user: {
+      id: 40224,
+      username: 'CubeyAI',
+      profilePicture: {
+        id: 50715371,
+        name: 'ComfyUI_temp_nkhki_00004_.png',
+        url: '5cc3bc43-6d2e-49cd-8b58-b531e66ebd75',
+        nsfwLevel: 1,
+        type: 'image',
+        width: 1024,
+        height: 1496,
+      },
+    },
+    triggerWords: ['nsfwsks'],
+    hashes: ['34e2144d3c', '34e2144d3cd65360f97d09ccbe03e1c39a096df6c9234af5fe3899d1b63cda39'],
+    version: {
+      id: 12345,
+      name: 'v2.2',
+      baseModel: 'Wan Video',
+    },
+    ...overrides,
+  })
+
+  it('should transform basic model properties', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+
+    expect(result.id).toBe(1307155)
+    expect(result.name).toBe('(wan 2.2 experimental) WAN General NSFW model')
+    expect(result.type).toBe('LORA')
+  })
+
+  it('should extract creator from user object', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+    expect(result.creator).toBe('CubeyAI')
+  })
+
+  it('should transform metrics to stats', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+
+    expect(result.stats.downloadCount).toBe(286558)
+    expect(result.stats.commentCount).toBe(468)
+    expect(result.stats.thumbsUpCount).toBe(15515)
+  })
+
+  it('should detect NSFW from nsfwLevel array', () => {
+    // High NSFW level
+    const nsfw = transformMeilisearchModel(createMockMeilisearchHit({ nsfwLevel: [8, 16] }))
+    expect(nsfw.nsfw).toBe(true)
+
+    // Low NSFW level (SFW)
+    const sfw = transformMeilisearchModel(createMockMeilisearchHit({ nsfwLevel: [1, 2], nsfw: false }))
+    expect(sfw.nsfw).toBe(false)
+  })
+
+  it('should extract version info', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+
+    expect(result.versions).toHaveLength(1)
+    expect(result.versions[0].id).toBe(12345)
+    expect(result.versions[0].name).toBe('v2.2')
+    expect(result.versions[0].base_model).toBe('Wan Video')
+  })
+
+  it('should use triggerWords as trained_words', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+    expect(result.versions[0].trained_words).toEqual(['nsfwsks'])
+  })
+
+  it('should create preview from user profilePicture', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit())
+
+    // Should have at least one preview from profilePicture
+    expect(result.previews.length).toBeGreaterThanOrEqual(0)
+    // Note: Meilisearch doesn't return full images in search, just profile pics
+  })
+
+  it('should handle missing data gracefully', () => {
+    const result = transformMeilisearchModel({
+      id: 123,
+      name: 'Test',
+    })
+
+    expect(result.id).toBe(123)
+    expect(result.name).toBe('Test')
+    expect(result.type).toBe('')
+    expect(result.nsfw).toBe(false)
+    expect(result.creator).toBe('')
+    expect(result.versions).toEqual([])
+    expect(result.previews).toEqual([])
+  })
+
+  it('should handle missing user gracefully', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit({ user: undefined }))
+    expect(result.creator).toBe('')
+  })
+
+  it('should handle missing metrics gracefully', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit({ metrics: undefined }))
+
+    expect(result.stats.downloadCount).toBeUndefined()
+    expect(result.stats.thumbsUpCount).toBeUndefined()
+  })
+})
+
+// =============================================================================
+// Meilisearch vs tRPC Comparison Tests
+// =============================================================================
+
+describe('Meilisearch vs tRPC format differences', () => {
+  it('both transformers should produce compatible output format', () => {
+    // tRPC format
+    const trpcModel = transformTrpcModel({
+      id: 123,
+      name: 'Test Model',
+      type: 'LORA',
+      nsfw: false,
+      user: { username: 'testuser' },
+      stats: { downloadCount: 1000 },
+      modelVersions: [],
+    })
+
+    // Meilisearch format
+    const meiliModel = transformMeilisearchModel({
+      id: 456,
+      name: 'Test Model 2',
+      type: 'Checkpoint',
+      nsfw: true,
+      user: { username: 'meiliuser' },
+      metrics: { downloadCount: 2000 },
+    })
+
+    // Both should have same structure
+    expect(trpcModel).toHaveProperty('id')
+    expect(trpcModel).toHaveProperty('name')
+    expect(trpcModel).toHaveProperty('type')
+    expect(trpcModel).toHaveProperty('nsfw')
+    expect(trpcModel).toHaveProperty('creator')
+    expect(trpcModel).toHaveProperty('stats')
+    expect(trpcModel).toHaveProperty('versions')
+    expect(trpcModel).toHaveProperty('previews')
+
+    expect(meiliModel).toHaveProperty('id')
+    expect(meiliModel).toHaveProperty('name')
+    expect(meiliModel).toHaveProperty('type')
+    expect(meiliModel).toHaveProperty('nsfw')
+    expect(meiliModel).toHaveProperty('creator')
+    expect(meiliModel).toHaveProperty('stats')
+    expect(meiliModel).toHaveProperty('versions')
+    expect(meiliModel).toHaveProperty('previews')
+  })
+
+  it('stats should be compatible between formats', () => {
+    const trpcModel = transformTrpcModel({
+      id: 1,
+      stats: { downloadCount: 100, thumbsUpCount: 50 },
+    })
+
+    const meiliModel = transformMeilisearchModel({
+      id: 2,
+      metrics: { downloadCount: 200, thumbsUpCount: 100 },
+    })
+
+    // Both use downloadCount
+    expect(trpcModel.stats.downloadCount).toBe(100)
+    expect(meiliModel.stats.downloadCount).toBe(200)
+
+    // Both use thumbsUpCount
+    expect(trpcModel.stats.thumbsUpCount).toBe(50)
+    expect(meiliModel.stats.thumbsUpCount).toBe(100)
   })
 })

@@ -385,3 +385,144 @@ function extractExampleParams(
 
   return undefined
 }
+
+// =============================================================================
+// Meilisearch Model Transformer
+// =============================================================================
+
+/**
+ * Build Civitai image URL from Meilisearch profilePicture or image data.
+ * Meilisearch returns a different structure than tRPC.
+ */
+function buildMeilisearchImageUrl(
+  img: Record<string, unknown>,
+  width = 450
+): string {
+  const uuid = img.url as string
+  if (!uuid) return ''
+
+  // If it's already a full URL, return as-is
+  if (uuid.startsWith('http')) return uuid
+
+  // Civitai CDN base - path-based params!
+  const cdnBase = 'https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA'
+
+  // Meilisearch provides hash/type/name in the structure
+  const imgType = img.type as string | undefined
+  const isVideo = imgType === 'video'
+  const name = (img.name as string) || (isVideo ? 'video.mp4' : 'image.jpeg')
+
+  // Build params - Civitai uses comma-separated path params, NOT query strings
+  // Example: /uuid/width=450,optimized=true/filename.jpeg
+  const params = isVideo
+    ? `transcode=true,width=${width},optimized=true`
+    : `width=${width},optimized=true`
+
+  return `${cdnBase}/${uuid}/${params}/${name}`
+}
+
+/**
+ * Transform Meilisearch hit to ModelPreview.
+ */
+function transformMeilisearchPreview(
+  img: Record<string, unknown>
+): ModelPreview {
+  const imgType = img.type as string | undefined
+  const isVideo = imgType === 'video'
+
+  // Build full URL
+  const originalUrl = buildMeilisearchImageUrl(img)
+  const url = toProxyUrl(originalUrl)
+
+  // Media type
+  const mediaType: MediaType = isVideo ? 'video' : 'image'
+
+  // NSFW detection
+  const nsfwLevel = (img.nsfwLevel as number) || 1
+  const isNsfw = nsfwLevel >= 4 // Meilisearch: 1=None, 2=Soft, 4=Mature, 8=X, 16=Blocked
+
+  // Video thumbnail
+  const thumbnailUrl =
+    mediaType === 'video' ? toProxyUrl(getVideoThumbnailUrl(originalUrl)) : undefined
+
+  return {
+    url,
+    nsfw: isNsfw,
+    width: img.width as number | undefined,
+    height: img.height as number | undefined,
+    meta: img.metadata as Record<string, unknown> | undefined,
+    media_type: mediaType,
+    thumbnail_url: thumbnailUrl,
+  }
+}
+
+/**
+ * Transform Meilisearch hit to CivitaiModel.
+ *
+ * Meilisearch returns a flattened structure with different field names:
+ * - id, name, type, nsfw (same)
+ * - nsfwLevel: [1,2,4,8,16,32] array
+ * - metrics: { downloadCount, thumbsUpCount, ... }
+ * - user: { id, username, ... }
+ * - hashes, triggerWords, etc.
+ */
+export function transformMeilisearchModel(
+  item: Record<string, unknown>
+): CivitaiModel {
+  // User info
+  const user = item.user as Record<string, unknown> | undefined
+  const creatorName = (user?.username as string) || ''
+
+  // Stats/metrics
+  const metrics = item.metrics as Record<string, unknown> | undefined
+
+  // NSFW - Meilisearch returns array of levels
+  const nsfwLevels = (item.nsfwLevel as number[]) || []
+  const maxNsfwLevel = Math.max(...nsfwLevels, 1)
+  const isNsfw = maxNsfwLevel >= 4 // 4=Mature, 8=X, etc.
+
+  // Profile picture as preview (Meilisearch doesn't include full images in search)
+  // We need to construct previews from the user's profilePicture or version images
+  const previews: ModelPreview[] = []
+
+  // Try to get profile picture
+  const profilePic = user?.profilePicture as Record<string, unknown> | undefined
+  if (profilePic?.url) {
+    previews.push(transformMeilisearchPreview(profilePic))
+  }
+
+  // Version info (Meilisearch has flattened version data)
+  const version = item.version as Record<string, unknown> | undefined
+  const versions: ModelVersion[] = []
+
+  if (version) {
+    versions.push({
+      id: (version.id as number) || 0,
+      name: (version.name as string) || '',
+      base_model: version.baseModel as string | undefined,
+      trained_words: (item.triggerWords as string[]) || [],
+      files: [],
+      published_at: item.lastVersionAt as string | undefined,
+    })
+  }
+
+  return {
+    id: item.id as number,
+    name: (item.name as string) || '',
+    description: undefined, // Meilisearch doesn't include description in list
+    type: (item.type as string) || '',
+    nsfw: (item.nsfw as boolean) || isNsfw,
+    tags: [], // Tags are in facets, not individual items
+    creator: creatorName,
+    stats: {
+      downloadCount: metrics?.downloadCount as number | undefined,
+      favoriteCount: undefined,
+      commentCount: metrics?.commentCount as number | undefined,
+      ratingCount: undefined,
+      rating: undefined,
+      thumbsUpCount: metrics?.thumbsUpCount as number | undefined,
+    },
+    versions,
+    previews,
+  }
+}
