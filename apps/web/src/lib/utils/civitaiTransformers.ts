@@ -15,8 +15,40 @@ import type {
 import type { MediaType } from '@/lib/media'
 
 // =============================================================================
+// Image Proxy (for Civitai CDN URLs)
+// =============================================================================
+
+/**
+ * Convert a Civitai CDN URL to use our image proxy.
+ * This avoids CORS issues and potential blocking.
+ */
+export function toProxyUrl(url: string): string {
+  if (!url) return url
+
+  // Only proxy Civitai CDN URLs
+  if (
+    !url.includes('image.civitai.com') &&
+    !url.includes('images.civitai.com') &&
+    !url.includes('cdn.civitai.com')
+  ) {
+    return url
+  }
+
+  return `/api/browse/image-proxy?url=${encodeURIComponent(url)}`
+}
+
+// =============================================================================
 // Media Detection (MUST match backend!)
 // =============================================================================
+
+/**
+ * Check if filename indicates a video file.
+ * tRPC API returns filename in the `name` field (e.g., "video.mp4", "image.jpeg")
+ */
+function isVideoFilename(filename: string | null): boolean {
+  if (!filename) return false
+  return /\.(mp4|webm|mov|avi|mkv)$/i.test(filename)
+}
 
 /**
  * Detect media type from URL.
@@ -113,18 +145,20 @@ export function transformTrpcModel(item: Record<string, unknown>): CivitaiModel 
   // tRPC model.getAll returns images at TOP LEVEL, not in modelVersions!
   // Try multiple locations for images:
   // 1. item.images (tRPC list response)
-  // 2. item.modelVersions[0].images (full model response)
+  // 2. item.modelVersions[].images (full model response - ALL versions!)
   let images: Record<string, unknown>[] = []
 
   // Check top-level images first (tRPC list format)
   if (Array.isArray(item.images) && item.images.length > 0) {
     images = item.images as Record<string, unknown>[]
   }
-  // Fallback to modelVersions (full model format)
+  // Fallback to modelVersions (full model format) - collect from ALL versions
   else if (item.modelVersions) {
-    const firstVersion = (item.modelVersions as Record<string, unknown>[])?.[0]
-    if (firstVersion?.images) {
-      images = firstVersion.images as Record<string, unknown>[]
+    const allVersions = item.modelVersions as Record<string, unknown>[]
+    for (const version of allVersions) {
+      if (version?.images && Array.isArray(version.images)) {
+        images.push(...(version.images as Record<string, unknown>[]))
+      }
     }
   }
 
@@ -204,13 +238,18 @@ function transformPreview(img: Record<string, unknown>): ModelPreview {
 
   // Determine if video:
   // 1. tRPC provides explicit type field
-  // 2. Fallback to URL-based detection (for REST/other formats)
+  // 2. Filename extension (e.g., "video.mp4") - critical for tRPC UUID responses!
+  // 3. Fallback to URL-based detection (for REST/other formats)
   const isVideoByType = imgType === 'video'
+  const isVideoByFilename = isVideoFilename(filename)
   const isVideoByUrl = rawUrl.startsWith('http') && detectMediaType(rawUrl) === 'video'
-  const isVideo = isVideoByType || isVideoByUrl
+  const isVideo = isVideoByType || isVideoByFilename || isVideoByUrl
 
   // Build full URL from UUID if needed
-  const url = buildCivitaiImageUrl(rawUrl, filename, isVideo)
+  const originalUrl = buildCivitaiImageUrl(rawUrl, filename, isVideo)
+
+  // CRITICAL: Proxy Civitai URLs to avoid CORS/blocking
+  const url = toProxyUrl(originalUrl)
 
   // Determine media type
   const mediaType: MediaType = isVideo ? 'video' : 'image'
@@ -219,6 +258,10 @@ function transformPreview(img: Record<string, unknown>): ModelPreview {
   const nsfwLevel = (img.nsfwLevel as number) || 0
   const isNsfw = (img.nsfw as boolean) === true || nsfwLevel >= 2
 
+  // CRITICAL: Video thumbnail - also needs proxy
+  const thumbnailUrl =
+    mediaType === 'video' ? toProxyUrl(getVideoThumbnailUrl(originalUrl)) : undefined
+
   return {
     url,
     nsfw: isNsfw,
@@ -226,8 +269,7 @@ function transformPreview(img: Record<string, unknown>): ModelPreview {
     height: img.height as number | undefined,
     meta: img.meta as Record<string, unknown> | undefined,
     media_type: mediaType,
-    // CRITICAL: Video thumbnail
-    thumbnail_url: mediaType === 'video' ? getVideoThumbnailUrl(url) : undefined,
+    thumbnail_url: thumbnailUrl,
   }
 }
 
@@ -284,16 +326,31 @@ function transformFile(f: Record<string, unknown>): ModelFile {
 
 /**
  * Transform tRPC model detail response to ModelDetail.
+ * Collects up to 50 previews from ALL versions (more than base transformer).
  */
 export function transformTrpcModelDetail(
   data: Record<string, unknown>
 ): ModelDetail {
   const base = transformTrpcModel(data)
-  const firstVersion = (data.modelVersions as Record<string, unknown>[] | undefined)?.[0]
+  const allVersions = (data.modelVersions as Record<string, unknown>[] | undefined) || []
+  const firstVersion = allVersions[0]
   const stats = data.stats as Record<string, unknown> | undefined
+
+  // Collect ALL images from ALL versions (up to 50)
+  // Note: Images are injected from posts[] by trpcBridgeAdapter before calling this
+  const allImages: Record<string, unknown>[] = []
+  for (const version of allVersions) {
+    if (version?.images && Array.isArray(version.images)) {
+      allImages.push(...(version.images as Record<string, unknown>[]))
+    }
+  }
+
+  // Transform to previews with proxy URLs (up to 50 for model detail)
+  const previews = allImages.slice(0, 50).map(transformPreview)
 
   return {
     ...base,
+    previews, // Override base previews with full collection
     trained_words: (firstVersion?.trainedWords as string[]) || [],
     base_model: firstVersion?.baseModel as string | undefined,
     download_count: stats?.downloadCount as number | undefined,

@@ -3,6 +3,9 @@
  *
  * Uses the existing backend /api/browse endpoints.
  * Always available, stable and reliable.
+ *
+ * NOTE: No image proxy needed - browser loads Civitai CDN directly via <img>/<video> tags.
+ * This is faster than proxying through our backend.
  */
 
 import type {
@@ -62,6 +65,7 @@ export class RestSearchAdapter implements SearchAdapter {
       throw new Error('Failed to fetch model')
     }
 
+    // No proxy needed - browser loads Civitai URLs directly
     return res.json()
   }
 }

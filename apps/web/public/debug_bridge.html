@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Bridge Debugger v2</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-color: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #8b5cf6;
+            --error-color: #ef4444;
+            --success-color: #22c55e;
+            --border-color: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--accent-color);
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            background-color: #4b5563;
+        }
+
+        .status-connected {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .status-disconnected {
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        .panel {
+            background-color: var(--card-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input,
+        button,
+        select,
+        label {
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background-color: #2d2d2d;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: var(--accent-color);
+            border: none;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .image-card {
+            background-color: #2d2d2d;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .image-card img,
+        .image-card video {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .image-info {
+            padding: 10px;
+            font-size: 0.8rem;
+            color: #aaa;
+            word-break: break-all;
+        }
+
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        pre {
+            background-color: #000;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 400px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        .log-error {
+            color: var(--error-color);
+        }
+
+        .log-success {
+            color: var(--success-color);
+        }
+
+        .log-info {
+            color: #60a5fa;
+        }
+
+        .log-warn {
+            color: #f59e0b;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Synapse Bridge Debugger v2</h1>
+            <div id="bridgeStatus" class="status-badge status-disconnected">Bridge Not Found</div>
+        </header>
+
+        <div class="panel">
+            <h3>1. Configuration</h3>
+            <div class="controls">
+                <label style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="chkUseProxy" checked>
+                    Use Backend Image Proxy (/api/browse/image-proxy)
+                </label>
+            </div>
+            <p style="font-size: 0.8rem; color: #888;">If unchecked, tries to load from image.civitai.com directly
+                (testing CORS).</p>
+        </div>
+
+        <div class="panel">
+            <h3>2. Fetch Requests</h3>
+
+            <div class="controls">
+                <input type="text" id="modelIdInput" placeholder="Model ID (e.g., 296313)" value="296313">
+                <button id="btnGetImages">Get Images (Infinite)</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3>Results</h3>
+            <div id="gallery" class="gallery"></div>
+        </div>
+
+        <div class="panel">
+            <h3>Console Logs</h3>
+            <div id="consoleLogs"></div>
+        </div>
+    </div>
+
+    <script>
+        // Utils
+        const log = (msg, type = 'info') => {
+            const el = document.getElementById('consoleLogs');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            el.prepend(entry);
+        };
+
+        const clearGallery = () => document.getElementById('gallery').innerHTML = '';
+
+        // URL Construction Logic (from civitaiTransformers.ts)
+        function buildCivitaiImageUrl(uuid, filename, isVideo = false, width = 450) {
+            if (!uuid) return '';
+            if (uuid.startsWith('http')) return uuid;
+
+            const cdnBase = 'https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA';
+            let name = filename || (isVideo ? 'video.mp4' : 'image.jpeg');
+
+            if (isVideo && !name.toLowerCase().endsWith('.mp4')) {
+                name = name.replace(/\.[^.]+$/, '.mp4');
+            }
+
+            const params = isVideo ? `transcode=true,width=${width}` : `width=${width}`;
+            return `${cdnBase}/${uuid}/${params}/${name}`;
+        }
+
+        function toProxyUrl(url) {
+            if (!url) return url;
+            return `/api/browse/image-proxy?url=${encodeURIComponent(url)}`;
+        }
+
+        // Media Types logic
+        function detectMediaType(url) {
+            if (!url) return 'unknown';
+            const lowerUrl = url.toLowerCase();
+            if (lowerUrl.match(/\.(mp4|webm|mov|avi|mkv)(\?|$)/)) return 'video';
+            if (lowerUrl.includes('transcode=true') && !lowerUrl.includes('anim=false')) return 'video';
+            if (lowerUrl.includes('type=video')) return 'video';
+            return 'image';
+        }
+
+        const addMediaToGallery = (item) => {
+            const gallery = document.getElementById('gallery');
+            const card = document.createElement('div');
+            card.className = 'image-card';
+
+            const rawUrl = item.url;
+            const filename = item.name;
+            // Basic detection
+            const isVideoByType = item.type === 'video';
+            // We don't have isVideoByUrl yet because rawUrl is just UUID usually
+            const isVideo = isVideoByType; // simplified for UUIDs
+
+            // 1. Build Full URL
+            const fullUrl = buildCivitaiImageUrl(rawUrl, filename, isVideo, 450);
+
+            // 2. Proxy Check
+            const useProxy = document.getElementById('chkUseProxy').checked;
+            const finalUrl = useProxy ? toProxyUrl(fullUrl) : fullUrl;
+
+            log(`Loading: ${finalUrl} (Original: ${rawUrl})`, 'info');
+
+            let mediaEl;
+            if (isVideo) {
+                mediaEl = document.createElement('video');
+                mediaEl.src = finalUrl;
+                mediaEl.controls = true;
+                mediaEl.muted = true;
+                mediaEl.loop = true;
+                // Attempt autoplay
+                mediaEl.onloadeddata = () => mediaEl.play().catch(e => log(`Autoplay failed: ${e.message}`, 'warn'));
+            } else {
+                mediaEl = document.createElement('img');
+                mediaEl.src = finalUrl;
+            }
+
+            mediaEl.onerror = () => {
+                log(`Failed to load media: ${finalUrl}`, 'error');
+                card.style.border = '1px solid red';
+                if (useProxy) {
+                    // Try to fetch the error text from proxy
+                    fetch(finalUrl).then(r => {
+                        if (!r.ok) log(`Proxy Error ${r.status}: ${r.statusText}`, 'error');
+                    });
+                }
+            };
+
+            mediaEl.onload = () => {
+                log(`Successfully loaded: ${finalUrl}`, 'success');
+                card.style.border = '1px solid green';
+            };
+
+            mediaEl.onloadeddata = () => { // for video
+                log(`Successfully loaded video: ${finalUrl}`, 'success');
+                card.style.border = '1px solid green';
+            }
+
+            card.appendChild(mediaEl);
+
+            const info = document.createElement('div');
+            info.className = 'image-info';
+            info.innerHTML = `ID: ${item.id}<br>Type: ${isVideo ? 'Video' : 'Image'}<br>Proxy: ${useProxy}`;
+            card.appendChild(info);
+
+            gallery.appendChild(card);
+        };
+
+        // Bridge
+        let bridge = null;
+
+        const checkBridge = () => {
+            bridge = window.SynapseSearchBridge;
+            const statusEl = document.getElementById('bridgeStatus');
+
+            if (bridge && bridge.isEnabled()) {
+                statusEl.textContent = `Connected (v${bridge.version})`;
+                statusEl.className = 'status-badge status-connected';
+                document.querySelectorAll('button').forEach(b => b.disabled = false);
+            } else {
+                statusEl.textContent = 'Bridge Not Found';
+                statusEl.className = 'status-badge status-disconnected';
+                document.querySelectorAll('button').forEach(b => b.disabled = true);
+            }
+        };
+
+        // Listeners
+        document.getElementById('btnGetImages').addEventListener('click', async () => {
+            if (!bridge) return;
+            const id = parseInt(document.getElementById('modelIdInput').value);
+            log(`Fetching Images for Model ID: ${id}...`);
+            clearGallery();
+
+            try {
+                if (!bridge.getModelImages) {
+                    log('bridge.getModelImages missing!', 'error');
+                    return;
+                }
+
+                const res = await bridge.getModelImages(id, { limit: 10 });
+
+                if (res.ok && res.data?.items) {
+                    log(`Found ${res.data.items.length} items.`, 'success');
+                    res.data.items.forEach(item => addMediaToGallery(item));
+                } else {
+                    log(`Failed: ${res.error?.message}`, 'error');
+                }
+            } catch (e) {
+                log(`Error: ${e.message}`, 'error');
+            }
+        });
+
+        window.addEventListener('synapse-bridge-ready', checkBridge);
+        setTimeout(checkBridge, 500);
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse - Premium Loading Animations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'synapse': '#8B5CF6',
+                        'synapse-light': '#A78BFA',
+                        'pulse': '#EC4899',
+                        'cyber': '#06B6D4',
+                        'neon': '#22D3EE',
+                        'slate-dark': '#1E293B',
+                        'slate-darker': '#0F172A',
+                        'slate-darkest': '#020617',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { -webkit-font-smoothing: antialiased; }
+
+        body {
+            background: linear-gradient(145deg, #020617 0%, #0F172A 50%, #1E293B 100%);
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: #F8FAFC;
+        }
+
+        /* ================================================ */
+        /* 1. NEURAL PULSE - Mozek/síť efekt */
+        /* ================================================ */
+        .neural-pulse {
+            position: relative;
+            width: 120px;
+            height: 120px;
+        }
+
+        .neural-pulse .core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            border-radius: 50%;
+            box-shadow:
+                0 0 30px rgba(139, 92, 246, 0.6),
+                0 0 60px rgba(139, 92, 246, 0.3);
+            animation: core-pulse 2s ease-in-out infinite;
+        }
+
+        .neural-pulse .ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 2px solid rgba(139, 92, 246, 0.3);
+            border-radius: 50%;
+            animation: ring-expand 2s ease-out infinite;
+        }
+
+        .neural-pulse .ring:nth-child(2) { animation-delay: 0.4s; }
+        .neural-pulse .ring:nth-child(3) { animation-delay: 0.8s; }
+        .neural-pulse .ring:nth-child(4) { animation-delay: 1.2s; }
+
+        @keyframes core-pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+        }
+
+        @keyframes ring-expand {
+            0% { width: 20px; height: 20px; opacity: 1; border-color: rgba(139, 92, 246, 0.8); }
+            100% { width: 100px; height: 100px; opacity: 0; border-color: rgba(139, 92, 246, 0); }
+        }
+
+        /* ================================================ */
+        /* 2. DNA HELIX - Spirála */
+        /* ================================================ */
+        .dna-helix {
+            position: relative;
+            width: 60px;
+            height: 100px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .dna-strand {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .dna-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: dna-wave 1.5s ease-in-out infinite;
+        }
+
+        .dna-strand:first-child .dna-dot {
+            background: linear-gradient(135deg, #8B5CF6, #A78BFA);
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        }
+
+        .dna-strand:last-child .dna-dot {
+            background: linear-gradient(135deg, #EC4899, #F472B6);
+            box-shadow: 0 0 10px rgba(236, 72, 153, 0.5);
+            animation-direction: reverse;
+        }
+
+        .dna-dot:nth-child(1) { animation-delay: 0s; }
+        .dna-dot:nth-child(2) { animation-delay: 0.1s; }
+        .dna-dot:nth-child(3) { animation-delay: 0.2s; }
+        .dna-dot:nth-child(4) { animation-delay: 0.3s; }
+        .dna-dot:nth-child(5) { animation-delay: 0.4s; }
+        .dna-dot:nth-child(6) { animation-delay: 0.5s; }
+
+        @keyframes dna-wave {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(20px); }
+        }
+
+        /* ================================================ */
+        /* 3. QUANTUM ORBIT - Orbitální částice */
+        /* ================================================ */
+        .quantum-orbit {
+            position: relative;
+            width: 100px;
+            height: 100px;
+        }
+
+        .quantum-orbit .nucleus {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
+        }
+
+        .quantum-orbit .orbit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 50%;
+            animation: orbit-rotate 3s linear infinite;
+        }
+
+        .quantum-orbit .orbit:nth-child(2) {
+            width: 50px;
+            height: 50px;
+            margin: -25px 0 0 -25px;
+        }
+
+        .quantum-orbit .orbit:nth-child(3) {
+            width: 80px;
+            height: 80px;
+            margin: -40px 0 0 -40px;
+            animation-direction: reverse;
+            animation-duration: 4s;
+        }
+
+        .quantum-orbit .electron {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: #06B6D4;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #06B6D4;
+            top: -4px;
+            left: 50%;
+            margin-left: -4px;
+        }
+
+        @keyframes orbit-rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* ================================================ */
+        /* 4. MORPHING CUBE - 3D kostka */
+        /* ================================================ */
+        .morphing-cube {
+            width: 60px;
+            height: 60px;
+            perspective: 200px;
+        }
+
+        .morphing-cube .cube {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: cube-rotate 4s ease-in-out infinite;
+        }
+
+        .morphing-cube .face {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border: 2px solid rgba(139, 92, 246, 0.4);
+            background: rgba(139, 92, 246, 0.1);
+            backdrop-filter: blur(4px);
+        }
+
+        .morphing-cube .front { transform: translateZ(30px); }
+        .morphing-cube .back { transform: rotateY(180deg) translateZ(30px); }
+        .morphing-cube .right { transform: rotateY(90deg) translateZ(30px); }
+        .morphing-cube .left { transform: rotateY(-90deg) translateZ(30px); }
+        .morphing-cube .top { transform: rotateX(90deg) translateZ(30px); }
+        .morphing-cube .bottom { transform: rotateX(-90deg) translateZ(30px); }
+
+        @keyframes cube-rotate {
+            0% { transform: rotateX(0deg) rotateY(0deg); }
+            25% { transform: rotateX(90deg) rotateY(90deg); }
+            50% { transform: rotateX(180deg) rotateY(180deg); }
+            75% { transform: rotateX(270deg) rotateY(270deg); }
+            100% { transform: rotateX(360deg) rotateY(360deg); }
+        }
+
+        /* ================================================ */
+        /* 5. SYNAPSE FLOW - Proudění dat */
+        /* ================================================ */
+        .synapse-flow {
+            position: relative;
+            width: 200px;
+            height: 60px;
+            overflow: hidden;
+        }
+
+        .synapse-flow .track {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: rgba(139, 92, 246, 0.2);
+            transform: translateY(-50%);
+        }
+
+        .synapse-flow .particle {
+            position: absolute;
+            width: 30px;
+            height: 6px;
+            background: linear-gradient(90deg, transparent, #8B5CF6, #EC4899, transparent);
+            border-radius: 3px;
+            top: 50%;
+            transform: translateY(-50%);
+            animation: flow-particle 1.5s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+        }
+
+        .synapse-flow .particle:nth-child(2) { animation-delay: 0.3s; top: 30%; }
+        .synapse-flow .particle:nth-child(3) { animation-delay: 0.6s; top: 70%; }
+        .synapse-flow .particle:nth-child(4) { animation-delay: 0.9s; }
+
+        @keyframes flow-particle {
+            0% { left: -30px; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+
+        /* ================================================ */
+        /* 6. INFINITY LOOP - Nekonečno */
+        /* ================================================ */
+        .infinity-loop {
+            width: 100px;
+            height: 50px;
+            position: relative;
+        }
+
+        .infinity-loop svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .infinity-loop .path {
+            fill: none;
+            stroke: url(#infinity-gradient);
+            stroke-width: 3;
+            stroke-linecap: round;
+            stroke-dasharray: 200;
+            stroke-dashoffset: 200;
+            animation: infinity-draw 2s ease-in-out infinite;
+            filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.5));
+        }
+
+        @keyframes infinity-draw {
+            0%, 100% { stroke-dashoffset: 200; }
+            50% { stroke-dashoffset: 0; }
+        }
+
+        /* ================================================ */
+        /* 7. GLITCH LOADER - Cyberpunk efekt */
+        /* ================================================ */
+        .glitch-loader {
+            position: relative;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            color: #8B5CF6;
+            text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+        }
+
+        .glitch-loader::before,
+        .glitch-loader::after {
+            content: 'LOADING';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .glitch-loader::before {
+            color: #EC4899;
+            animation: glitch-1 0.3s infinite;
+            clip-path: polygon(0 0, 100% 0, 100% 45%, 0 45%);
+        }
+
+        .glitch-loader::after {
+            color: #06B6D4;
+            animation: glitch-2 0.3s infinite;
+            clip-path: polygon(0 55%, 100% 55%, 100% 100%, 0 100%);
+        }
+
+        @keyframes glitch-1 {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(-3px, 3px); }
+            40% { transform: translate(3px, -3px); }
+            60% { transform: translate(-3px, -3px); }
+            80% { transform: translate(3px, 3px); }
+        }
+
+        @keyframes glitch-2 {
+            0%, 100% { transform: translate(0); }
+            20% { transform: translate(3px, -3px); }
+            40% { transform: translate(-3px, 3px); }
+            60% { transform: translate(3px, 3px); }
+            80% { transform: translate(-3px, -3px); }
+        }
+
+        /* ================================================ */
+        /* 8. WAVE BARS - Audio vlny */
+        /* ================================================ */
+        .wave-bars {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 50px;
+        }
+
+        .wave-bars .bar {
+            width: 6px;
+            background: linear-gradient(180deg, #8B5CF6, #EC4899);
+            border-radius: 3px;
+            animation: wave-bar 1s ease-in-out infinite;
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+        }
+
+        .wave-bars .bar:nth-child(1) { animation-delay: 0s; }
+        .wave-bars .bar:nth-child(2) { animation-delay: 0.1s; }
+        .wave-bars .bar:nth-child(3) { animation-delay: 0.2s; }
+        .wave-bars .bar:nth-child(4) { animation-delay: 0.3s; }
+        .wave-bars .bar:nth-child(5) { animation-delay: 0.4s; }
+        .wave-bars .bar:nth-child(6) { animation-delay: 0.5s; }
+        .wave-bars .bar:nth-child(7) { animation-delay: 0.6s; }
+
+        @keyframes wave-bar {
+            0%, 100% { height: 10px; }
+            50% { height: 40px; }
+        }
+
+        /* ================================================ */
+        /* 9. HEXAGON SPIN - Hexagonální rotace */
+        /* ================================================ */
+        .hexagon-spin {
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+
+        .hexagon-spin .hex {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            margin: -30px 0 0 -30px;
+            animation: hex-rotate 3s linear infinite;
+        }
+
+        .hexagon-spin .hex svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .hexagon-spin .hex:nth-child(2) {
+            animation-delay: -1s;
+            opacity: 0.6;
+            transform: scale(0.7);
+        }
+
+        .hexagon-spin .hex:nth-child(3) {
+            animation-delay: -2s;
+            opacity: 0.3;
+            transform: scale(0.4);
+        }
+
+        @keyframes hex-rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* ================================================ */
+        /* 10. BREATHING ORB - Dýchající koule (DOPORUČENO) */
+        /* ================================================ */
+        .breathing-orb {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .breathing-orb .orb {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #06B6D4 100%);
+            border-radius: 50%;
+            animation: orb-breathe 2s ease-in-out infinite;
+            box-shadow:
+                0 0 30px rgba(139, 92, 246, 0.4),
+                0 0 60px rgba(236, 72, 153, 0.2),
+                inset 0 0 20px rgba(255, 255, 255, 0.2);
+        }
+
+        .breathing-orb .glow {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+            animation: glow-breathe 2s ease-in-out infinite;
+        }
+
+        .breathing-orb .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .breathing-orb .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #A78BFA;
+            border-radius: 50%;
+            animation: particle-float 3s ease-in-out infinite;
+        }
+
+        .breathing-orb .particle:nth-child(1) { top: 10%; left: 50%; animation-delay: 0s; }
+        .breathing-orb .particle:nth-child(2) { top: 30%; left: 85%; animation-delay: 0.5s; }
+        .breathing-orb .particle:nth-child(3) { top: 70%; left: 90%; animation-delay: 1s; }
+        .breathing-orb .particle:nth-child(4) { top: 90%; left: 50%; animation-delay: 1.5s; }
+        .breathing-orb .particle:nth-child(5) { top: 70%; left: 10%; animation-delay: 2s; }
+        .breathing-orb .particle:nth-child(6) { top: 30%; left: 15%; animation-delay: 2.5s; }
+
+        @keyframes orb-breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+        }
+
+        @keyframes glow-breathe {
+            0%, 100% { transform: scale(1); opacity: 0.5; }
+            50% { transform: scale(1.3); opacity: 0.8; }
+        }
+
+        @keyframes particle-float {
+            0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
+            50% { transform: translateY(-10px) scale(1.5); opacity: 1; }
+        }
+
+        /* ================================================ */
+        /* CARD STYLES */
+        /* ================================================ */
+        .loader-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 20px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .loader-card:hover {
+            border-color: rgba(139, 92, 246, 0.5);
+            box-shadow: 0 0 40px rgba(139, 92, 246, 0.2);
+            transform: translateY(-4px);
+        }
+
+        .loader-card.recommended {
+            border-color: rgba(139, 92, 246, 0.5);
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(236, 72, 153, 0.1));
+        }
+
+        .loader-card.recommended::before {
+            content: 'RECOMMENDED';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 16px;
+            background: linear-gradient(135deg, #8B5CF6, #EC4899);
+            border-radius: 20px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .badge {
+            padding: 4px 12px;
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+            font-size: 12px;
+            color: #A78BFA;
+        }
+    </style>
+</head>
+<body>
+    <div class="max-w-6xl mx-auto p-8">
+
+        <!-- Header -->
+        <header class="text-center py-12 space-y-4">
+            <div class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-synapse/20 to-pulse/20 border border-synapse/30 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-synapse animate-pulse"></span>
+                <span class="text-synapse font-medium">Premium Loading Animations</span>
+            </div>
+            <h1 class="text-5xl font-bold bg-gradient-to-r from-synapse via-pulse to-cyber bg-clip-text text-transparent">
+                Synapse Loaders
+            </h1>
+            <p class="text-slate-400 text-lg max-w-2xl mx-auto">
+                Vyber si loading animaci pro BrowsePage. Každá je unikátní a moderní.
+            </p>
+        </header>
+
+        <!-- SVG Definitions -->
+        <svg width="0" height="0">
+            <defs>
+                <linearGradient id="infinity-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stop-color="#8B5CF6" />
+                    <stop offset="50%" stop-color="#EC4899" />
+                    <stop offset="100%" stop-color="#06B6D4" />
+                </linearGradient>
+                <linearGradient id="hex-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#8B5CF6" />
+                    <stop offset="100%" stop-color="#EC4899" />
+                </linearGradient>
+            </defs>
+        </svg>
+
+        <!-- Loaders Grid -->
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8 py-8">
+
+            <!-- 1. Neural Pulse -->
+            <div class="loader-card">
+                <div class="neural-pulse">
+                    <div class="ring"></div>
+                    <div class="ring"></div>
+                    <div class="ring"></div>
+                    <div class="ring"></div>
+                    <div class="core"></div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Neural Pulse</h3>
+                <p class="text-slate-400 text-sm text-center">Mozek/síť efekt - pulzující vlny</p>
+                <span class="badge">Elegant</span>
+            </div>
+
+            <!-- 2. DNA Helix -->
+            <div class="loader-card">
+                <div class="dna-helix">
+                    <div class="dna-strand">
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                    </div>
+                    <div class="dna-strand">
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                        <div class="dna-dot"></div>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">DNA Helix</h3>
+                <p class="text-slate-400 text-sm text-center">Spirálová struktura - sci-fi</p>
+                <span class="badge">Creative</span>
+            </div>
+
+            <!-- 3. Quantum Orbit -->
+            <div class="loader-card">
+                <div class="quantum-orbit">
+                    <div class="nucleus"></div>
+                    <div class="orbit">
+                        <div class="electron"></div>
+                    </div>
+                    <div class="orbit">
+                        <div class="electron"></div>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Quantum Orbit</h3>
+                <p class="text-slate-400 text-sm text-center">Atomová struktura - elektrony</p>
+                <span class="badge">Scientific</span>
+            </div>
+
+            <!-- 4. Morphing Cube -->
+            <div class="loader-card">
+                <div class="morphing-cube">
+                    <div class="cube">
+                        <div class="face front"></div>
+                        <div class="face back"></div>
+                        <div class="face right"></div>
+                        <div class="face left"></div>
+                        <div class="face top"></div>
+                        <div class="face bottom"></div>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Morphing Cube</h3>
+                <p class="text-slate-400 text-sm text-center">3D rotující kostka - futuristické</p>
+                <span class="badge">3D</span>
+            </div>
+
+            <!-- 5. Synapse Flow -->
+            <div class="loader-card">
+                <div class="synapse-flow">
+                    <div class="track"></div>
+                    <div class="track" style="top: 30%;"></div>
+                    <div class="track" style="top: 70%;"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                    <div class="particle"></div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Synapse Flow</h3>
+                <p class="text-slate-400 text-sm text-center">Proudění dat - neuronová síť</p>
+                <span class="badge">Data</span>
+            </div>
+
+            <!-- 6. Infinity Loop -->
+            <div class="loader-card">
+                <div class="infinity-loop">
+                    <svg viewBox="0 0 100 50">
+                        <path class="path" d="M 25 25 C 25 10, 40 10, 50 25 C 60 40, 75 40, 75 25 C 75 10, 60 10, 50 25 C 40 40, 25 40, 25 25" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Infinity Loop</h3>
+                <p class="text-slate-400 text-sm text-center">Symbol nekonečna - elegantní</p>
+                <span class="badge">Minimal</span>
+            </div>
+
+            <!-- 7. Glitch Loader -->
+            <div class="loader-card">
+                <div class="glitch-loader">LOADING</div>
+                <h3 class="text-lg font-semibold text-white">Glitch Text</h3>
+                <p class="text-slate-400 text-sm text-center">Cyberpunk glitch efekt</p>
+                <span class="badge">Cyberpunk</span>
+            </div>
+
+            <!-- 8. Wave Bars -->
+            <div class="loader-card">
+                <div class="wave-bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Wave Bars</h3>
+                <p class="text-slate-400 text-sm text-center">Audio vlny - dynamické</p>
+                <span class="badge">Dynamic</span>
+            </div>
+
+            <!-- 9. Hexagon Spin -->
+            <div class="loader-card">
+                <div class="hexagon-spin">
+                    <div class="hex">
+                        <svg viewBox="0 0 100 100">
+                            <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
+                                     fill="none"
+                                     stroke="url(#hex-gradient)"
+                                     stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <div class="hex">
+                        <svg viewBox="0 0 100 100">
+                            <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
+                                     fill="none"
+                                     stroke="url(#hex-gradient)"
+                                     stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <div class="hex">
+                        <svg viewBox="0 0 100 100">
+                            <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5"
+                                     fill="none"
+                                     stroke="url(#hex-gradient)"
+                                     stroke-width="2"/>
+                        </svg>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Hexagon Spin</h3>
+                <p class="text-slate-400 text-sm text-center">Rotující hexagony - tech</p>
+                <span class="badge">Tech</span>
+            </div>
+
+            <!-- 10. Breathing Orb (RECOMMENDED) -->
+            <div class="loader-card recommended relative">
+                <div class="breathing-orb">
+                    <div class="glow"></div>
+                    <div class="orb"></div>
+                    <div class="particles">
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                        <div class="particle"></div>
+                    </div>
+                </div>
+                <h3 class="text-lg font-semibold text-white">Breathing Orb</h3>
+                <p class="text-slate-400 text-sm text-center">Dýchající koule s částicemi - prémiový</p>
+                <span class="badge" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(236, 72, 153, 0.3)); border-color: rgba(139, 92, 246, 0.5);">Premium</span>
+            </div>
+
+        </div>
+
+        <!-- Full Page Demo Section -->
+        <section class="py-16 space-y-8">
+            <h2 class="text-3xl font-bold text-center bg-gradient-to-r from-synapse to-pulse bg-clip-text text-transparent">
+                Full Page Loading Demo
+            </h2>
+
+            <div class="relative rounded-2xl overflow-hidden border border-slate-700" style="height: 400px; background: linear-gradient(145deg, #020617, #0F172A);">
+                <!-- Simulated full page loader -->
+                <div class="absolute inset-0 flex flex-col items-center justify-center gap-6">
+                    <div class="breathing-orb" style="transform: scale(1.5);">
+                        <div class="glow"></div>
+                        <div class="orb"></div>
+                        <div class="particles">
+                            <div class="particle"></div>
+                            <div class="particle"></div>
+                            <div class="particle"></div>
+                            <div class="particle"></div>
+                            <div class="particle"></div>
+                            <div class="particle"></div>
+                        </div>
+                    </div>
+                    <div class="text-center space-y-2">
+                        <p class="text-white font-medium text-lg">Searching models...</p>
+                        <p class="text-slate-400 text-sm">Connecting to Civitai tRPC</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center py-12">
+            <p class="text-slate-500">Synapse 2026 - Premium Loading Animations</p>
+        </footer>
+
+    </div>
+</body>
+</html>

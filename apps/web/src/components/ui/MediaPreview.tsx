@@ -438,7 +438,7 @@ export function MediaPreview({
 
       {/* Loading placeholder - Shown when image loading or video fallback loading */}
       {(!imageLoaded && !imageError && !forceVideoDisplay) || (forceVideoDisplay && !videoLoaded) ? (
-        <div className="absolute inset-0 bg-slate-700 animate-pulse" />
+        <div className="absolute inset-0 bg-slate-700" />
       ) : null}
 
       {/* Error state */}

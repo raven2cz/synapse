@@ -13,10 +13,7 @@ import type {
   SearchResult,
   ModelDetail,
 } from '../searchTypes'
-import {
-  transformTrpcModel,
-  transformTrpcModelDetail,
-} from '@/lib/utils/civitaiTransformers'
+import { transformTrpcModel } from '@/lib/utils/civitaiTransformers'
 
 // =============================================================================
 // Bridge Type Declaration
@@ -35,15 +32,6 @@ interface BridgeSearchResult {
   meta?: {
     durationMs: number
     cached: boolean
-  }
-}
-
-interface BridgeModelResult {
-  ok: boolean
-  data?: Record<string, unknown>
-  error?: {
-    code: string
-    message: string
   }
 }
 
@@ -66,10 +54,6 @@ interface SynapseSearchBridge {
     },
     opts?: { signal?: AbortSignal; noCache?: boolean }
   ): Promise<BridgeSearchResult>
-  getModel?(
-    modelId: number,
-    opts?: { signal?: AbortSignal }
-  ): Promise<BridgeModelResult>
   test?(): Promise<BridgeSearchResult>
 }
 
@@ -142,22 +126,15 @@ export class TrpcBridgeAdapter implements SearchAdapter {
   }
 
   async getModelDetail(modelId: number): Promise<ModelDetail> {
-    const bridge = window.SynapseSearchBridge
+    // tRPC model.getById doesn't return images (only post IDs)
+    // Use REST API which returns full model data with images
+    // No proxy needed - browser loads Civitai URLs directly
+    const res = await fetch(`/api/browse/model/${modelId}`)
 
-    // If bridge doesn't support getModel, fallback to REST
-    if (!bridge?.getModel) {
-      const res = await fetch(`/api/browse/model/${modelId}`)
-      if (!res.ok) throw new Error('Failed to fetch model')
-      return res.json()
+    if (!res.ok) {
+      throw new Error('Failed to fetch model')
     }
 
-    const result = await bridge.getModel(modelId)
-
-    if (!result.ok) {
-      throw new Error(result.error?.message || 'Failed to fetch model')
-    }
-
-    // Transform tRPC model detail response
-    return transformTrpcModelDetail(result.data!)
+    return res.json()
   }
 }

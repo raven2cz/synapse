@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Synapse Civitai Bridge
 // @namespace    synapse.civitai.bridge
-// @version      8.0.0
+// @version      9.0.1
 // @description  Bridge for Synapse - direct Civitai tRPC API access bypassing CORS
 // @author       SynapseTeam
 // @match        http://localhost:*/*
@@ -22,11 +22,12 @@
   // Configuration
   // ==========================================================================
 
-  const VERSION = '8.0.0';
+  const VERSION = '9.0.1';
   const TRPC_BASE = 'https://civitai.com/api/trpc';
   const CACHE_TTL = 30000; // 30 seconds
   const CACHE_MAX_SIZE = 200;
-  const DEFAULT_TIMEOUT = 20000;
+  const DEFAULT_TIMEOUT = 30000;
+  const IMAGE_FETCH_TIMEOUT = 60000; // 60 seconds for image.getInfinite which is VERY slow
 
   // Target window (Firefox needs unsafeWindow)
   const target = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
@@ -126,6 +127,22 @@
     )}`;
   }
 
+  function buildModelImagesUrl(modelId, config, limit = 50) {
+    const input = {
+      json: {
+        modelId: modelId,
+        limit: limit,
+        sort: 'Most Reactions',
+        period: 'AllTime',
+        // browsingLevel: 31 = all content, 1 = SFW only
+        browsingLevel: config.nsfw ? 31 : 1,
+      },
+    };
+    return `${TRPC_BASE}/image.getInfinite?input=${encodeURIComponent(
+      JSON.stringify(input)
+    )}`;
+  }
+
   // ==========================================================================
   // tRPC Request Handler
   // ==========================================================================
@@ -179,15 +196,6 @@
 
               // tRPC wraps response in result.data.json
               const result = data?.result?.data?.json || data;
-
-              // DEBUG: Log what we're getting
-              console.log('[Bridge DEBUG] Raw response data:', data);
-              console.log('[Bridge DEBUG] Unwrapped result:', result);
-              console.log('[Bridge DEBUG] Result keys:', result ? Object.keys(result) : 'null');
-              if (result?.items) {
-                console.log('[Bridge DEBUG] items count:', result.items.length);
-                console.log('[Bridge DEBUG] First item:', result.items[0]);
-              }
 
               cacheSet(cacheKey, result);
 
@@ -358,6 +366,33 @@
       }
 
       const url = buildModelUrl(modelId);
+      return trpcRequest(url, opts);
+    },
+
+    /**
+     * Get images for a model via tRPC image.getInfinite
+     *
+     * NOTE: model.getById only returns post IDs, not actual images!
+     * This method fetches the images separately.
+     *
+     * @param {number} modelId - Model ID
+     * @param {Object} opts - Request options
+     * @param {number} opts.limit - Max images to fetch (default: 50)
+     */
+    getModelImages: async (modelId, opts = {}) => {
+      const config = getConfig();
+
+      if (!config.enabled) {
+        return {
+          ok: false,
+          error: {
+            code: 'DISABLED',
+            message: 'Bridge is disabled',
+          },
+        };
+      }
+
+      const url = buildModelImagesUrl(modelId, config, opts.limit || 50);
       return trpcRequest(url, opts);
     },
 

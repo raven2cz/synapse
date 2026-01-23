@@ -253,7 +253,9 @@ describe('transformTrpcModel', () => {
     const result = transformTrpcModel(createMockTrpcModel())
 
     expect(result.previews).toHaveLength(1)
-    expect(result.previews[0].url).toBe('https://image.civitai.com/uuid/image.jpg')
+    // URLs go through proxy
+    expect(result.previews[0].url).toContain('/api/browse/image-proxy?url=')
+    expect(result.previews[0].url).toContain('image.civitai.com')
     expect(result.previews[0].nsfw).toBe(false)
     expect(result.previews[0].media_type).toBe('image')
   })
@@ -277,7 +279,9 @@ describe('transformTrpcModel', () => {
     )
 
     expect(result.previews[0].media_type).toBe('video')
-    expect(result.previews[0].thumbnail_url).toContain('anim=false')
+    // Thumbnail URL goes through proxy and contains anim=false (URL-encoded)
+    expect(result.previews[0].thumbnail_url).toContain('/api/browse/image-proxy?url=')
+    expect(result.previews[0].thumbnail_url).toContain('anim%3Dfalse')
   })
 
   it('should handle NSFW flag from nsfw boolean', () => {

@@ -472,6 +472,83 @@ async def get_model_version(model_id: int, version_id: int):
 
 
 # ============================================================================
+# Image Proxy - Serve Civitai images through our API
+# ============================================================================
+
+from fastapi.responses import StreamingResponse
+import requests as req_lib
+from urllib.parse import unquote
+
+# Allowed domains for image proxy (security)
+ALLOWED_IMAGE_DOMAINS = [
+    'image.civitai.com',
+    'images.civitai.com',
+    'cdn.civitai.com',
+]
+
+
+@router.get("/image-proxy")
+async def proxy_image(url: str):
+    """
+    Proxy images from Civitai CDN to avoid CORS issues.
+
+    Only allows requests to known Civitai domains for security.
+    Streams the image directly to avoid memory issues with large files.
+    """
+    from urllib.parse import urlparse
+
+    # Decode URL (may be URL-encoded)
+    decoded_url = unquote(url)
+
+    # Parse and validate domain
+    parsed = urlparse(decoded_url)
+    if parsed.netloc not in ALLOWED_IMAGE_DOMAINS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Domain not allowed: {parsed.netloc}"
+        )
+
+    # Validate scheme
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme")
+
+    try:
+        # Fetch image with browser-like headers
+        headers = {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://civitai.com/",
+        }
+
+        resp = req_lib.get(decoded_url, headers=headers, stream=True, timeout=30)
+        resp.raise_for_status()
+
+        # Get content type from response
+        content_type = resp.headers.get('content-type', 'image/jpeg')
+
+        # Stream the response
+        def generate():
+            for chunk in resp.iter_content(chunk_size=8192):
+                yield chunk
+
+        return StreamingResponse(
+            generate(),
+            media_type=content_type,
+            headers={
+                "Cache-Control": "public, max-age=86400",  # Cache for 1 day
+                "Access-Control-Allow-Origin": "*",
+            }
+        )
+
+    except req_lib.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Image fetch timeout")
+    except req_lib.exceptions.RequestException as e:
+        logger.error(f"Failed to proxy image: {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch image")
+
+
+# ============================================================================
 # Base Model (Checkpoint) Search - Generic API for multiple sources
 # ============================================================================
 

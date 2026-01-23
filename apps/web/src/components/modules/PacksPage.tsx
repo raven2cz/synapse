@@ -3,12 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
   Package, Search, Tag,
-  ZoomIn, ZoomOut, Loader2, X, AlertTriangle
+  ZoomIn, ZoomOut, X, AlertTriangle
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePacksStore } from '@/stores/packsStore'
 import { MediaPreview } from '../ui/MediaPreview'
+import { BreathingOrb } from '../ui/BreathingOrb'
 
 interface PackSummary {
   name: string
@@ -240,9 +241,7 @@ export function PacksPage() {
 
       {/* Loading */}
       {isLoading && (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-synapse" />
-        </div>
+        <BreathingOrb size="lg" text="Loading packs..." className="py-16" />
       )}
 
       {/* Error */}

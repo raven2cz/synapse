@@ -16,6 +16,7 @@ import { clsx } from 'clsx'
 import { toast } from '@/stores/toastStore'
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
+import { BreathingOrb } from '@/components/ui/BreathingOrb'
 import { MediaType } from '@/lib/media'
 
 // Download progress tracking
@@ -849,10 +850,12 @@ export function PackDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-synapse" />
-        <span className="ml-3 text-text-muted">Loading pack: {packName}</span>
-      </div>
+      <BreathingOrb
+        size="lg"
+        text="Loading pack..."
+        subtext={packName}
+        className="py-20"
+      />
     )
   }
 
@@ -1111,11 +1114,12 @@ export function PackDetailPage() {
               {resolverTab === 'civitai' && (
                 <div className="space-y-2">
                   {isSearching ? (
-                    <div className="flex flex-col items-center justify-center py-12">
-                      <Loader2 className="w-10 h-10 animate-spin text-synapse mb-4" />
-                      <p className="text-text-muted">Searching Civitai...</p>
-                      <p className="text-xs text-text-muted mt-1">This may take a moment (fetching multiple pages)</p>
-                    </div>
+                    <BreathingOrb
+                      size="md"
+                      text="Searching Civitai..."
+                      subtext="This may take a moment"
+                      className="py-12"
+                    />
                   ) : !searchTrigger ? (
                     <div className="text-center py-8 text-text-muted">
                       <Globe className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -1178,11 +1182,12 @@ export function PackDetailPage() {
               {resolverTab === 'huggingface' && (
                 <div className="space-y-2">
                   {isSearching ? (
-                    <div className="flex flex-col items-center justify-center py-12">
-                      <Loader2 className="w-10 h-10 animate-spin text-synapse mb-4" />
-                      <p className="text-text-muted">Searching Hugging Face...</p>
-                      <p className="text-xs text-text-muted mt-1">Looking for diffusion models</p>
-                    </div>
+                    <BreathingOrb
+                      size="md"
+                      text="Searching Hugging Face..."
+                      subtext="Looking for diffusion models"
+                      className="py-12"
+                    />
                   ) : !searchTrigger ? (
                     <div className="text-center py-8 text-text-muted">
                       <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />

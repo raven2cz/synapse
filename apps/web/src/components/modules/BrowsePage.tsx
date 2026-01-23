@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
@@ -12,6 +12,7 @@ import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { ImportWizardModal } from '@/components/ui/ImportWizardModal'
 import { SearchFilters } from '@/components/ui/SearchFilters'
+import { BreathingOrb } from '@/components/ui/BreathingOrb'
 
 import type { MediaType } from '@/lib/media'
 import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
@@ -122,6 +123,7 @@ export function BrowsePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
   const [selectedType, setSelectedType] = useState('')
+  const [modelTypes, setModelTypes] = useState<string[]>([])  // Multi-select model types
   const [includeNsfw] = useState(true)
 
   // Phase 5: Search provider and filters
@@ -177,12 +179,19 @@ export function BrowsePage() {
   // Check if search is a special query
   const isSpecialQuery = activeSearch.startsWith('tag:') || activeSearch.startsWith('url:') || activeSearch.startsWith('https://')
 
+  // Combine selectedType (dropdown) with modelTypes (chips) for search
+  const effectiveModelTypes = [
+    ...(selectedType ? [selectedType] : []),
+    ...modelTypes.filter(t => t !== selectedType), // Avoid duplicates
+  ]
+
   // Phase 5: Search query with adapter pattern
   const { data: searchResults, isLoading, error, isFetching } = useQuery({
     queryKey: [
       'civitai-search',
       activeSearch,
       selectedType,
+      modelTypes,
       searchProvider,
       sortBy,
       period,
@@ -212,7 +221,7 @@ export function BrowsePage() {
       const result = await adapter.search(
         {
           query: activeSearch || undefined,
-          types: selectedType ? [selectedType] : undefined,
+          types: effectiveModelTypes.length > 0 ? effectiveModelTypes : undefined,
           baseModels: baseModel ? [baseModel] : undefined,
           sort: sortBy,
           period,
@@ -222,14 +231,6 @@ export function BrowsePage() {
         },
         signal
       )
-
-      // Log for debugging
-      console.log(`[BrowsePage] Search via ${result.metadata?.source}:`, {
-        items: result.items.length,
-        hasMore: result.hasMore,
-        cached: result.metadata?.cached,
-        time: result.metadata?.responseTime,
-      })
 
       // Transform to expected format
       return {
@@ -258,40 +259,24 @@ export function BrowsePage() {
     }
   }, [searchResults])
 
-  // Model detail query
+  // Model detail query - uses adapter pattern (tRPC bridge when available)
   const { data: modelDetail, isLoading: isLoadingDetail } = useQuery<ModelDetail>({
-    queryKey: ['civitai-model', selectedModel],
+    queryKey: ['civitai-model', selectedModel, searchProvider],
     queryFn: async () => {
-      const res = await fetch(`/api/browse/model/${selectedModel}`)
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        throw new Error(errData.detail || 'Failed to fetch model')
+      // Get adapter for current provider
+      let adapter = getAdapter(searchProvider)
+
+      // If adapter has getModelDetail, use it (tRPC, REST)
+      // Otherwise fall back to REST (Archive doesn't support model fetch)
+      if (!adapter.getModelDetail) {
+        adapter = getAdapter('rest')
       }
-      return res.json()
+
+      return adapter.getModelDetail!(selectedModel!)
     },
     enabled: !!selectedModel,
-  })
-
-  // Import mutation
-  const importMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const res = await fetch('/api/packs/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || data.message || JSON.stringify(data))
-      return data
-    },
-    onSuccess: (data) => {
-      addToast('success', data.message || `Successfully imported '${data.pack_name}'`)
-      queryClient.invalidateQueries({ queryKey: ['packs'] })
-      setSelectedModel(null)
-    },
-    onError: (error: Error) => {
-      addToast('error', 'Import failed', error.message)
-    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: 2, // Limit retries to avoid long waits
   })
 
   // Handlers
@@ -305,17 +290,12 @@ export function BrowsePage() {
     setActiveSearch(searchQuery)
   }
 
-  // CRITICAL: Load More handler
+  // Load More handler
   const handleLoadMore = () => {
     if (nextCursor && !isFetching) {
-      console.log('[BrowsePage] Loading more with cursor:', nextCursor)
       isLoadingMore.current = true
       setCurrentCursor(nextCursor)
     }
-  }
-
-  const handleImport = (modelId: number) => {
-    importMutation.mutate(`https://civitai.com/models/${modelId}`)
   }
 
   const copyToClipboard = (text: string) => {
@@ -571,7 +551,17 @@ export function BrowsePage() {
             setCurrentCursor(undefined)
             setNextCursor(undefined)
           }}
-          isLoading={isLoading && !isFetching}
+          modelTypes={modelTypes}
+          onModelTypesChange={(types) => {
+            setModelTypes(types)
+            // Reset on model types change
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          isLoading={isFetching}
+          isError={!!error}
         />
       )}
 
@@ -583,11 +573,14 @@ export function BrowsePage() {
         </div>
       )}
 
-      {/* Loading state for initial load */}
+      {/* Premium Loading Animation - Breathing Orb */}
       {isLoading && allModels.length === 0 && !isLoadingMore.current && (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-synapse" />
-        </div>
+        <BreathingOrb
+          size="lg"
+          text="Searching models..."
+          subtext={`Connecting to ${searchProvider === 'trpc' ? 'tRPC' : searchProvider === 'archive' ? 'CivArchive' : 'Civitai'}`}
+          className="py-16"
+        />
       )}
 
       {/* Results grid */}
@@ -655,9 +648,7 @@ export function BrowsePage() {
 
       {/* Loading indicator for Load More */}
       {isFetching && isLoadingMore.current && (
-        <div className="flex justify-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin text-synapse" />
-        </div>
+        <BreathingOrb size="sm" className="py-8" />
       )}
 
       {/* CRITICAL: Load More button - must be visible when there's more data */}
@@ -691,16 +682,14 @@ export function BrowsePage() {
             onClick={e => e.stopPropagation()}
           >
             {isLoadingDetail ? (
-              <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 animate-spin text-synapse" />
-              </div>
+              <BreathingOrb size="md" text="Loading model..." className="py-20" />
             ) : modelDetail ? (
               <>
                 {/* Modal Header */}
-                <div className="bg-slate-dark/95 backdrop-blur-xl border-b border-slate-mid p-4 flex items-center justify-between flex-shrink-0">
-                  <div>
-                    <h2 className="text-xl font-bold text-text-primary">{modelDetail.name}</h2>
-                    <div className="flex items-center gap-3 mt-1 text-sm text-text-muted">
+                <div className="bg-slate-dark/95 backdrop-blur-xl border-b border-slate-mid p-4 flex items-start justify-between gap-4 flex-shrink-0">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-xl font-bold text-text-primary break-words">{modelDetail.name}</h2>
+                    <div className="flex items-center gap-3 mt-1 text-sm text-text-muted flex-wrap">
                       <span className="px-2 py-0.5 bg-synapse/20 text-synapse rounded-lg font-medium">{modelDetail.type}</span>
                       {modelDetail.base_model && (
                         <span className="px-2 py-0.5 bg-slate-mid rounded-lg">{modelDetail.base_model}</span>
@@ -713,11 +702,11 @@ export function BrowsePage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-shrink-0">
                     {/* Main Import Button - Opens Wizard */}
                     <Button
                       onClick={() => setShowImportWizard(true)}
-                      className="bg-gradient-to-r from-synapse to-pulse hover:shadow-lg hover:shadow-synapse/25"
+                      className="bg-gradient-to-r from-synapse to-pulse hover:shadow-lg hover:shadow-synapse/25 whitespace-nowrap"
                     >
                       <Download className="w-4 h-4 mr-2" />
                       Import to Pack...
@@ -840,33 +829,16 @@ export function BrowsePage() {
                                   {version.file_size && <span>{formatSize(version.file_size)}</span>}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    window.open(`https://civitai.com/models/${modelDetail.id}?modelVersionId=${version.id}`, '_blank')
-                                  }}
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleImport(modelDetail.id)
-                                  }}
-                                  disabled={importMutation.isPending}
-                                >
-                                  {importMutation.isPending ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                  ) : (
-                                    <Download className="w-4 h-4" />
-                                  )}
-                                  Import
-                                </Button>
-                              </div>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  window.open(`https://civitai.com/models/${modelDetail.id}?modelVersionId=${version.id}`, '_blank')
+                                }}
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
                             </div>
                           </div>
                         ))}

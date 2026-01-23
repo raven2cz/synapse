@@ -2,11 +2,31 @@
  * SearchFilters - Floating Chips Component
  *
  * Phase 5: Premium filter UI for BrowsePage with animated chips.
- * Supports search provider selection, sort, period, and base model filters.
+ * Features:
+ * - Color-coded provider chips (tRPC=purple, REST=blue, Archive=amber)
+ * - Glowing status indicators with proper visibility
+ * - Two-step filter selection: first type, then values
+ * - Multi-select support for Model Type filter
+ * - Active filter chips with remove button
+ * - "Clear all" when multiple filters active
+ * - Loading/Fetching/Offline states
  */
 
-import { useState, useEffect, useRef, createContext, useContext } from 'react'
-import { Zap, Globe, Archive, ChevronDown, X, Plus, Loader2 } from 'lucide-react'
+import { useState, useEffect, useRef, createContext, useContext, useCallback } from 'react'
+import {
+  Zap,
+  Globe,
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  X,
+  Plus,
+  Loader2,
+  Trash2,
+  AlertTriangle,
+  Check,
+  Filter,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
 import {
@@ -14,12 +34,17 @@ import {
   SORT_OPTIONS,
   PERIOD_OPTIONS,
   BASE_MODEL_OPTIONS,
+  MODEL_TYPE_OPTIONS,
+  FILE_FORMAT_OPTIONS,
+  CATEGORY_OPTIONS,
 } from '@/lib/api/searchTypes'
 import { isProviderAvailable } from '@/lib/api/searchAdapters'
 
 // =============================================================================
 // Types
 // =============================================================================
+
+export type FilterType = 'baseModel' | 'modelTypes' | 'fileFormat' | 'category'
 
 interface SearchFiltersProps {
   provider: SearchProvider
@@ -28,28 +53,131 @@ interface SearchFiltersProps {
   onSortChange: (sort: SortOption) => void
   period: PeriodOption
   onPeriodChange: (period: PeriodOption) => void
+  // Single-select filters
   baseModel: string
   onBaseModelChange: (model: string) => void
+  fileFormat?: string
+  onFileFormatChange?: (format: string) => void
+  category?: string
+  onCategoryChange?: (category: string) => void
+  // Multi-select filter
+  modelTypes?: string[]
+  onModelTypesChange?: (types: string[]) => void
+  // Legacy single-select (backwards compatibility)
+  modelType?: string
+  onModelTypeChange?: (type: string) => void
+  // State
   isLoading?: boolean
+  isError?: boolean
   disabled?: boolean
 }
 
 // =============================================================================
-// Dropdown Component
+// Filter Type Configuration
 // =============================================================================
 
-// Context for closing dropdown from items
+interface FilterTypeConfig {
+  key: FilterType
+  label: string
+  icon: React.ReactNode
+  multiSelect: boolean
+  options: readonly { value: string; label: string }[]
+}
+
+const FILTER_TYPE_CONFIGS: FilterTypeConfig[] = [
+  {
+    key: 'baseModel',
+    label: 'Base Model',
+    icon: <Filter className="w-4 h-4" />,
+    multiSelect: false,
+    options: BASE_MODEL_OPTIONS,
+  },
+  {
+    key: 'modelTypes',
+    label: 'Model Type',
+    icon: <Filter className="w-4 h-4" />,
+    multiSelect: true,
+    options: MODEL_TYPE_OPTIONS,
+  },
+  {
+    key: 'fileFormat',
+    label: 'File Format',
+    icon: <Filter className="w-4 h-4" />,
+    multiSelect: false,
+    options: FILE_FORMAT_OPTIONS,
+  },
+  {
+    key: 'category',
+    label: 'Category',
+    icon: <Filter className="w-4 h-4" />,
+    multiSelect: false,
+    options: CATEGORY_OPTIONS,
+  },
+]
+
+// =============================================================================
+// Provider Color Schemes - Fixed tRPC visibility
+// =============================================================================
+
+const PROVIDER_COLORS = {
+  trpc: {
+    chip: 'bg-gradient-to-r from-violet-500/25 to-fuchsia-500/25 border-violet-400/60 text-violet-300',
+    chipHover: 'hover:border-violet-400/80 hover:shadow-lg hover:shadow-violet-500/40',
+    dot: 'bg-violet-400',
+    dotGlow: '0 0 12px rgba(167, 139, 250, 1), 0 0 20px rgba(167, 139, 250, 0.6)',
+    status: 'bg-emerald-500/15 border-emerald-400/40 text-emerald-400',
+    statusDot: 'bg-emerald-400',
+    statusDotGlow: '0 0 10px rgba(52, 211, 153, 0.8)',
+  },
+  rest: {
+    chip: 'bg-gradient-to-r from-blue-500/25 to-cyan-500/25 border-blue-400/60 text-blue-300',
+    chipHover: 'hover:border-blue-400/80 hover:shadow-lg hover:shadow-blue-500/40',
+    dot: 'bg-blue-400',
+    dotGlow: '0 0 12px rgba(96, 165, 250, 1), 0 0 20px rgba(96, 165, 250, 0.6)',
+    status: 'bg-blue-500/15 border-blue-400/40 text-blue-400',
+    statusDot: 'bg-blue-400',
+    statusDotGlow: '0 0 10px rgba(96, 165, 250, 0.8)',
+  },
+  archive: {
+    chip: 'bg-gradient-to-r from-amber-500/25 to-orange-500/25 border-amber-400/60 text-amber-300',
+    chipHover: 'hover:border-amber-400/80 hover:shadow-lg hover:shadow-amber-500/40',
+    dot: 'bg-amber-400',
+    dotGlow: '0 0 12px rgba(251, 191, 36, 1), 0 0 20px rgba(251, 191, 36, 0.6)',
+    status: 'bg-amber-500/15 border-amber-400/40 text-amber-400',
+    statusDot: 'bg-amber-400',
+    statusDotGlow: '0 0 10px rgba(251, 191, 36, 0.8)',
+  },
+}
+
+// =============================================================================
+// Dropdown Context & Components
+// =============================================================================
+
 const DropdownContext = createContext<{ close: () => void } | null>(null)
 
 interface DropdownProps {
   trigger: React.ReactNode
   children: React.ReactNode
   align?: 'left' | 'center' | 'right'
+  maxHeight?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
-function Dropdown({ trigger, children, align = 'center' }: DropdownProps) {
-  const [isOpen, setIsOpen] = useState(false)
+function Dropdown({
+  trigger,
+  children,
+  align = 'center',
+  maxHeight = '300px',
+  open: controlledOpen,
+  onOpenChange,
+}: DropdownProps) {
+  const [internalOpen, setInternalOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  const isControlled = controlledOpen !== undefined
+  const isOpen = isControlled ? controlledOpen : internalOpen
+  const setIsOpen = isControlled ? (onOpenChange ?? (() => {})) : setInternalOpen
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -59,7 +187,7 @@ function Dropdown({ trigger, children, align = 'center' }: DropdownProps) {
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [setIsOpen])
 
   const alignClass = {
     left: 'left-0',
@@ -67,7 +195,7 @@ function Dropdown({ trigger, children, align = 'center' }: DropdownProps) {
     right: 'right-0',
   }[align]
 
-  const close = () => setIsOpen(false)
+  const close = useCallback(() => setIsOpen(false), [setIsOpen])
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -76,14 +204,15 @@ function Dropdown({ trigger, children, align = 'center' }: DropdownProps) {
         <DropdownContext.Provider value={{ close }}>
           <div
             className={clsx(
-              'absolute top-full mt-2 min-w-[180px] p-1.5',
+              'absolute top-full mt-2 min-w-[220px] p-1.5',
               'bg-slate-darker/95 backdrop-blur-xl',
               'border border-slate-mid/30 rounded-xl',
               'shadow-xl shadow-black/30',
               'animate-in fade-in slide-in-from-top-2 duration-150',
-              'z-[9999]',
+              'z-[9999] overflow-y-auto',
               alignClass
             )}
+            style={{ maxHeight }}
           >
             {children}
           </div>
@@ -96,35 +225,87 @@ function Dropdown({ trigger, children, align = 'center' }: DropdownProps) {
 interface DropdownItemProps {
   children: React.ReactNode
   selected?: boolean
+  disabled?: boolean
   onClick: () => void
+  closeOnClick?: boolean
 }
 
-function DropdownItem({ children, selected, onClick }: DropdownItemProps) {
+function DropdownItem({
+  children,
+  selected,
+  disabled,
+  onClick,
+  closeOnClick = true,
+}: DropdownItemProps) {
   const dropdown = useContext(DropdownContext)
 
   const handleClick = () => {
+    if (disabled) return
     onClick()
-    dropdown?.close()
+    if (closeOnClick) {
+      dropdown?.close()
+    }
   }
 
   return (
     <button
       onClick={handleClick}
+      disabled={disabled}
       className={clsx(
         'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left',
         'transition-colors duration-150',
+        disabled && 'opacity-40 cursor-not-allowed',
         selected
           ? 'bg-synapse/20 text-synapse'
           : 'text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary'
       )}
     >
       {children}
-      {selected && (
-        <svg className="w-4 h-4 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-        </svg>
-      )}
     </button>
+  )
+}
+
+interface CheckboxItemProps {
+  children: React.ReactNode
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
+function CheckboxItem({ children, checked, onChange }: CheckboxItemProps) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left',
+        'transition-colors duration-150',
+        checked
+          ? 'bg-synapse/20 text-synapse'
+          : 'text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary'
+      )}
+    >
+      <div
+        className={clsx(
+          'w-4 h-4 rounded border-2 flex items-center justify-center transition-colors',
+          checked ? 'bg-synapse border-synapse' : 'border-slate-mid bg-transparent'
+        )}
+      >
+        {checked && <Check className="w-3 h-3 text-white" />}
+      </div>
+      {children}
+    </button>
+  )
+}
+
+// DropdownDivider kept for potential future use
+// function DropdownDivider() {
+//   return <div className="h-px bg-slate-mid/30 my-1 mx-2" />
+// }
+
+function DropdownLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-3 py-2 text-xs text-text-muted uppercase tracking-wider font-medium sticky top-0 bg-slate-darker/95">
+      {children}
+    </div>
   )
 }
 
@@ -134,26 +315,22 @@ function DropdownItem({ children, selected, onClick }: DropdownItemProps) {
 
 interface ChipProps {
   children: React.ReactNode
-  variant?: 'provider' | 'filter' | 'active' | 'add'
+  variant?: 'provider' | 'filter' | 'active' | 'add' | 'clear'
   onClick?: () => void
   className?: string
+  loading?: boolean
 }
 
-function Chip({ children, variant = 'filter', onClick, className }: ChipProps) {
+function Chip({ children, variant = 'filter', onClick, className, loading }: ChipProps) {
   const baseClasses = clsx(
     'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium',
     'cursor-pointer select-none transition-all duration-200',
-    'active:scale-[0.97]'
+    'active:scale-[0.97]',
+    loading && 'pointer-events-none'
   )
 
   const variantClasses = {
-    provider: clsx(
-      'bg-gradient-to-r from-synapse/15 to-pulse/15',
-      'border border-synapse/40',
-      'text-synapse-light',
-      'hover:border-synapse/60 hover:shadow-lg hover:shadow-synapse/20',
-      'hover:-translate-y-0.5'
-    ),
+    provider: '', // Custom per provider
     filter: clsx(
       'bg-slate-dark/80 border border-slate-mid/50',
       'text-text-secondary',
@@ -163,17 +340,24 @@ function Chip({ children, variant = 'filter', onClick, className }: ChipProps) {
     active: clsx(
       'bg-synapse/15 border border-synapse/40',
       'text-synapse',
-      'hover:bg-synapse/25'
+      'hover:bg-synapse/25',
+      'group'
     ),
     add: clsx(
       'bg-transparent border border-dashed border-slate-mid/50',
       'text-text-muted',
       'hover:border-synapse/40 hover:text-synapse hover:border-solid'
     ),
+    clear: clsx(
+      'bg-transparent border border-dashed border-red-500/30',
+      'text-red-400/70',
+      'hover:border-red-500/50 hover:text-red-400 hover:border-solid hover:bg-red-500/10'
+    ),
   }
 
   return (
     <button onClick={onClick} className={clsx(baseClasses, variantClasses[variant], className)}>
+      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
       {children}
     </button>
   )
@@ -186,36 +370,280 @@ function Chip({ children, variant = 'filter', onClick, className }: ChipProps) {
 interface StatusBadgeProps {
   provider: SearchProvider
   isLoading?: boolean
+  isError?: boolean
 }
 
-function StatusBadge({ provider, isLoading }: StatusBadgeProps) {
+function StatusBadge({ provider, isLoading, isError }: StatusBadgeProps) {
+  const colors = PROVIDER_COLORS[provider]
   const config = PROVIDER_CONFIGS[provider]
 
-  if (isLoading) {
+  if (isError) {
     return (
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-synapse/10 border border-synapse/30">
-        <Loader2 className="w-3 h-3 animate-spin text-synapse" />
-        <span className="text-xs text-synapse font-medium">Loading</span>
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/15 border border-red-400/40">
+        <AlertTriangle className="w-3 h-3 text-red-400" />
+        <span className="text-xs text-red-400 font-semibold uppercase tracking-wide">Offline</span>
       </div>
     )
   }
 
-  const colorMap: Record<SearchProvider, string> = {
-    trpc: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    rest: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-    archive: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-  }
-
-  const dotColorMap: Record<SearchProvider, string> = {
-    trpc: 'bg-emerald-400',
-    rest: 'bg-blue-400',
-    archive: 'bg-amber-400',
+  if (isLoading) {
+    return (
+      <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-full border', colors.status)}>
+        <Loader2 className="w-3 h-3 animate-spin" />
+        <span className="text-xs font-semibold uppercase tracking-wide">Fetching</span>
+      </div>
+    )
   }
 
   return (
-    <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-full border', colorMap[provider])}>
-      <span className={clsx('w-1.5 h-1.5 rounded-full animate-pulse', dotColorMap[provider])} />
-      <span className="text-xs font-medium">{config.statusLabel}</span>
+    <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-full border', colors.status)}>
+      <span
+        className={clsx('w-2 h-2 rounded-full', colors.statusDot)}
+        style={{
+          boxShadow: colors.statusDotGlow,
+          animation: 'glow-pulse 2s ease-in-out infinite',
+        }}
+      />
+      <span className="text-xs font-semibold uppercase tracking-wide">{config.statusLabel}</span>
+    </div>
+  )
+}
+
+// =============================================================================
+// Filter Value Selector (Second Step)
+// =============================================================================
+
+interface FilterValueSelectorProps {
+  filterType: FilterTypeConfig
+  selectedValues: string[]
+  onChange: (values: string[]) => void
+  onClose: () => void
+}
+
+function FilterValueSelector({
+  filterType,
+  selectedValues,
+  onChange,
+  onClose,
+}: FilterValueSelectorProps) {
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [onClose])
+
+  const filteredOptions = filterType.options.filter(
+    (opt) =>
+      opt.value && opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const handleToggle = (value: string) => {
+    if (filterType.multiSelect) {
+      if (selectedValues.includes(value)) {
+        onChange(selectedValues.filter((v) => v !== value))
+      } else {
+        onChange([...selectedValues, value])
+      }
+    } else {
+      onChange([value])
+      onClose()
+    }
+  }
+
+  return (
+    <div
+      ref={dropdownRef}
+      className={clsx(
+        'absolute top-full mt-2 left-0 min-w-[280px] p-1.5',
+        'bg-slate-darker/95 backdrop-blur-xl',
+        'border border-slate-mid/30 rounded-xl',
+        'shadow-xl shadow-black/30',
+        'animate-in fade-in slide-in-from-top-2 duration-150',
+        'z-[10000]'
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-mid/30 mb-1">
+        <span className="text-sm font-medium text-text-primary">{filterType.label}</span>
+        {filterType.multiSelect && selectedValues.length > 0 && (
+          <span className="text-xs text-synapse">{selectedValues.length} selected</span>
+        )}
+      </div>
+
+      {/* Search (for large lists) */}
+      {filterType.options.length > 10 && (
+        <div className="px-2 pb-2">
+          <input
+            type="text"
+            placeholder={`Search ${filterType.label.toLowerCase()}...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={clsx(
+              'w-full px-3 py-2 text-sm rounded-lg',
+              'bg-slate-dark/80 border border-slate-mid/50',
+              'text-text-primary placeholder-text-muted',
+              'focus:outline-none focus:border-synapse/50'
+            )}
+            autoFocus
+          />
+        </div>
+      )}
+
+      {/* Options */}
+      <div className="max-h-[300px] overflow-y-auto">
+        {filteredOptions.length === 0 ? (
+          <div className="px-3 py-4 text-sm text-text-muted text-center">No options found</div>
+        ) : (
+          filteredOptions.map((opt) =>
+            filterType.multiSelect ? (
+              <CheckboxItem
+                key={opt.value}
+                checked={selectedValues.includes(opt.value)}
+                onChange={() => handleToggle(opt.value)}
+              >
+                {opt.label}
+              </CheckboxItem>
+            ) : (
+              <DropdownItem
+                key={opt.value}
+                selected={selectedValues.includes(opt.value)}
+                onClick={() => handleToggle(opt.value)}
+              >
+                {opt.label}
+                {selectedValues.includes(opt.value) && (
+                  <Check className="w-4 h-4 ml-auto flex-shrink-0" />
+                )}
+              </DropdownItem>
+            )
+          )
+        )}
+      </div>
+
+      {/* Done button for multi-select */}
+      {filterType.multiSelect && (
+        <div className="px-2 pt-2 border-t border-slate-mid/30 mt-1">
+          <button
+            onClick={onClose}
+            className={clsx(
+              'w-full px-4 py-2 rounded-lg text-sm font-medium',
+              'bg-synapse/20 text-synapse',
+              'hover:bg-synapse/30 transition-colors'
+            )}
+          >
+            Done
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Add Filter Button with Two-Step Selection
+// =============================================================================
+
+interface AddFilterButtonProps {
+  availableFilters: FilterTypeConfig[]
+  getSelectedValues: (filterType: FilterType) => string[]
+  onValuesChange: (filterType: FilterType, values: string[]) => void
+}
+
+function AddFilterButton({
+  availableFilters,
+  getSelectedValues,
+  onValuesChange,
+}: AddFilterButtonProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedFilterType, setSelectedFilterType] = useState<FilterTypeConfig | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+        setSelectedFilterType(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleFilterTypeSelect = (config: FilterTypeConfig) => {
+    setSelectedFilterType(config)
+  }
+
+  const handleValuesChange = (values: string[]) => {
+    if (selectedFilterType) {
+      onValuesChange(selectedFilterType.key, values)
+    }
+  }
+
+  const handleClose = () => {
+    setSelectedFilterType(null)
+    setIsOpen(false)
+  }
+
+  if (availableFilters.length === 0) return null
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <Chip variant="add" onClick={() => setIsOpen(!isOpen)}>
+        <Plus className="w-4 h-4" />
+        <span>Add filter</span>
+      </Chip>
+
+      {/* Step 1: Filter Type Selection */}
+      {isOpen && !selectedFilterType && (
+        <div
+          className={clsx(
+            'absolute top-full mt-2 left-0 min-w-[200px] p-1.5',
+            'bg-slate-darker/95 backdrop-blur-xl',
+            'border border-slate-mid/30 rounded-xl',
+            'shadow-xl shadow-black/30',
+            'animate-in fade-in slide-in-from-top-2 duration-150',
+            'z-[9999]'
+          )}
+        >
+          <DropdownLabel>Select filter type</DropdownLabel>
+          {availableFilters.map((config) => (
+            <button
+              key={config.key}
+              onClick={() => handleFilterTypeSelect(config)}
+              className={clsx(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-left',
+                'transition-colors duration-150',
+                'text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary'
+              )}
+            >
+              {config.icon}
+              <span className="flex-1">{config.label}</span>
+              {config.multiSelect && (
+                <span className="text-xs text-text-muted bg-slate-mid/30 px-1.5 py-0.5 rounded">
+                  Multi
+                </span>
+              )}
+              <ChevronRight className="w-4 h-4 opacity-50" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Step 2: Value Selection */}
+      {isOpen && selectedFilterType && (
+        <FilterValueSelector
+          filterType={selectedFilterType}
+          selectedValues={getSelectedValues(selectedFilterType.key)}
+          onChange={handleValuesChange}
+          onClose={handleClose}
+        />
+      )}
     </div>
   )
 }
@@ -233,49 +661,141 @@ export function SearchFilters({
   onPeriodChange,
   baseModel,
   onBaseModelChange,
+  modelTypes,
+  onModelTypesChange,
+  modelType,
+  onModelTypeChange,
+  fileFormat,
+  onFileFormatChange,
+  category,
+  onCategoryChange,
   isLoading,
+  isError,
   disabled,
 }: SearchFiltersProps) {
   const config = PROVIDER_CONFIGS[provider]
+  const colors = PROVIDER_COLORS[provider]
   const trpcAvailable = isProviderAvailable('trpc')
 
-  // Provider colors
-  const providerColorMap: Record<SearchProvider, string> = {
-    trpc: 'from-synapse/15 to-pulse/15 border-synapse/40 text-synapse-light',
-    rest: 'from-blue-500/15 to-cyan-500/15 border-blue-500/40 text-blue-400',
-    archive: 'from-amber-500/15 to-orange-500/15 border-amber-500/40 text-amber-400',
-  }
+  // Handle both multi-select and legacy single-select for model type
+  const effectiveModelTypes = modelTypes ?? (modelType ? [modelType] : [])
+  const handleModelTypesChange = useCallback(
+    (types: string[]) => {
+      if (onModelTypesChange) {
+        onModelTypesChange(types)
+      } else if (onModelTypeChange) {
+        // Fallback to legacy single-select (use first value)
+        onModelTypeChange(types[0] || '')
+      }
+    },
+    [onModelTypesChange, onModelTypeChange]
+  )
 
-  const providerDotMap: Record<SearchProvider, string> = {
-    trpc: 'bg-synapse shadow-synapse/50',
-    rest: 'bg-blue-400 shadow-blue-400/50',
-    archive: 'bg-amber-400 shadow-amber-400/50',
+  // Get selected values for a filter type
+  const getSelectedValues = useCallback(
+    (filterType: FilterType): string[] => {
+      switch (filterType) {
+        case 'baseModel':
+          return baseModel ? [baseModel] : []
+        case 'modelTypes':
+          return effectiveModelTypes
+        case 'fileFormat':
+          return fileFormat ? [fileFormat] : []
+        case 'category':
+          return category ? [category] : []
+        default:
+          return []
+      }
+    },
+    [baseModel, effectiveModelTypes, fileFormat, category]
+  )
+
+  // Handle value changes for any filter type
+  const handleValuesChange = useCallback(
+    (filterType: FilterType, values: string[]) => {
+      switch (filterType) {
+        case 'baseModel':
+          onBaseModelChange(values[0] || '')
+          break
+        case 'modelTypes':
+          handleModelTypesChange(values)
+          break
+        case 'fileFormat':
+          onFileFormatChange?.(values[0] || '')
+          break
+        case 'category':
+          onCategoryChange?.(values[0] || '')
+          break
+      }
+    },
+    [onBaseModelChange, handleModelTypesChange, onFileFormatChange, onCategoryChange]
+  )
+
+  // Determine which filters can be added
+  // Multi-select filters (modelTypes) are always available to add more
+  // Single-select filters disappear once a value is selected
+  const availableFilters = FILTER_TYPE_CONFIGS.filter((config) => {
+    switch (config.key) {
+      case 'baseModel':
+        return !baseModel
+      case 'modelTypes':
+        // Always show for multi-select - user can add more types
+        return onModelTypesChange || onModelTypeChange
+      case 'fileFormat':
+        return onFileFormatChange && !fileFormat
+      case 'category':
+        return onCategoryChange && !category
+      default:
+        return false
+    }
+  })
+
+  // Count active filters (non-default values)
+  const activeFilterCount = [
+    sortBy !== 'Most Downloaded' ? 1 : 0,
+    period !== 'AllTime' ? 1 : 0,
+    baseModel ? 1 : 0,
+    effectiveModelTypes.length > 0 ? effectiveModelTypes.length : 0,
+    fileFormat ? 1 : 0,
+    category ? 1 : 0,
+  ].reduce((a, b) => a + b, 0)
+
+  const handleClearAll = () => {
+    onSortChange('Most Downloaded')
+    onPeriodChange('AllTime')
+    onBaseModelChange('')
+    handleModelTypesChange([])
+    onFileFormatChange?.('')
+    onCategoryChange?.('')
   }
 
   return (
-    <div className={clsx(
-      'relative z-50',
-      'flex items-center gap-2 flex-wrap p-3',
-      'bg-slate-dark/30 backdrop-blur-sm rounded-2xl',
-      'border border-slate-mid/20',
-      disabled && 'opacity-50 pointer-events-none'
-    )}>
+    <div
+      className={clsx(
+        'relative z-50',
+        'flex items-center gap-2.5 flex-wrap p-3',
+        'bg-slate-dark/40 backdrop-blur-sm rounded-2xl',
+        'border border-slate-mid/30',
+        disabled && 'opacity-50 pointer-events-none'
+      )}
+    >
       {/* Provider Chip */}
       <Dropdown
         trigger={
           <Chip
             variant="provider"
-            className={clsx(
-              'bg-gradient-to-r',
-              providerColorMap[provider]
-            )}
+            loading={isLoading}
+            className={clsx('border', colors.chip, colors.chipHover, 'hover:-translate-y-0.5')}
           >
-            <span
-              className={clsx(
-                'w-2 h-2 rounded-full shadow-lg animate-pulse',
-                providerDotMap[provider]
-              )}
-            />
+            {!isLoading && (
+              <span
+                className={clsx('w-2.5 h-2.5 rounded-full', colors.dot)}
+                style={{
+                  boxShadow: colors.dotGlow,
+                  animation: 'glow-pulse 2s ease-in-out infinite',
+                }}
+              />
+            )}
             <span>{config.shortName}</span>
             <ChevronDown className="w-4 h-4 opacity-60" />
           </Chip>
@@ -283,23 +803,19 @@ export function SearchFilters({
       >
         <DropdownItem
           selected={provider === 'trpc'}
+          disabled={!trpcAvailable}
           onClick={() => trpcAvailable && onProviderChange('trpc')}
         >
-          <Zap className="w-4 h-4" />
+          <Zap className="w-4 h-4 text-violet-400" />
           <span>Internal tRPC</span>
-          {!trpcAvailable && (
-            <span className="ml-auto text-xs text-text-muted">Unavailable</span>
-          )}
+          {!trpcAvailable && <span className="ml-auto text-xs text-red-400">Offline</span>}
         </DropdownItem>
         <DropdownItem selected={provider === 'rest'} onClick={() => onProviderChange('rest')}>
-          <Globe className="w-4 h-4" />
+          <Globe className="w-4 h-4 text-blue-400" />
           <span>REST API</span>
         </DropdownItem>
-        <DropdownItem
-          selected={provider === 'archive'}
-          onClick={() => onProviderChange('archive')}
-        >
-          <Archive className="w-4 h-4" />
+        <DropdownItem selected={provider === 'archive'} onClick={() => onProviderChange('archive')}>
+          <Archive className="w-4 h-4 text-amber-400" />
           <span>CivArchive</span>
         </DropdownItem>
       </Dropdown>
@@ -307,66 +823,26 @@ export function SearchFilters({
       {/* Divider */}
       <span className="w-1 h-1 rounded-full bg-slate-mid/50" />
 
-      {/* Sort Chip */}
-      <Dropdown
-        trigger={
-          <Chip variant="filter">
-            <span>{sortBy}</span>
-            <ChevronDown className="w-4 h-4 opacity-50" />
-          </Chip>
-        }
-      >
-        {SORT_OPTIONS.map((opt) => (
-          <DropdownItem
-            key={opt.value}
-            selected={sortBy === opt.value}
-            onClick={() => onSortChange(opt.value as SortOption)}
-          >
-            {opt.label}
-          </DropdownItem>
-        ))}
-      </Dropdown>
-
-      {/* Period Chip */}
-      <Dropdown
-        trigger={
-          <Chip variant="filter">
-            <span>{PERIOD_OPTIONS.find((p) => p.value === period)?.label || period}</span>
-            <ChevronDown className="w-4 h-4 opacity-50" />
-          </Chip>
-        }
-      >
-        {PERIOD_OPTIONS.map((opt) => (
-          <DropdownItem
-            key={opt.value}
-            selected={period === opt.value}
-            onClick={() => onPeriodChange(opt.value as PeriodOption)}
-          >
-            {opt.label}
-          </DropdownItem>
-        ))}
-      </Dropdown>
-
-      {/* Base Model - Active Filter or Add Button */}
-      {baseModel ? (
-        <Chip variant="active" onClick={() => onBaseModelChange('')}>
-          <span>{BASE_MODEL_OPTIONS.find((m) => m.value === baseModel)?.label || baseModel}</span>
-          <X className="w-4 h-4 opacity-60 hover:opacity-100" />
+      {/* Sort - Show as active chip if not default */}
+      {sortBy !== 'Most Downloaded' ? (
+        <Chip variant="active" onClick={() => onSortChange('Most Downloaded')}>
+          <span>{sortBy}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
         </Chip>
       ) : (
         <Dropdown
           trigger={
-            <Chip variant="add">
-              <Plus className="w-4 h-4" />
-              <span>Base Model</span>
+            <Chip variant="filter">
+              <span>Most Downloaded</span>
+              <ChevronDown className="w-4 h-4 opacity-50" />
             </Chip>
           }
         >
-          {BASE_MODEL_OPTIONS.filter((m) => m.value).map((opt) => (
+          {SORT_OPTIONS.map((opt) => (
             <DropdownItem
               key={opt.value}
-              selected={baseModel === opt.value}
-              onClick={() => onBaseModelChange(opt.value)}
+              selected={sortBy === opt.value}
+              onClick={() => onSortChange(opt.value as SortOption)}
             >
               {opt.label}
             </DropdownItem>
@@ -374,11 +850,87 @@ export function SearchFilters({
         </Dropdown>
       )}
 
+      {/* Period - Show as active chip if not default */}
+      {period !== 'AllTime' ? (
+        <Chip variant="active" onClick={() => onPeriodChange('AllTime')}>
+          <span>{PERIOD_OPTIONS.find((p) => p.value === period)?.label}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      ) : (
+        <Dropdown
+          trigger={
+            <Chip variant="filter">
+              <span>All Time</span>
+              <ChevronDown className="w-4 h-4 opacity-50" />
+            </Chip>
+          }
+        >
+          {PERIOD_OPTIONS.map((opt) => (
+            <DropdownItem
+              key={opt.value}
+              selected={period === opt.value}
+              onClick={() => onPeriodChange(opt.value as PeriodOption)}
+            >
+              {opt.label}
+            </DropdownItem>
+          ))}
+        </Dropdown>
+      )}
+
+      {/* Active filter chips */}
+      {baseModel && (
+        <Chip variant="active" onClick={() => onBaseModelChange('')}>
+          <span>{BASE_MODEL_OPTIONS.find((m) => m.value === baseModel)?.label || baseModel}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      )}
+
+      {/* Model Types - show each as separate chip */}
+      {effectiveModelTypes.map((type) => (
+        <Chip
+          key={type}
+          variant="active"
+          onClick={() => handleModelTypesChange(effectiveModelTypes.filter((t) => t !== type))}
+        >
+          <span>{MODEL_TYPE_OPTIONS.find((t) => t.value === type)?.label || type}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      ))}
+
+      {fileFormat && onFileFormatChange && (
+        <Chip variant="active" onClick={() => onFileFormatChange('')}>
+          <span>{FILE_FORMAT_OPTIONS.find((f) => f.value === fileFormat)?.label || fileFormat}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      )}
+
+      {category && onCategoryChange && (
+        <Chip variant="active" onClick={() => onCategoryChange('')}>
+          <span>{CATEGORY_OPTIONS.find((c) => c.value === category)?.label || category}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      )}
+
+      {/* Add Filter Button - Two-step selection */}
+      <AddFilterButton
+        availableFilters={availableFilters}
+        getSelectedValues={getSelectedValues}
+        onValuesChange={handleValuesChange}
+      />
+
+      {/* Clear All - Show when 2+ filters active */}
+      {activeFilterCount >= 2 && (
+        <Chip variant="clear" onClick={handleClearAll}>
+          <Trash2 className="w-4 h-4" />
+          <span>Clear all</span>
+        </Chip>
+      )}
+
       {/* Spacer */}
       <div className="flex-1" />
 
       {/* Status Badge */}
-      <StatusBadge provider={provider} isLoading={isLoading} />
+      <StatusBadge provider={provider} isLoading={isLoading} isError={isError} />
     </div>
   )
 }
