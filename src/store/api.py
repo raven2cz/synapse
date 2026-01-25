@@ -28,20 +28,23 @@ logger = logging.getLogger(__name__)
 
 from .models import (
     APIResponse,
+    AssetKind,
     BackResult,
+    BlobStatus,
+    CivitaiSelector,
     DoctorReport,
+    GenerationParameters,
+    HuggingFaceSelector,
     SearchResult,
     StatusReport,
     StoreConfig,
     UpdatePlan,
     UpdateResult,
     UseResult,
-    CivitaiSelector,
-    HuggingFaceSelector,
-    AssetKind,
-    GenerationParameters,
     WorkflowInfo,
 )
+from .layout import PackNotFoundError
+from .backup_service import BackupNotEnabledError, BackupNotConnectedError
 
 
 # =============================================================================
@@ -407,6 +410,580 @@ def get_attach_status(
 ):
     """Get UI attachment status."""
     return store.get_attach_status(ui_set=ui_set)
+
+
+# =============================================================================
+# Inventory Endpoints
+# =============================================================================
+
+
+class CleanupRequest(BaseModel):
+    """Request for cleanup operation."""
+    dry_run: bool = True
+    max_items: int = 0
+
+
+class DeleteBlobRequest(BaseModel):
+    """Request for blob deletion."""
+    force: bool = False
+    target: str = "local"  # "local", "backup", or "both"
+
+
+class VerifyRequest(BaseModel):
+    """Request for blob verification."""
+    sha256: Optional[List[str]] = None
+    all: bool = False
+
+
+class BackupBlobRequest(BaseModel):
+    """Request for backup blob operation."""
+    verify_after: bool = True
+
+
+class RestoreBlobRequest(BaseModel):
+    """Request for restore blob operation."""
+    verify_after: bool = True
+
+
+class DeleteFromBackupRequest(BaseModel):
+    """Request for deleting from backup."""
+    confirm: bool = False
+
+
+class SyncBackupRequest(BaseModel):
+    """Request for backup sync operation."""
+    direction: str = "to_backup"  # "to_backup" or "from_backup"
+    only_missing: bool = True
+    dry_run: bool = True
+
+
+class ConfigureBackupRequest(BaseModel):
+    """Request for configuring backup storage."""
+    enabled: bool = False
+    path: Optional[str] = None
+    auto_backup_new: bool = False
+    warn_before_delete_last_copy: bool = True
+
+
+@store_router.get("/inventory", response_model=Dict[str, Any])
+def get_inventory(
+    kind: Optional[str] = Query(None, description="Filter by asset kind"),
+    status: Optional[str] = Query(None, description="Filter by blob status"),
+    include_verification: bool = Query(False, description="Verify blob hashes (slow!)"),
+    sort_by: str = Query("size_desc", description="Sort by: size_desc, size_asc, name_asc, kind"),
+    limit: int = Query(1000, description="Maximum items to return"),
+    offset: int = Query(0, description="Pagination offset"),
+    store=Depends(require_initialized),
+):
+    """
+    Get blob inventory with filtering and pagination.
+
+    Returns all blobs with their status (REFERENCED, ORPHAN, MISSING),
+    usage information, and disk statistics.
+    """
+    from .models import AssetKind, BlobStatus
+
+    kind_filter = None
+    if kind and kind != "all":
+        try:
+            kind_filter = AssetKind(kind)
+        except ValueError:
+            raise HTTPException(400, f"Invalid kind: {kind}")
+
+    status_filter = None
+    if status and status != "all":
+        try:
+            status_filter = BlobStatus(status)
+        except ValueError:
+            raise HTTPException(400, f"Invalid status: {status}")
+
+    inventory = store.get_inventory(
+        kind_filter=kind_filter,
+        status_filter=status_filter,
+        include_verification=include_verification,
+    )
+
+    # Sort items
+    if sort_by == "size_desc":
+        inventory.items.sort(key=lambda x: x.size_bytes, reverse=True)
+    elif sort_by == "size_asc":
+        inventory.items.sort(key=lambda x: x.size_bytes)
+    elif sort_by == "name_asc":
+        inventory.items.sort(key=lambda x: x.display_name.lower())
+    elif sort_by == "kind":
+        inventory.items.sort(key=lambda x: x.kind.value)
+
+    # Paginate
+    total = len(inventory.items)
+    inventory.items = inventory.items[offset:offset + limit]
+
+    return {
+        "generated_at": inventory.generated_at,
+        "summary": inventory.summary.model_dump(),
+        "items": [item.model_dump() for item in inventory.items],
+        "pagination": {
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        },
+    }
+
+
+@store_router.get("/inventory/summary", response_model=Dict[str, Any])
+def get_inventory_summary(store=Depends(require_initialized)):
+    """
+    Get quick inventory summary (no items).
+
+    Returns statistics only, useful for dashboard widgets.
+    """
+    summary = store.get_inventory_summary()
+    return summary.model_dump()
+
+
+@store_router.get("/inventory/{sha256}", response_model=Dict[str, Any])
+def get_blob_detail(
+    sha256: str,
+    store=Depends(require_initialized),
+):
+    """
+    Get detailed info about a specific blob.
+
+    Returns blob info plus impact analysis for deletion.
+    """
+    inventory = store.get_inventory()
+
+    item = next((i for i in inventory.items if i.sha256 == sha256.lower()), None)
+    if not item:
+        raise HTTPException(404, f"Blob not found: {sha256}")
+
+    impacts = store.get_blob_impacts(sha256)
+
+    return {
+        "item": item.model_dump(),
+        "impacts": impacts.model_dump(),
+    }
+
+
+@store_router.post("/inventory/cleanup-orphans", response_model=Dict[str, Any])
+def cleanup_orphans(
+    request: CleanupRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """
+    Remove orphan blobs safely.
+
+    NEVER removes referenced blobs. Use dry_run=true to preview.
+    """
+    result = store.cleanup_orphans(
+        dry_run=request.dry_run,
+        max_items=request.max_items,
+    )
+    return result.model_dump()
+
+
+@store_router.delete("/inventory/{sha256}", response_model=Dict[str, Any])
+def delete_blob(
+    sha256: str,
+    force: bool = Query(False, description="Force delete even if referenced"),
+    target: str = Query("local", description="Delete from: local, backup, both"),
+    store=Depends(require_initialized),
+):
+    """
+    Delete a specific blob with safety checks.
+
+    Without force=true, only orphan blobs can be deleted.
+    Returns 409 Conflict if blob is referenced and force=false.
+    """
+    result = store.delete_blob(sha256, force=force, target=target)
+
+    if not result.get("deleted") and "impacts" in result:
+        raise HTTPException(409, detail=result)
+
+    return result
+
+
+@store_router.post("/inventory/verify", response_model=Dict[str, Any])
+def verify_blobs(
+    request: VerifyRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """
+    Verify blob integrity.
+
+    Checks SHA256 hashes of blobs. Use all=true to verify all blobs.
+    """
+    return store.verify_blobs(
+        sha256_list=request.sha256,
+        all_blobs=request.all,
+    )
+
+
+# =============================================================================
+# Backup Storage Endpoints
+# =============================================================================
+
+@store_router.get("/backup/status", response_model=Dict[str, Any])
+def get_backup_status(store=Depends(require_initialized)):
+    """
+    Get backup storage status.
+
+    Returns connection status, blob count, and disk usage.
+    """
+    status = store.get_backup_status()
+    return status.model_dump()
+
+
+@store_router.post("/backup/blob/{sha256}", response_model=Dict[str, Any])
+def backup_blob(
+    sha256: str,
+    request: BackupBlobRequest = Body(default_factory=BackupBlobRequest),
+    store=Depends(require_initialized),
+):
+    """
+    Backup a blob from local to backup storage.
+
+    Copies the blob to the backup storage location.
+    Returns 400 if backup not enabled, 503 if not connected,
+    409 if already on backup, 507 if insufficient space.
+    """
+    result = store.backup_blob(sha256, verify_after=request.verify_after)
+    if not result.success:
+        error = result.error or "Unknown error"
+        if "not enabled" in error.lower():
+            raise HTTPException(status_code=400, detail=error)
+        elif "not accessible" in error.lower() or "not connected" in error.lower():
+            raise HTTPException(status_code=503, detail=error)
+        elif "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        elif "not enough space" in error.lower():
+            raise HTTPException(status_code=507, detail=error)
+        else:
+            raise HTTPException(status_code=500, detail=error)
+    return result.model_dump()
+
+
+@store_router.post("/backup/restore/{sha256}", response_model=Dict[str, Any])
+def restore_blob(
+    sha256: str,
+    request: RestoreBlobRequest = Body(default_factory=RestoreBlobRequest),
+    store=Depends(require_initialized),
+):
+    """
+    Restore a blob from backup to local storage.
+
+    Copies the blob from backup storage to local.
+    Returns 400 if backup not enabled, 503 if not connected,
+    404 if not found on backup, 507 if insufficient local space.
+    """
+    result = store.restore_blob(sha256, verify_after=request.verify_after)
+    if not result.success:
+        error = result.error or "Unknown error"
+        if "not enabled" in error.lower():
+            raise HTTPException(status_code=400, detail=error)
+        elif "not accessible" in error.lower() or "not connected" in error.lower():
+            raise HTTPException(status_code=503, detail=error)
+        elif "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        elif "not enough space" in error.lower():
+            raise HTTPException(status_code=507, detail=error)
+        else:
+            raise HTTPException(status_code=500, detail=error)
+    return result.model_dump()
+
+
+@store_router.delete("/backup/blob/{sha256}", response_model=Dict[str, Any])
+def delete_from_backup(
+    sha256: str,
+    request: DeleteFromBackupRequest = Body(default_factory=DeleteFromBackupRequest),
+    store=Depends(require_initialized),
+):
+    """
+    Delete a blob from backup storage.
+
+    Requires confirm=true in request body.
+    The blob remains on local storage if it exists there.
+    """
+    result = store.delete_from_backup(sha256, confirm=request.confirm)
+    if not result.success:
+        error = result.error or "Unknown error"
+        if "not confirmed" in error.lower():
+            raise HTTPException(status_code=400, detail="Deletion not confirmed. Set confirm=true.")
+        elif "not enabled" in error.lower():
+            raise HTTPException(status_code=400, detail=error)
+        elif "not accessible" in error.lower() or "not connected" in error.lower():
+            raise HTTPException(status_code=503, detail=error)
+        elif "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        else:
+            raise HTTPException(status_code=500, detail=error)
+    return result.model_dump()
+
+
+@store_router.post("/backup/sync", response_model=Dict[str, Any])
+def sync_backup(
+    request: SyncBackupRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """
+    Sync blobs between local and backup storage.
+
+    Direction can be "to_backup" or "from_backup".
+    Use dry_run=true to preview without actually syncing.
+    """
+    result = store.sync_backup(
+        direction=request.direction,
+        only_missing=request.only_missing,
+        dry_run=request.dry_run,
+    )
+    return result.model_dump()
+
+
+@store_router.put("/backup/config", response_model=Dict[str, Any])
+def configure_backup(
+    request: ConfigureBackupRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """
+    Configure backup storage settings.
+
+    Updates the backup configuration in the store config.
+    """
+    from .models import BackupConfig
+    config = BackupConfig(
+        enabled=request.enabled,
+        path=request.path,
+        auto_backup_new=request.auto_backup_new,
+        warn_before_delete_last_copy=request.warn_before_delete_last_copy,
+    )
+    store.configure_backup(config)
+    return {"success": True, "config": config.model_dump()}
+
+
+@store_router.get("/backup/blob/{sha256}/warning", response_model=Dict[str, Any])
+def get_delete_warning(
+    sha256: str,
+    target: str = Query("local", description="Target: local, backup, or both"),
+    store=Depends(require_initialized),
+):
+    """
+    Get a warning message if deleting this blob would be dangerous.
+
+    Returns a warning message if this is the last copy of the blob,
+    or null if deletion is safe.
+    """
+    warning = store.backup_service.get_delete_warning(sha256, target)
+    return {
+        "sha256": sha256,
+        "target": target,
+        "warning": warning,
+        "is_last_copy": store.backup_service.is_last_copy(sha256),
+    }
+
+
+# -----------------------------------------------------------------------------
+# Pack-Level Backup Operations (pull/push)
+# -----------------------------------------------------------------------------
+
+
+class PackPullRequest(BaseModel):
+    """Request for pack pull operation."""
+    dry_run: bool = True
+
+
+class PackPushRequest(BaseModel):
+    """Request for pack push operation."""
+    dry_run: bool = True
+    cleanup: bool = False
+
+
+@store_router.post("/backup/pull-pack/{pack_name}", response_model=Dict[str, Any])
+def backup_pull_pack(
+    pack_name: str,
+    request: PackPullRequest = Body(default=PackPullRequest()),
+    store=Depends(require_initialized),
+):
+    """
+    Pull (restore) all blobs for a pack from backup to local.
+
+    Restores pack blobs without activating any profile.
+    Use case: Need pack models locally but want to stay on global profile.
+
+    Returns 400 if backup not enabled, 503 if not connected,
+    404 if pack not found.
+    """
+    try:
+        result = store.pull_pack(pack_name, dry_run=request.dry_run)
+        return {
+            "success": True,
+            "pack": pack_name,
+            "dry_run": result.dry_run,
+            "direction": result.direction,
+            "blobs_to_sync": result.blobs_to_sync,
+            "bytes_to_sync": result.bytes_to_sync,
+            "blobs_synced": result.blobs_synced,
+            "bytes_synced": result.bytes_synced,
+            "items": [
+                {
+                    "sha256": item.sha256,
+                    "display_name": item.display_name,
+                    "kind": item.kind,
+                    "size_bytes": item.size_bytes,
+                }
+                for item in result.items
+            ],
+            "errors": result.errors,
+        }
+    except PackNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+    except BackupNotEnabledError:
+        raise HTTPException(status_code=400, detail="Backup not enabled")
+    except BackupNotConnectedError:
+        raise HTTPException(status_code=503, detail="Backup storage not connected")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@store_router.post("/backup/push-pack/{pack_name}", response_model=Dict[str, Any])
+def backup_push_pack(
+    pack_name: str,
+    request: PackPushRequest = Body(default=PackPushRequest()),
+    store=Depends(require_initialized),
+):
+    """
+    Push (backup) all blobs for a pack from local to backup.
+
+    Optionally removes local copies after successful backup.
+
+    Returns 400 if backup not enabled, 503 if not connected,
+    404 if pack not found.
+    """
+    try:
+        result = store.push_pack(
+            pack_name,
+            dry_run=request.dry_run,
+            cleanup=request.cleanup,
+        )
+        return {
+            "success": True,
+            "pack": pack_name,
+            "dry_run": result.dry_run,
+            "direction": result.direction,
+            "blobs_to_sync": result.blobs_to_sync,
+            "bytes_to_sync": result.bytes_to_sync,
+            "blobs_synced": result.blobs_synced,
+            "bytes_synced": result.bytes_synced,
+            "cleanup": request.cleanup,
+            "items": [
+                {
+                    "sha256": item.sha256,
+                    "display_name": item.display_name,
+                    "kind": item.kind,
+                    "size_bytes": item.size_bytes,
+                }
+                for item in result.items
+            ],
+            "errors": result.errors,
+        }
+    except PackNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+    except BackupNotEnabledError:
+        raise HTTPException(status_code=400, detail="Backup not enabled")
+    except BackupNotConnectedError:
+        raise HTTPException(status_code=503, detail="Backup storage not connected")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@store_router.get("/backup/pack-status/{pack_name}", response_model=Dict[str, Any])
+def get_pack_backup_status(
+    pack_name: str,
+    store=Depends(require_initialized),
+):
+    """
+    Get backup status for all blobs in a pack.
+
+    Returns location (local_only, backup_only, both, nowhere) for each blob.
+    Useful for UI to determine which actions are available.
+    """
+    try:
+        pack = store.layout.load_pack(pack_name)
+        lock = store.layout.load_pack_lock(pack_name)
+        if not lock:
+            return {
+                "pack": pack_name,
+                "backup_enabled": store.backup_service.is_enabled(),
+                "backup_connected": store.backup_service.is_connected(),
+                "blobs": [],
+                "summary": {
+                    "total": 0,
+                    "local_only": 0,
+                    "backup_only": 0,
+                    "both": 0,
+                    "nowhere": 0,
+                    "total_bytes": 0,
+                },
+            }
+
+        # Build blob status list
+        blobs = []
+        summary = {
+            "total": 0,
+            "local_only": 0,
+            "backup_only": 0,
+            "both": 0,
+            "nowhere": 0,
+            "total_bytes": 0,
+        }
+
+        for dep in pack.dependencies:
+            resolved = lock.get_resolved(dep.id)
+            if not resolved or not resolved.artifacts:
+                continue
+            for artifact in resolved.artifacts:
+                if not artifact.sha256:
+                    continue
+                sha256 = artifact.sha256
+                on_local = store.blob_store.exists(sha256)
+                on_backup = store.backup_service.blob_exists_on_backup(sha256) if store.backup_service.is_connected() else False
+
+                if on_local and on_backup:
+                    location = "both"
+                    summary["both"] += 1
+                elif on_local:
+                    location = "local_only"
+                    summary["local_only"] += 1
+                elif on_backup:
+                    location = "backup_only"
+                    summary["backup_only"] += 1
+                else:
+                    location = "nowhere"
+                    summary["nowhere"] += 1
+
+                summary["total"] += 1
+                size = artifact.size or 0
+                summary["total_bytes"] += size
+
+                blobs.append({
+                    "sha256": sha256,
+                    "display_name": artifact.filename or dep.name,
+                    "kind": dep.kind.value if hasattr(dep.kind, "value") else str(dep.kind),
+                    "size_bytes": size,
+                    "location": location,
+                    "on_local": on_local,
+                    "on_backup": on_backup,
+                })
+
+        return {
+            "pack": pack_name,
+            "backup_enabled": store.backup_service.is_enabled(),
+            "backup_connected": store.backup_service.is_connected(),
+            "blobs": blobs,
+            "summary": summary,
+        }
+    except PackNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =============================================================================
@@ -1039,9 +1616,18 @@ def install_pack(pack_name: str, store=Depends(require_initialized)):
 
 @v2_packs_router.delete("/{pack_name}")
 def delete_pack(pack_name: str, store=Depends(require_initialized)):
-    """Delete a pack."""
-    if store.delete_pack(pack_name):
-        return {"deleted": pack_name}
+    """Delete a pack and clean up associated resources."""
+    result = store.delete_pack(pack_name)
+    if result.deleted:
+        return {
+            "deleted": pack_name,
+            "cleanup": {
+                "removed_from_global": result.removed_from_global,
+                "removed_work_profile": result.removed_work_profile,
+                "removed_from_stacks": result.removed_from_stacks,
+            },
+            "warnings": result.cleanup_warnings,
+        }
     raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
 
 
@@ -2992,41 +3578,26 @@ def reset_to_global(
 ):
     """
     Reset stack to global for all UIs in ui_set.
-    
+
     This pops all work profiles and returns to just ["global"].
     Operation is atomic under store lock.
     """
     try:
-        results = {}
-        ui_targets = store.get_ui_targets(request.ui_set)
-        
-        # Atomic operation under lock
-        with store.layout.lock():
-            runtime = store.layout.load_runtime()
-            
-            for ui in ui_targets:
-                # Reset stack to just global
-                runtime.set_stack(ui, ["global"])
-                results[ui] = {
-                    "reset": True,
-                    "profile": "global",
-                }
-            
-            # Save runtime
-            store.layout.save_runtime(runtime)
-            
-            # Update active symlinks
-            for ui in ui_targets:
-                store.view_builder.activate_profile("global", ui)
-        
-        # Sync once at the end if requested (outside lock to avoid long hold)
-        if request.sync:
-            store.sync(ui_set=request.ui_set)
-        
+        result = store.reset(ui_set=request.ui_set, sync=request.sync)
+
+        # Convert to legacy API format for backwards compatibility
+        ui_results = {}
+        for ui, from_profile in result.from_profiles.items():
+            ui_results[ui] = {
+                "reset": True,
+                "profile": "global",
+                "from_profile": from_profile,
+            }
+
         return {
             "ok": True,
             "reset": True,
-            "ui_results": results,
+            "ui_results": ui_results,
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -219,6 +219,14 @@ class ConfigDefaults(BaseModel):
     use_base: str = "global"
 
 
+class BackupConfig(BaseModel):
+    """Configuration for backup storage."""
+    enabled: bool = False
+    path: Optional[str] = None  # e.g., "/mnt/external/synapse-backup" or "D:\\SynapseBackup"
+    auto_backup_new: bool = False  # Automatically backup new blobs
+    warn_before_delete_last_copy: bool = True  # Warn when deleting last copy
+
+
 class StoreConfig(BaseModel):
     """Main store configuration (state/config.json)."""
     schema_: str = Field(default="synapse.config.v2", alias="schema")
@@ -226,7 +234,8 @@ class StoreConfig(BaseModel):
     ui: UIConfig = Field(default_factory=UIConfig)
     providers: Dict[str, ProviderConfig] = Field(default_factory=dict)
     base_model_aliases: Dict[str, BaseModelAlias] = Field(default_factory=dict)
-    
+    backup: BackupConfig = Field(default_factory=BackupConfig)
+
     model_config = {"populate_by_name": True}
     
     @classmethod
@@ -882,6 +891,207 @@ class BackResult(BaseModel):
     to_profile: str
     synced: bool
     notes: List[str] = Field(default_factory=list)
+
+
+class ResetResult(BaseModel):
+    """Result of 'reset' command."""
+    ui_targets: List[str]
+    from_profiles: Dict[str, str]  # UI -> previous active profile
+    to_profile: str  # Always "global"
+    synced: bool
+    notes: List[str] = Field(default_factory=list)
+
+
+class DeleteResult(BaseModel):
+    """Result of 'delete' command."""
+    pack_name: str
+    deleted: bool
+    cleanup_warnings: List[str] = Field(default_factory=list)
+    removed_from_global: bool = False
+    removed_work_profile: bool = False
+    removed_from_stacks: bool = False
+
+
+# =============================================================================
+# Inventory Models (for Model Inventory feature)
+# =============================================================================
+
+class BlobStatus(str, Enum):
+    """Status of a blob in the inventory."""
+    REFERENCED = "referenced"    # Blob exists locally and is used by at least one pack
+    ORPHAN = "orphan"            # Blob exists locally but no pack references it
+    MISSING = "missing"          # Pack references blob but it doesn't exist anywhere
+    BACKUP_ONLY = "backup_only"  # Blob is only on backup storage (not local)
+
+
+class BlobLocation(str, Enum):
+    """Physical location of a blob."""
+    LOCAL_ONLY = "local_only"    # Only on local disk
+    BACKUP_ONLY = "backup_only"  # Only on backup storage
+    BOTH = "both"                # On both local and backup (synced)
+    NOWHERE = "nowhere"          # Missing everywhere
+
+
+class BlobOrigin(BaseModel):
+    """Origin information for a blob - where it came from."""
+    model_config = ConfigDict(protected_namespaces=())
+
+    provider: ProviderName
+    model_id: Optional[int] = None
+    version_id: Optional[int] = None
+    file_id: Optional[int] = None
+    filename: Optional[str] = None
+    repo_id: Optional[str] = None  # For HuggingFace
+
+
+class PackReference(BaseModel):
+    """Reference from a pack to a blob."""
+    pack_name: str
+    dependency_id: str
+    kind: AssetKind
+    expose_filename: Optional[str] = None
+    size_bytes: Optional[int] = None
+    origin: Optional[BlobOrigin] = None
+
+
+class InventoryItem(BaseModel):
+    """A single item in the blob inventory."""
+    sha256: str
+    kind: AssetKind
+    display_name: str  # Priority: expose.filename > origin.filename > sha256[:12]
+    size_bytes: int
+
+    # Location tracking
+    location: BlobLocation
+    on_local: bool
+    on_backup: bool
+
+    # Status and usage
+    status: BlobStatus
+    used_by_packs: List[str] = Field(default_factory=list)  # Pack names
+    ref_count: int = 0  # Total reference count (can be > len(used_by_packs))
+
+    # Origin and context
+    origin: Optional[BlobOrigin] = None
+    active_in_uis: List[str] = Field(default_factory=list)  # UIs currently using this blob
+
+    # Verification status
+    verified: Optional[bool] = None  # True/False/None (not verified)
+
+
+class BackupStats(BaseModel):
+    """Statistics about backup storage."""
+    enabled: bool = False
+    connected: bool = False
+    path: Optional[str] = None
+    blobs_local_only: int = 0
+    blobs_backup_only: int = 0
+    blobs_both: int = 0
+    bytes_local_only: int = 0
+    bytes_backup_only: int = 0
+    bytes_synced: int = 0
+    total_bytes: int = 0
+    free_space: Optional[int] = None
+    last_sync: Optional[str] = None
+
+
+class InventorySummary(BaseModel):
+    """Summary statistics for the inventory."""
+    blobs_total: int = 0
+    blobs_referenced: int = 0
+    blobs_orphan: int = 0
+    blobs_missing: int = 0
+    blobs_backup_only: int = 0
+    bytes_total: int = 0
+    bytes_referenced: int = 0
+    bytes_orphan: int = 0
+    bytes_by_kind: Dict[str, int] = Field(default_factory=dict)
+    disk_total: Optional[int] = None
+    disk_free: Optional[int] = None
+    backup: Optional[BackupStats] = None
+
+
+class InventoryResponse(BaseModel):
+    """Response from inventory endpoint."""
+    generated_at: str
+    summary: InventorySummary
+    items: List[InventoryItem] = Field(default_factory=list)
+
+
+class CleanupResult(BaseModel):
+    """Result of a cleanup operation."""
+    dry_run: bool
+    orphans_found: int = 0
+    orphans_deleted: int = 0
+    bytes_freed: int = 0
+    deleted: List[InventoryItem] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+
+
+class ImpactAnalysis(BaseModel):
+    """Analysis of what would break if a blob is deleted."""
+    sha256: str
+    status: BlobStatus
+    size_bytes: int
+    used_by_packs: List[str] = Field(default_factory=list)
+    active_in_uis: List[str] = Field(default_factory=list)
+    can_delete_safely: bool
+    warning: Optional[str] = None
+
+
+# =============================================================================
+# Backup Storage Models
+# =============================================================================
+
+class BackupStatus(BaseModel):
+    """Status of the backup storage connection."""
+    enabled: bool
+    connected: bool
+    path: Optional[str] = None
+    total_blobs: int = 0
+    total_bytes: int = 0
+    free_space: Optional[int] = None
+    last_sync: Optional[str] = None
+    error: Optional[str] = None
+
+
+class BackupOperationResult(BaseModel):
+    """Result of a backup/restore operation."""
+    success: bool
+    sha256: str
+    bytes_copied: int = 0
+    duration_ms: int = 0
+    error: Optional[str] = None
+    verified: Optional[bool] = None
+
+
+class BackupDeleteResult(BaseModel):
+    """Result of deleting from backup storage."""
+    success: bool
+    sha256: str
+    bytes_freed: int = 0
+    still_on_local: bool = False
+    error: Optional[str] = None
+
+
+class SyncItem(BaseModel):
+    """An item to be synced."""
+    sha256: str
+    size_bytes: int
+    display_name: Optional[str] = None
+    kind: Optional[str] = None  # AssetKind value (checkpoint, lora, vae, etc.)
+
+
+class SyncResult(BaseModel):
+    """Result of a sync operation."""
+    dry_run: bool
+    direction: str  # "to_backup" or "from_backup"
+    blobs_to_sync: int = 0
+    bytes_to_sync: int = 0
+    blobs_synced: int = 0
+    bytes_synced: int = 0
+    items: List[SyncItem] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
 
 
 # =============================================================================

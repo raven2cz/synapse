@@ -18,6 +18,14 @@ import { MediaPreview } from '@/components/ui/MediaPreview'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { BreathingOrb } from '@/components/ui/BreathingOrb'
 import { MediaType } from '@/lib/media'
+import {
+  PackStorageStatus,
+  PackStorageActions,
+  PackBlobsTable,
+  PullConfirmDialog,
+  PushConfirmDialog,
+} from './packs'
+import type { PackBackupStatusResponse, PackPullPushResponse } from './inventory/types'
 
 // Download progress tracking
 interface DownloadProgress {
@@ -256,6 +264,11 @@ export function PackDetailPage() {
   const [uploadWorkflowFile, setUploadWorkflowFile] = useState<File | null>(null)
   const [uploadWorkflowName, setUploadWorkflowName] = useState('')
   const [uploadWorkflowDescription, setUploadWorkflowDescription] = useState('')
+
+  // Pack backup state
+  const [showPullDialog, setShowPullDialog] = useState(false)
+  const [showPushDialog, setShowPushDialog] = useState(false)
+  const [pushWithCleanup, setPushWithCleanup] = useState(false)
 
   // Local model import state
   const [showImportModelModal, setShowImportModelModal] = useState(false)
@@ -621,6 +634,83 @@ export function PackDetailPage() {
     },
     onError: (err) => {
       console.error('[PackDetailPage] Download-all mutation error:', err)
+    },
+  })
+
+  // Pack backup status query
+  const { data: backupStatus, isLoading: isBackupStatusLoading } = useQuery<PackBackupStatusResponse>({
+    queryKey: ['pack-backup-status', packName],
+    queryFn: async () => {
+      const res = await fetch(`/api/store/backup/pack-status/${encodeURIComponent(packName)}`)
+      if (!res.ok) {
+        // If backup not enabled or pack not found, return empty status
+        return {
+          pack: packName,
+          backup_enabled: false,
+          backup_connected: false,
+          blobs: [],
+          summary: { total: 0, local_only: 0, backup_only: 0, both: 0, nowhere: 0, total_bytes: 0 },
+        }
+      }
+      return res.json()
+    },
+    enabled: !!packName,
+    staleTime: 30000, // 30 seconds
+  })
+
+  // Pull pack mutation (restore from backup)
+  const pullPackMutation = useMutation<PackPullPushResponse, Error>({
+    mutationFn: async () => {
+      const res = await fetch(`/api/store/backup/pull-pack/${encodeURIComponent(packName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: false }),
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(errText)
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      setShowPullDialog(false)
+      // P3: Invalidate both backup status and pack detail (installation state may have changed)
+      queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+      queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success(`Restored ${data.blobs_synced} blob${data.blobs_synced !== 1 ? 's' : ''} from backup`)
+    },
+    onError: (error) => {
+      toast.error(`Pull failed: ${error.message}`)
+    },
+  })
+
+  // Push pack mutation (backup to external storage)
+  const pushPackMutation = useMutation<PackPullPushResponse, Error, { cleanup: boolean }>({
+    mutationFn: async ({ cleanup }) => {
+      const res = await fetch(`/api/store/backup/push-pack/${encodeURIComponent(packName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dry_run: false, cleanup }),
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(errText)
+      }
+      return res.json()
+    },
+    onSuccess: (data) => {
+      setShowPushDialog(false)
+      // P3: Invalidate both backup status and pack detail (if cleanup removed local files)
+      queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+      queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      if (data.cleanup) {
+        toast.success(`Backed up ${data.blobs_synced} blob${data.blobs_synced !== 1 ? 's' : ''} and freed local space`)
+      } else {
+        toast.success(`Backed up ${data.blobs_synced} blob${data.blobs_synced !== 1 ? 's' : ''}`)
+      }
+    },
+    onError: (error) => {
+      toast.error(`Push failed: ${error.message}`)
     },
   })
 
@@ -2015,6 +2105,78 @@ export function PackDetailPage() {
           <p className="text-text-muted text-sm">No user tags. Click Edit to add some.</p>
         )}
       </Card>
+
+      {/* Storage Actions - Pack Backup */}
+      {isBackupStatusLoading ? (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold text-text-primary">Storage</h3>
+              <div className="h-5 w-24 bg-slate-mid/50 rounded animate-pulse" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
+              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
+              <div className="h-8 w-24 bg-slate-mid/50 rounded animate-pulse" />
+            </div>
+          </div>
+        </Card>
+      ) : backupStatus && (
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold text-text-primary">Storage</h3>
+              <PackStorageStatus
+                summary={backupStatus.summary}
+                backupEnabled={backupStatus.backup_enabled}
+                backupConnected={backupStatus.backup_connected}
+              />
+            </div>
+            <PackStorageActions
+              summary={backupStatus.summary}
+              backupEnabled={backupStatus.backup_enabled}
+              backupConnected={backupStatus.backup_connected}
+              onPull={() => setShowPullDialog(true)}
+              onPush={() => {
+                setPushWithCleanup(false)
+                setShowPushDialog(true)
+              }}
+              onPushAndFree={() => {
+                setPushWithCleanup(true)
+                setShowPushDialog(true)
+              }}
+              isPulling={pullPackMutation.isPending}
+              isPushing={pushPackMutation.isPending}
+            />
+          </div>
+
+          {/* Blob table - show only if there are blobs */}
+          {backupStatus.blobs.length > 0 && (
+            <PackBlobsTable blobs={backupStatus.blobs} className="mt-3" />
+          )}
+        </Card>
+      )}
+
+      {/* Pull Confirmation Dialog */}
+      <PullConfirmDialog
+        isOpen={showPullDialog}
+        onClose={() => setShowPullDialog(false)}
+        onConfirm={() => pullPackMutation.mutate()}
+        packName={packName}
+        blobs={backupStatus?.blobs || []}
+        isLoading={pullPackMutation.isPending}
+      />
+
+      {/* Push Confirmation Dialog */}
+      <PushConfirmDialog
+        isOpen={showPushDialog}
+        onClose={() => setShowPushDialog(false)}
+        onConfirm={(cleanup) => pushPackMutation.mutate({ cleanup })}
+        packName={packName}
+        blobs={backupStatus?.blobs || []}
+        isLoading={pushPackMutation.isPending}
+        initialCleanup={pushWithCleanup}
+      />
 
       {/* Assets/Dependencies */}
       <Card className="p-4">

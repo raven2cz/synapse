@@ -14,7 +14,7 @@ Workflow:
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from .blob_store import BlobStore
 from .layout import StoreLayout, ProfileNotFoundError
@@ -32,6 +32,9 @@ from .models import (
 )
 from .view_builder import BuildReport, ViewBuilder
 
+if TYPE_CHECKING:
+    from .backup_service import BackupService
+
 
 class ProfileService:
     """
@@ -45,18 +48,25 @@ class ProfileService:
         layout: StoreLayout,
         blob_store: BlobStore,
         view_builder: ViewBuilder,
+        backup_service: Optional["BackupService"] = None,
     ):
         """
         Initialize profile service.
-        
+
         Args:
             layout: Store layout manager
             blob_store: Blob store
             view_builder: View builder
+            backup_service: Optional backup service for auto-restore
         """
         self.layout = layout
         self.blob_store = blob_store
         self.view_builder = view_builder
+        self.backup_service = backup_service
+
+    def set_backup_service(self, backup_service: "BackupService") -> None:
+        """Set backup service for auto-restore on use."""
+        self.backup_service = backup_service
     
     # =========================================================================
     # Profile Loading
@@ -221,21 +231,27 @@ class ProfileService:
         # Load packs data for building
         if sync:
             packs_data = self._load_packs_for_profile(work_profile)
-            
+
+            # Auto-restore missing blobs from backup before building views
+            restored = self._install_missing_blobs(packs_data)
+            if restored:
+                result.notes.append(f"restored_{len(restored)}_blobs_from_backup")
+
             # Build and activate for each UI
             for ui in ui_targets:
                 report = self.view_builder.build(ui, work_profile, packs_data)
                 result.shadowed.extend(report.shadowed)
-                
+
                 # Activate
                 self.view_builder.activate(ui, work_profile.name)
-        
-        # Update runtime stack
-        runtime = self.layout.load_runtime()
-        for ui in ui_targets:
-            runtime.push_profile(ui, work_profile.name)
-        self.layout.save_runtime(runtime)
-        
+
+        # Update runtime stack (atomic operation with lock)
+        with self.layout.lock():
+            runtime = self.layout.load_runtime()
+            for ui in ui_targets:
+                runtime.push_profile(ui, work_profile.name)
+            self.layout.save_runtime(runtime)
+
         return result
     
     def use_from_ui_set(
@@ -263,20 +279,18 @@ class ProfileService:
     ) -> BackResult:
         """
         Execute 'back' command.
-        
+
         1. Pop current profile from stack
         2. Activate previous profile
-        
+
         Args:
             ui_targets: List of UI names to target
             sync: If True, rebuild views
-        
+
         Returns:
             BackResult with details
         """
-        runtime = self.layout.load_runtime()
-        
-        # Determine from/to profiles (use first UI as reference)
+        # Handle empty UI targets
         if not ui_targets:
             return BackResult(
                 ui_targets=[],
@@ -285,16 +299,24 @@ class ProfileService:
                 synced=False,
                 notes=["no_ui_targets"],
             )
-        
-        first_ui = ui_targets[0]
-        from_profile = runtime.get_active_profile(first_ui)
-        
-        # Pop from all target UIs
-        for ui in ui_targets:
-            runtime.pop_profile(ui)
-        
-        to_profile = runtime.get_active_profile(first_ui)
-        
+
+        # Atomic runtime modification with lock
+        with self.layout.lock():
+            runtime = self.layout.load_runtime()
+
+            first_ui = ui_targets[0]
+            from_profile = runtime.get_active_profile(first_ui)
+
+            # Pop from all target UIs
+            for ui in ui_targets:
+                runtime.pop_profile(ui)
+
+            to_profile = runtime.get_active_profile(first_ui)
+
+            # Save runtime immediately
+            self.layout.save_runtime(runtime)
+
+        # Build result
         result = BackResult(
             ui_targets=ui_targets,
             from_profile=from_profile,
@@ -302,17 +324,17 @@ class ProfileService:
             synced=sync,
             notes=[],
         )
-        
+
         # Check if already at base
         if from_profile == to_profile:
             result.notes.append("already_at_base")
-        
-        # Rebuild and activate if syncing
+
+        # Rebuild and activate if syncing (outside lock - slow operation)
         if sync and to_profile:
             try:
                 profile = self.layout.load_profile(to_profile)
                 packs_data = self._load_packs_for_profile(profile)
-                
+
                 for ui in ui_targets:
                     self.view_builder.build(ui, profile, packs_data)
                     self.view_builder.activate(ui, to_profile)
@@ -325,10 +347,7 @@ class ProfileService:
                     self.view_builder.activate(ui, to_profile)
                 except Exception:
                     pass  # View may not exist
-        
-        # Save runtime
-        self.layout.save_runtime(runtime)
-        
+
         return result
     
     def back_from_ui_set(
@@ -477,24 +496,37 @@ class ProfileService:
     ) -> List[str]:
         """
         Install missing blobs for packs.
-        
+
+        Tries to restore from backup first, then downloads from URL if needed.
+
         Returns:
             List of installed blob SHA256 hashes
         """
         installed = []
-        
+
         for pack_name, (pack, lock) in packs_data.items():
             if lock is None:
                 continue
-            
+
             for resolved in lock.resolved:
                 sha256 = resolved.artifact.sha256
                 if not sha256:
                     continue
-                
+
                 if self.blob_store.blob_exists(sha256):
                     continue
-                
+
+                # Try restore from backup first (auto-restore feature)
+                if self.backup_service and self.backup_service.is_connected():
+                    if self.backup_service.blob_exists_on_backup(sha256):
+                        try:
+                            result = self.backup_service.restore_blob(sha256)
+                            if result.success:
+                                installed.append(sha256)
+                                continue  # Successfully restored, no need to download
+                        except Exception:
+                            pass  # Restore failed, try download
+
                 # Download from first available URL
                 urls = resolved.artifact.download.urls
                 if urls:
@@ -503,5 +535,5 @@ class ProfileService:
                         installed.append(sha256)
                     except Exception:
                         pass  # Log error, continue
-        
+
         return installed

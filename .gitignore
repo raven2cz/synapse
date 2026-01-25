@@ -71,6 +71,7 @@ pnpm-debug.log*
 # Synapse local runtime artifacts (keep repo clean)
 # ------------------------------------------------------------
 # If you ever run a local store inside the repo by accident:
+.synapse
 .synapse/
 .synapse-store/
 store-data/

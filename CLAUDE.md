@@ -8,7 +8,7 @@
 - **Dokumentace:** Anglicky (pokud uživatel neurčí jinak)
 
 ### Jediný zdroj pravdy
-**`plans/PLAN-Internal-Search-trpc.md`** je JEDINÝ soubor, který určuje:
+**`plans/PLAN-Model-Inventory.md`** je JEDINÝ soubor, který určuje:
 - Co je implementováno
 - Co je INTEGROVÁNO (kritické! implementace ≠ integrace)
 - Co ještě chybí
@@ -44,7 +44,9 @@ synapse/
 │   └── clients/      # External API clients (civitai.py)
 ├── plans/            # PLAN soubory pro jednotlivé fáze
 │   ├── PLAN-Phase-4.md              # ✅ DOKONČENO - Packs Video & Import
-│   └── PLAN-Internal-Search-trpc.md # 🚧 AKTIVNÍ - Interní vyhledávání
+│   ├── PLAN-Internal-Search-trpc.md # ✅ DOKONČENO - Interní vyhledávání
+│   ├── PLAN-Phase-6-Store-UI.md     # ✅ DOKONČENO - Store UI zmapování
+│   └── PLAN-Model-Inventory.md      # 🚧 AKTIVNÍ - Model Inventory & Backup
 ├── tests/            # Python tests (pytest) - viz sekce Testování
 │   ├── conftest.py   # Globální fixtures a markery
 │   ├── unit/         # Rychlé, izolované testy (zrcadlí src/)
@@ -103,7 +105,10 @@ pnpm build            # Production build
 |--------|------|
 | `src/core/pack_builder.py` | Import packů z Civitai, stahování preview |
 | `src/store/pack_service.py` | CRUD operace nad packy |
-| `src/store/api.py` | FastAPI routery pro packy (v2) |
+| `src/store/api.py` | FastAPI routery pro packy a inventory (v2) |
+| `src/store/inventory_service.py` | Blob inventory, cleanup, impacts, verification |
+| `src/store/backup_service.py` | Backup storage: backup/restore/sync operace |
+| `src/store/cli.py` | **🆕** Typer CLI: inventory, backup, profiles, packs |
 | `src/utils/media_detection.py` | Detekce typu média (image/video), URL transformace |
 | `src/clients/civitai_client.py` | Civitai API client |
 
@@ -113,10 +118,13 @@ pnpm build            # Production build
 | `MediaPreview.tsx` | **HLAVNÍ** komponenta pro zobrazení obrázků/videí s autoPlay |
 | `FullscreenMediaViewer.tsx` | Fullscreen galerie s navigací, quality selector |
 | `GenerationDataPanel.tsx` | Panel s metadata (prompt, seed, model, atd.) |
-| `BrowsePage.tsx` | Browse Civitai - **CÍL PHASE 5** |
+| `BrowsePage.tsx` | Browse Civitai - hotovo |
 | `PacksPage.tsx` | Seznam packů - hotovo |
 | `PackDetailPage.tsx` | Detail packu - hotovo |
 | `ImportWizardModal.tsx` | Wizard pro import s výběrem verzí |
+| **🆕 `InventoryPage.tsx`** | **Model Inventory** - správa blob storage a backupů |
+| **🆕 `BlobsTable.tsx`** | Tabulka blobů s sorting, filtering, bulk actions |
+| **🆕 `InventoryStats.tsx`** | Dashboard karty: Local Disk, Backup, Status, Quick Actions |
 
 ---
 
@@ -284,19 +292,54 @@ Umístění: `apps/web/src/__tests__/`
 
 ---
 
-## 📋 Aktuální práce: Phase 5 - Internal Civitai Search (tRPC)
+## 📋 Aktuální práce: Model Inventory
 
-**Viz:** `plans/PLAN-Internal-Search-trpc.md`
+**Viz:** `plans/PLAN-Model-Inventory.md`
 
 ### Hlavní cíle:
-1. ❌ Backend search router (`/api/search/models`)
-2. ❌ Search service s cachováním
-3. ❌ Frontend API client
-4. ❌ BrowsePage integrace
-5. ❌ Local pack enrichment
-6. ❌ Offline fallback
 
-**STATUS:** 🚧 PLANNING
+Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro správu blobů a backup storage.
+
+**Iterace 1: Backend - Inventory Service** ✅ DOKONČENO
+- ✅ `inventory_service.py` - kompletní služba (300+ řádků)
+- ✅ Modely v `models.py` (BlobStatus, BlobLocation, InventoryItem, atd.)
+- ✅ Integrace do `Store` třídy
+- ✅ API endpointy (`/api/store/inventory/*`)
+- ✅ Backend testy (21 testů v `test_inventory.py`)
+
+**Iterace 2: Backend - Backup Storage** ✅ DOKONČENO
+- ✅ `backup_service.py` (~450 řádků)
+- ✅ backup/restore/sync operace
+- ✅ Backup API endpointy (7 endpointů)
+- ✅ Guard rails (is_last_copy, delete warning)
+- ✅ Location detection v inventory
+- ✅ Backend testy (29 testů v `test_backup.py`)
+
+**Iterace 3: CLI** ✅ DOKONČENO
+- ✅ `synapse inventory` subcommand (list, orphans, missing, cleanup, impacts, verify)
+- ✅ `synapse backup` subcommand (status, sync, blob, restore, delete, config)
+- ✅ Rich formatting, progress spinners
+- ✅ CLI testy (34 testů v `test_cli.py`)
+
+**Iterace 4: UI Dashboard & BlobsTable** ✅ DOKONČENO
+- ✅ `InventoryPage.tsx` - hlavní stránka s React Query
+- ✅ `InventoryStats.tsx` - dashboard karty (Local Disk, Backup, Status, Quick Actions)
+- ✅ `BlobsTable.tsx` - 🔥 HLAVNÍ KOMPONENTA (~450 řádků)
+  - Všechny sloupce (Checkbox, Icon, Name, Type, Size, Status, Location, Used By, Actions)
+  - Sortable headers, bulk selection, context menu
+  - Quick actions (Backup/Restore/Delete)
+- ✅ Helper komponenty: `LocationIcon`, `StatusBadge`, `AssetKindIcon`
+- ✅ `InventoryFilters.tsx` - search + kind/status/location dropdowns
+- ✅ Navigace v `Sidebar.tsx` ("Model Inventory" mezi Packs a Profiles)
+- ✅ Route `/inventory` v `App.tsx`
+- ✅ TypeScript typy v `types.ts`, utility v `utils.ts`
+
+**Iterace 5-6: UI Wizards & Integrace** ❌ ČEKÁ
+- ❌ CleanupWizard, BackupSyncWizard, DeleteConfirmationDialog
+- ❌ ImpactsDialog, VerifyProgress
+- ❌ Frontend testy, E2E testy
+
+**STATUS:** 🚧 ITERACE 5 - UI WIZARDS & DIALOGS
 
 ---
 
@@ -305,7 +348,9 @@ Umístění: `apps/web/src/__tests__/`
 | Fáze | Soubor | Stav |
 |------|--------|------|
 | Phase 4 | `plans/PLAN-Phase-4.md` | ✅ DOKONČENO |
-| Phase 5 | `plans/PLAN-Internal-Search-trpc.md` | 🚧 AKTIVNÍ |
+| Phase 5 | `plans/PLAN-Internal-Search-trpc.md` | ✅ DOKONČENO |
+| Phase 6 | `plans/PLAN-Phase-6-Store-UI.md` | ✅ DOKONČENO |
+| **Model Inventory** | `plans/PLAN-Model-Inventory.md` | 🚧 AKTIVNÍ |
 
 ---
 
@@ -340,7 +385,8 @@ Umístění: `apps/web/src/__tests__/`
 - ❌ Nepřeskakovat integraci - implementace bez integrace = nefunkční
 - ❌ Nezapomínat na testy
 - ❌ Neměnit existující API kontrakty bez migrace
-- ❌ NEPRACOVAT na Phase 4 - ta je dokončena!
+- ❌ NEPRACOVAT na Phase 4, 5, 6 - ty jsou DOKONČENY!
+- ❌ NEPŘESKAKOVAT iterace Model Inventory - musí jít po sobě!
 
 ---
 
@@ -365,5 +411,5 @@ Umístění: `apps/web/src/__tests__/`
 
 ---
 
-*Poslední aktualizace: 2026-01-22*
-*Aktivní fáze: Phase 5 - Internal Search (tRPC)*
+*Poslední aktualizace: 2026-01-24*
+*Aktivní fáze: Model Inventory - Iterace 3 (CLI příkazy)*

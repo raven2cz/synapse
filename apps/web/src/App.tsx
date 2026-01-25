@@ -6,6 +6,7 @@ import { DownloadsPage } from './components/modules/DownloadsPage'
 import { BrowsePage } from './components/modules/BrowsePage'
 import { SettingsPage } from './components/modules/SettingsPage'
 import { ProfilesPage } from './components/modules/ProfilesPage'
+import { InventoryPage } from './components/modules/InventoryPage'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<PacksPage />} />
         <Route path="/packs/:packName" element={<PackDetailPage />} />
+        <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/profiles" element={<ProfilesPage />} />
         <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/browse" element={<BrowsePage />} />

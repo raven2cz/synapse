@@ -43,11 +43,23 @@ from .models import (
     ArtifactProvider,
     AssetKind,
     BackResult,
+    BackupConfig,
+    BackupDeleteResult,
+    BackupOperationResult,
+    BackupStatus,
+    BlobLocation,
+    BlobStatus,
     CivitaiSelector,
+    CleanupResult,
+    DeleteResult,
     DependencySelector,
     DoctorReport,
     ExposeConfig,
     HuggingFaceSelector,
+    ImpactAnalysis,
+    InventoryItem,
+    InventoryResponse,
+    InventorySummary,
     MissingBlob,
     Pack,
     PackDependency,
@@ -57,6 +69,7 @@ from .models import (
     Profile,
     ProfilePackEntry,
     ProviderName,
+    ResetResult,
     ResolvedArtifact,
     ResolvedDependency,
     Runtime,
@@ -66,6 +79,8 @@ from .models import (
     ShadowedEntry,
     StatusReport,
     StoreConfig,
+    SyncItem,
+    SyncResult,
     UISets,
     UnresolvedDependency,
     UnresolvedReport,
@@ -75,6 +90,8 @@ from .models import (
     UpdateResult,
     UseResult,
 )
+from .backup_service import BackupService, BackupError, BackupNotConnectedError, BackupNotEnabledError
+from .inventory_service import InventoryService
 from .pack_service import PackService
 from .profile_service import ProfileService
 from .update_service import UpdateService
@@ -94,6 +111,7 @@ __all__ = [
     "PackService",
     "ProfileService",
     "UpdateService",
+    "InventoryService",
     
     # Models
     "Pack",
@@ -112,11 +130,34 @@ __all__ = [
     "UpdateResult",
     "UseResult",
     "BackResult",
+    "ResetResult",
+    "DeleteResult",
     "DoctorReport",
     "SearchResult",
     "BuildReport",
     "APIResponse",
-    
+
+    # Inventory
+    "BlobStatus",
+    "BlobLocation",
+    "InventoryItem",
+    "InventoryResponse",
+    "InventorySummary",
+    "CleanupResult",
+    "ImpactAnalysis",
+
+    # Backup
+    "BackupService",
+    "BackupConfig",
+    "BackupStatus",
+    "BackupOperationResult",
+    "BackupDeleteResult",
+    "SyncItem",
+    "SyncResult",
+    "BackupError",
+    "BackupNotEnabledError",
+    "BackupNotConnectedError",
+
     # Errors
     "StoreError",
     "StoreLockError",
@@ -174,7 +215,20 @@ class Store:
             self.view_builder,
             civitai_client,
         )
-    
+        # BackupService initialized with default config, updated when store loads
+        self.backup_service = BackupService(
+            self.layout,
+            BackupConfig(),
+        )
+        # InventoryService with backup support
+        self.inventory_service = InventoryService(
+            self.layout,
+            self.blob_store,
+            self.backup_service,
+        )
+        # Set backup service on profile service for auto-restore
+        self.profile_service.set_backup_service(self.backup_service)
+
     # =========================================================================
     # Initialization
     # =========================================================================
@@ -350,14 +404,71 @@ class Store:
         """Get lock file for a pack."""
         return self.layout.load_pack_lock(pack_name)
     
-    def delete_pack(self, pack_name: str) -> bool:
-        """Delete a pack."""
-        # Remove from global profile first
+    def delete_pack(self, pack_name: str) -> "DeleteResult":
+        """Delete a pack and clean up associated resources.
+
+        This includes:
+        - Removing from global profile
+        - Deleting work profile (work__<pack>)
+        - Removing from runtime stacks if active
+        - Deleting pack files
+
+        Returns:
+            DeleteResult with detailed status of the operation
+        """
+        from .models import DeleteResult
+
+        work_profile_name = self.profile_service.get_work_profile_name(pack_name)
+        warnings: List[str] = []
+        removed_from_stacks = False
+        removed_from_global = False
+        removed_work_profile = False
+
+        # 1. Remove from runtime stacks if work profile is active (with lock)
+        try:
+            with self.layout.lock():
+                runtime = self.layout.load_runtime()
+                modified = False
+                for ui_name, ui_state in runtime.ui.items():
+                    if work_profile_name in ui_state.stack:
+                        # Remove work profile from stack
+                        ui_state.stack = [p for p in ui_state.stack if p != work_profile_name]
+                        # Ensure at least global remains
+                        if not ui_state.stack:
+                            ui_state.stack = ["global"]
+                        modified = True
+                if modified:
+                    self.layout.save_runtime(runtime)
+                    removed_from_stacks = True
+        except Exception as e:
+            warnings.append(f"Failed to clean runtime stacks: {e}")
+
+        # 2. Remove from global profile
         try:
             self.profile_service.remove_pack_from_global(pack_name)
-        except Exception:
-            pass
-        return self.pack_service.delete_pack(pack_name)
+            removed_from_global = True
+        except Exception as e:
+            warnings.append(f"Failed to remove from global profile: {e}")
+
+        # 3. Delete work profile
+        try:
+            if self.layout.profile_exists(work_profile_name):
+                self.layout.delete_profile(work_profile_name)
+                removed_work_profile = True
+        except Exception as e:
+            warnings.append(f"Failed to delete work profile: {e}")
+
+        # 4. Delete pack files
+        deleted = self.pack_service.delete_pack(pack_name)
+
+        return DeleteResult(
+            pack_name=pack_name,
+            deleted=deleted,
+            cleanup_warnings=warnings,
+            removed_from_global=removed_from_global,
+            removed_work_profile=removed_work_profile,
+            removed_from_stacks=removed_from_stacks,
+        )
     
     def import_civitai(
         self,
@@ -569,11 +680,75 @@ class Store:
                 pass
         
         return result
-    
+
+    def reset(
+        self,
+        ui_targets: Optional[List[str]] = None,
+        ui_set: Optional[str] = None,
+        sync: bool = False,
+    ) -> "ResetResult":
+        """
+        Reset stack to global for all specified UIs.
+
+        Pops all work profiles and returns to just ["global"].
+
+        Args:
+            ui_targets: List of UI names. If None, uses ui_set.
+            ui_set: Name of UI set to use. Uses default if None.
+            sync: If True, rebuild views
+
+        Returns:
+            ResetResult with details
+        """
+        from .models import ResetResult
+
+        if ui_targets is None:
+            ui_targets = self.get_ui_targets(ui_set)
+
+        notes: List[str] = []
+        from_profiles: dict[str, str] = {}
+
+        with self.layout.lock():
+            runtime = self.layout.load_runtime()
+
+            for ui in ui_targets:
+                # Remember what profile we were on
+                from_profiles[ui] = runtime.get_active_profile(ui)
+
+                # Reset stack to just global
+                runtime.set_stack(ui, ["global"])
+
+            # Save runtime
+            self.layout.save_runtime(runtime)
+
+            # Update active symlinks (ignore if view doesn't exist yet)
+            for ui in ui_targets:
+                try:
+                    self.view_builder.activate(ui, "global")
+                except Exception:
+                    # View may not exist yet - sync will create it
+                    notes.append(f"view_not_activated:{ui}")
+
+        # Sync if requested (outside lock to avoid long hold)
+        if sync:
+            self.sync(ui_set=ui_set)
+
+        # Check if we were already at global
+        if all(p == "global" for p in from_profiles.values()):
+            notes.append("already_at_global")
+
+        return ResetResult(
+            ui_targets=ui_targets,
+            from_profiles=from_profiles,
+            to_profile="global",
+            synced=sync,
+            notes=notes,
+        )
+
     # =========================================================================
     # Update Operations
     # =========================================================================
-    
+
     def check_updates(self, pack_name: str) -> UpdatePlan:
         """
         Check for updates on a pack.
@@ -997,5 +1172,449 @@ class Store:
         
         if partial:
             result["partial"] = self.blob_store.clean_partial()
-        
+
         return result
+
+    # =========================================================================
+    # Inventory
+    # =========================================================================
+
+    def get_inventory(
+        self,
+        kind_filter: Optional[AssetKind] = None,
+        status_filter: Optional["BlobStatus"] = None,
+        include_verification: bool = False,
+    ) -> "InventoryResponse":
+        """
+        Get blob inventory with optional filtering.
+
+        Args:
+            kind_filter: Filter by asset kind
+            status_filter: Filter by blob status
+            include_verification: If True, verify blob hashes (slow!)
+
+        Returns:
+            Complete inventory response with summary and items
+        """
+        return self.inventory_service.build_inventory(
+            kind_filter=kind_filter,
+            status_filter=status_filter,
+            include_verification=include_verification,
+        )
+
+    def get_inventory_summary(self) -> "InventorySummary":
+        """
+        Get quick inventory summary (without item list).
+
+        Returns:
+            Summary statistics only
+        """
+        response = self.inventory_service.build_inventory()
+        return response.summary
+
+    def cleanup_orphans(self, dry_run: bool = True, max_items: int = 0) -> "CleanupResult":
+        """
+        Remove orphan blobs safely.
+
+        NEVER removes referenced blobs.
+
+        Args:
+            dry_run: If True, only preview without deleting
+            max_items: Maximum number of items to delete (0 = unlimited)
+
+        Returns:
+            Cleanup result with details
+        """
+        return self.inventory_service.cleanup_orphans(dry_run=dry_run, max_items=max_items)
+
+    def get_blob_impacts(self, sha256: str) -> "ImpactAnalysis":
+        """
+        Analyze what would break if a blob is deleted.
+
+        Args:
+            sha256: SHA256 hash of blob to analyze
+
+        Returns:
+            Impact analysis
+        """
+        return self.inventory_service.get_impacts(sha256)
+
+    def delete_blob(
+        self,
+        sha256: str,
+        force: bool = False,
+        target: str = "local",
+    ) -> Dict:
+        """
+        Delete a blob with safety checks.
+
+        Args:
+            sha256: SHA256 hash of blob to delete
+            force: If True, delete even if referenced
+            target: Where to delete from: "local", "backup", or "both"
+
+        Returns:
+            Dict with deletion result
+        """
+        return self.inventory_service.delete_blob(sha256, force=force, target=target)
+
+    def verify_blobs(
+        self,
+        sha256_list: Optional[List[str]] = None,
+        all_blobs: bool = False,
+    ) -> Dict:
+        """
+        Verify blob integrity.
+
+        Args:
+            sha256_list: Specific blobs to verify
+            all_blobs: If True, verify all blobs
+
+        Returns:
+            Verification result
+        """
+        return self.inventory_service.verify_blobs(sha256_list=sha256_list, all_blobs=all_blobs)
+
+    # =========================================================================
+    # Backup Storage Operations
+    # =========================================================================
+
+    def get_backup_status(self) -> "BackupStatus":
+        """
+        Get backup storage status.
+
+        Returns:
+            BackupStatus with connection info and statistics
+        """
+        # Ensure backup service has current config
+        if self.is_initialized():
+            config = self.layout.load_config()
+            self.backup_service.update_config(config.backup)
+        return self.backup_service.get_status()
+
+    def backup_blob(
+        self,
+        sha256: str,
+        verify_after: bool = True,
+    ) -> "BackupOperationResult":
+        """
+        Backup a blob from local to backup storage.
+
+        Args:
+            sha256: SHA256 hash of the blob
+            verify_after: If True, verify the copy after backup
+
+        Returns:
+            BackupOperationResult with operation details
+        """
+        return self.backup_service.backup_blob(sha256, verify_after=verify_after)
+
+    def restore_blob(
+        self,
+        sha256: str,
+        verify_after: bool = True,
+    ) -> "BackupOperationResult":
+        """
+        Restore a blob from backup to local storage.
+
+        Args:
+            sha256: SHA256 hash of the blob
+            verify_after: If True, verify the copy after restore
+
+        Returns:
+            BackupOperationResult with operation details
+        """
+        return self.backup_service.restore_blob(sha256, verify_after=verify_after)
+
+    def delete_from_backup(
+        self,
+        sha256: str,
+        confirm: bool = False,
+    ) -> "BackupDeleteResult":
+        """
+        Delete a blob from backup storage.
+
+        Args:
+            sha256: SHA256 hash of the blob
+            confirm: Must be True to actually delete
+
+        Returns:
+            BackupDeleteResult with operation details
+        """
+        return self.backup_service.delete_from_backup(sha256, confirm=confirm)
+
+    def sync_backup(
+        self,
+        direction: str = "to_backup",
+        only_missing: bool = True,
+        dry_run: bool = True,
+    ) -> "SyncResult":
+        """
+        Sync blobs between local and backup storage.
+
+        Args:
+            direction: "to_backup" or "from_backup"
+            only_missing: Only sync blobs missing from target
+            dry_run: If True, only preview without syncing
+
+        Returns:
+            SyncResult with sync details
+        """
+        return self.backup_service.sync(
+            direction=direction,
+            only_missing=only_missing,
+            dry_run=dry_run,
+        )
+
+    def configure_backup(self, config: "BackupConfig") -> None:
+        """
+        Update backup configuration.
+
+        Args:
+            config: New backup configuration
+        """
+        # Update the stored config
+        if self.is_initialized():
+            store_config = self.layout.load_config()
+            store_config.backup = config
+            self.layout.save_config(store_config)
+        # Update the service
+        self.backup_service.update_config(config)
+
+    def is_backup_connected(self) -> bool:
+        """Quick check if backup is connected."""
+        return self.backup_service.is_connected()
+
+    def blob_exists_on_backup(self, sha256: str) -> bool:
+        """Check if blob exists on backup storage."""
+        return self.backup_service.blob_exists_on_backup(sha256)
+
+    # =========================================================================
+    # Pack-Level Backup Operations (pull/push)
+    # =========================================================================
+
+    def pull_pack(
+        self,
+        pack_name: str,
+        dry_run: bool = True,
+    ) -> "SyncResult":
+        """
+        Pull (restore) all blobs for a pack from backup to local.
+
+        This restores pack blobs without activating any profile.
+        Use case: Need pack models locally but want to stay on global profile.
+
+        Args:
+            pack_name: Name of the pack to pull
+            dry_run: If True, only preview without restoring
+
+        Returns:
+            SyncResult with restore details
+        """
+        # Load pack and lock
+        pack = self.layout.load_pack(pack_name)
+        lock = self.layout.load_pack_lock(pack_name)
+
+        if not lock:
+            return SyncResult(
+                dry_run=dry_run,
+                direction="from_backup",
+                blobs_to_sync=0,
+                bytes_to_sync=0,
+                blobs_synced=0,
+                bytes_synced=0,
+                items=[],
+                errors=[f"Pack {pack_name} has no lock file"],
+            )
+
+        # Collect blobs that need to be restored
+        items_to_restore: List[SyncItem] = []
+        errors: List[str] = []
+
+        for resolved in lock.resolved:
+            sha256 = resolved.artifact.sha256
+            if not sha256:
+                continue
+
+            # Skip if already local
+            if self.blob_store.blob_exists(sha256):
+                continue
+
+            # Check if on backup
+            if not self.backup_service.is_connected():
+                errors.append("Backup not connected")
+                break
+
+            if self.backup_service.blob_exists_on_backup(sha256):
+                # Get display name and kind from dependency
+                dep = pack.get_dependency(resolved.dependency_id)
+                # Use expose.filename as primary, fallback to dep.id or dependency_id
+                display_name = (
+                    dep.expose.filename if dep and dep.expose else
+                    dep.id if dep else
+                    resolved.dependency_id
+                )
+                # P5: Include kind in SyncItem
+                kind = dep.kind.value if dep and hasattr(dep.kind, 'value') else str(dep.kind) if dep else None
+
+                items_to_restore.append(SyncItem(
+                    sha256=sha256,
+                    size_bytes=resolved.artifact.size_bytes or 0,
+                    display_name=display_name,
+                    kind=kind,
+                ))
+            else:
+                # P4: Blob not on backup - report as error instead of silent download fallback
+                dep = pack.get_dependency(resolved.dependency_id)
+                dep_name = dep.id if dep else resolved.dependency_id
+                errors.append(f"Blob {sha256[:12]} ({dep_name}) not found on backup")
+
+        bytes_to_sync = sum(item.size_bytes for item in items_to_restore)
+        blobs_synced = 0
+        bytes_synced = 0
+
+        # Execute restore if not dry run
+        if not dry_run:
+            for item in items_to_restore:
+                try:
+                    result = self.backup_service.restore_blob(item.sha256)
+                    if result.success:
+                        blobs_synced += 1
+                        bytes_synced += item.size_bytes
+                    else:
+                        errors.append(f"Restore failed for {item.sha256[:12]}: {result.error}")
+                except Exception as e:
+                    errors.append(f"Restore error for {item.sha256[:12]}: {e}")
+
+        return SyncResult(
+            dry_run=dry_run,
+            direction="from_backup",
+            blobs_to_sync=len(items_to_restore),
+            bytes_to_sync=bytes_to_sync,
+            blobs_synced=blobs_synced,
+            bytes_synced=bytes_synced,
+            items=items_to_restore,
+            errors=errors,
+        )
+
+    def push_pack(
+        self,
+        pack_name: str,
+        dry_run: bool = True,
+        cleanup: bool = False,
+    ) -> "SyncResult":
+        """
+        Push (backup) all blobs for a pack from local to backup.
+
+        Optionally removes local copies after successful backup.
+
+        Args:
+            pack_name: Name of the pack to push
+            dry_run: If True, only preview without backing up
+            cleanup: If True, delete local copies after backup (requires dry_run=False)
+
+        Returns:
+            SyncResult with backup details
+        """
+        # Load pack and lock
+        pack = self.layout.load_pack(pack_name)
+        lock = self.layout.load_pack_lock(pack_name)
+
+        if not lock:
+            return SyncResult(
+                dry_run=dry_run,
+                direction="to_backup",
+                blobs_to_sync=0,
+                bytes_to_sync=0,
+                blobs_synced=0,
+                bytes_synced=0,
+                items=[],
+                errors=[f"Pack {pack_name} has no lock file"],
+            )
+
+        # Collect blobs that need to be backed up
+        items_to_backup: List[SyncItem] = []
+        errors: List[str] = []
+
+        if not self.backup_service.is_connected():
+            return SyncResult(
+                dry_run=dry_run,
+                direction="to_backup",
+                blobs_to_sync=0,
+                bytes_to_sync=0,
+                blobs_synced=0,
+                bytes_synced=0,
+                items=[],
+                errors=["Backup not connected"],
+            )
+
+        for resolved in lock.resolved:
+            sha256 = resolved.artifact.sha256
+            if not sha256:
+                continue
+
+            # Skip if not local
+            if not self.blob_store.blob_exists(sha256):
+                continue
+
+            # Skip if already on backup
+            if self.backup_service.blob_exists_on_backup(sha256):
+                continue
+
+            # Get display name and kind from dependency
+            dep = pack.get_dependency(resolved.dependency_id)
+            # Use expose.filename as primary, fallback to dep.id
+            display_name = (
+                dep.expose.filename if dep and dep.expose else
+                dep.id if dep else
+                resolved.dependency_id
+            )
+            # P5: Include kind in SyncItem
+            kind = dep.kind.value if dep and hasattr(dep.kind, 'value') else str(dep.kind) if dep else None
+
+            items_to_backup.append(SyncItem(
+                sha256=sha256,
+                size_bytes=resolved.artifact.size_bytes or 0,
+                display_name=display_name,
+                kind=kind,
+            ))
+
+        bytes_to_sync = sum(item.size_bytes for item in items_to_backup)
+        blobs_synced = 0
+        bytes_synced = 0
+        blobs_cleaned = 0
+
+        # Execute backup if not dry run
+        if not dry_run:
+            for item in items_to_backup:
+                try:
+                    result = self.backup_service.backup_blob(item.sha256)
+                    if result.success:
+                        blobs_synced += 1
+                        bytes_synced += item.size_bytes
+
+                        # Cleanup local copy if requested
+                        if cleanup:
+                            try:
+                                self.blob_store.remove_blob(item.sha256)
+                                blobs_cleaned += 1
+                            except Exception as e:
+                                errors.append(f"Cleanup failed for {item.sha256[:12]}: {e}")
+                    else:
+                        errors.append(f"Backup failed for {item.sha256[:12]}: {result.error}")
+                except Exception as e:
+                    errors.append(f"Backup error for {item.sha256[:12]}: {e}")
+
+            if cleanup and blobs_cleaned > 0:
+                errors.append(f"note:cleaned_up_{blobs_cleaned}_local_copies")
+
+        return SyncResult(
+            dry_run=dry_run,
+            direction="to_backup",
+            blobs_to_sync=len(items_to_backup),
+            bytes_to_sync=bytes_to_sync,
+            blobs_synced=blobs_synced,
+            bytes_synced=bytes_synced,
+            items=items_to_backup,
+            errors=errors,
+        )

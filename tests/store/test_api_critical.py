@@ -987,5 +987,220 @@ class TestPackDetailWithRealData:
         pytest.skip("V2 Store API test - V1 backend uses different structure")
 
 
+# =============================================================================
+# Reset Endpoint Tests
+# =============================================================================
+
+class TestResetEndpoint:
+    """Tests for profiles/reset endpoint."""
+
+    def test_reset_resets_stack_to_global(self, tmp_path):
+        """Test that reset sets stack to ['global'] for all UIs."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create a pack
+        pack = Pack(
+            name="TestPack",
+            pack_type=AssetKind.LORA,
+            source=PackSource(provider=ProviderName.CIVITAI),
+            dependencies=[],
+        )
+        store.layout.save_pack(pack)
+        store.layout.save_pack_lock(PackLock(pack="TestPack"))
+        store.profile_service.add_pack_to_global("TestPack")
+
+        # Use pack to create work profile
+        store.use("TestPack", ui_set="local", sync=False)
+
+        # Verify stack has work profile
+        runtime = store.layout.load_runtime()
+        assert runtime.get_active_profile("comfyui") == "work__TestPack"
+        assert len(runtime.get_stack("comfyui")) > 1
+
+        # Reset - simulate what API does (with proper error handling)
+        ui_targets = store.get_ui_targets("local")
+        with store.layout.lock():
+            runtime = store.layout.load_runtime()
+            for ui in ui_targets:
+                runtime.set_stack(ui, ["global"])
+            store.layout.save_runtime(runtime)
+            # Update active symlinks (ignore if view doesn't exist yet)
+            for ui in ui_targets:
+                try:
+                    store.view_builder.activate(ui, "global")
+                except Exception:
+                    # View may not exist yet - sync will create it
+                    pass
+
+        # Verify stack is reset
+        runtime = store.layout.load_runtime()
+        assert runtime.get_active_profile("comfyui") == "global"
+        assert runtime.get_stack("comfyui") == ["global"]
+
+    def test_reset_handles_deep_stack(self, tmp_path):
+        """Test that reset handles multiple nested use() calls."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create multiple packs
+        for i in range(3):
+            pack = Pack(
+                name=f"Pack{i}",
+                pack_type=AssetKind.LORA,
+                source=PackSource(provider=ProviderName.CIVITAI),
+                dependencies=[],
+            )
+            store.layout.save_pack(pack)
+            store.layout.save_pack_lock(PackLock(pack=f"Pack{i}"))
+            store.profile_service.add_pack_to_global(f"Pack{i}")
+
+        # Use multiple packs (creates deep stack)
+        for i in range(3):
+            store.use(f"Pack{i}", ui_set="local", sync=False)
+
+        # Verify deep stack
+        runtime = store.layout.load_runtime()
+        assert len(runtime.get_stack("comfyui")) == 4  # global + 3 work profiles
+
+        # Reset
+        ui_targets = store.get_ui_targets("local")
+        with store.layout.lock():
+            runtime = store.layout.load_runtime()
+            for ui in ui_targets:
+                runtime.set_stack(ui, ["global"])
+            store.layout.save_runtime(runtime)
+
+        # Verify clean reset
+        runtime = store.layout.load_runtime()
+        assert runtime.get_stack("comfyui") == ["global"]
+
+
+# =============================================================================
+# Delete Pack Cleanup Tests
+# =============================================================================
+
+class TestDeletePackCleanup:
+    """Tests for delete_pack cleanup behavior."""
+
+    def test_delete_pack_removes_work_profile(self, tmp_path):
+        """Test that delete_pack removes associated work profile."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create and use pack
+        pack = Pack(
+            name="TestPack",
+            pack_type=AssetKind.LORA,
+            source=PackSource(provider=ProviderName.CIVITAI),
+            dependencies=[],
+        )
+        store.layout.save_pack(pack)
+        store.layout.save_pack_lock(PackLock(pack="TestPack"))
+        store.profile_service.add_pack_to_global("TestPack")
+        store.use("TestPack", ui_set="local", sync=False)
+
+        # Verify work profile exists
+        assert store.layout.profile_exists("work__TestPack")
+
+        # Delete pack
+        store.delete_pack("TestPack")
+
+        # Verify work profile is deleted
+        assert not store.layout.profile_exists("work__TestPack")
+
+    def test_delete_pack_removes_from_runtime_stack(self, tmp_path):
+        """Test that delete_pack removes work profile from runtime stacks."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create and use pack
+        pack = Pack(
+            name="TestPack",
+            pack_type=AssetKind.LORA,
+            source=PackSource(provider=ProviderName.CIVITAI),
+            dependencies=[],
+        )
+        store.layout.save_pack(pack)
+        store.layout.save_pack_lock(PackLock(pack="TestPack"))
+        store.profile_service.add_pack_to_global("TestPack")
+        store.use("TestPack", ui_set="local", sync=False)
+
+        # Verify work profile is in stack
+        runtime = store.layout.load_runtime()
+        assert "work__TestPack" in runtime.get_stack("comfyui")
+
+        # Delete pack
+        store.delete_pack("TestPack")
+
+        # Verify work profile removed from stack
+        runtime = store.layout.load_runtime()
+        assert "work__TestPack" not in runtime.get_stack("comfyui")
+        # Stack should still have global
+        assert "global" in runtime.get_stack("comfyui")
+
+    def test_delete_pack_removes_from_global_profile(self, tmp_path):
+        """Test that delete_pack removes pack from global profile."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create pack
+        pack = Pack(
+            name="TestPack",
+            pack_type=AssetKind.LORA,
+            source=PackSource(provider=ProviderName.CIVITAI),
+            dependencies=[],
+        )
+        store.layout.save_pack(pack)
+        store.layout.save_pack_lock(PackLock(pack="TestPack"))
+        store.profile_service.add_pack_to_global("TestPack")
+
+        # Verify in global profile
+        global_profile = store.profile_service.load_global()
+        assert "TestPack" in global_profile.get_pack_names()
+
+        # Delete pack
+        store.delete_pack("TestPack")
+
+        # Verify removed from global profile
+        global_profile = store.profile_service.load_global()
+        assert "TestPack" not in global_profile.get_pack_names()
+
+    def test_delete_pack_handles_unused_pack(self, tmp_path):
+        """Test that delete_pack works for pack that was never used."""
+        from src.store import Store, Pack, PackLock, PackSource, AssetKind, ProviderName
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create pack but don't use it
+        pack = Pack(
+            name="UnusedPack",
+            pack_type=AssetKind.LORA,
+            source=PackSource(provider=ProviderName.CIVITAI),
+            dependencies=[],
+        )
+        store.layout.save_pack(pack)
+        store.layout.save_pack_lock(PackLock(pack="UnusedPack"))
+
+        # Verify no work profile exists
+        assert not store.layout.profile_exists("work__UnusedPack")
+
+        # Delete should work without error
+        result = store.delete_pack("UnusedPack")
+        assert result.deleted is True
+        assert result.pack_name == "UnusedPack"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

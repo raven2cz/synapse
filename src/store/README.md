@@ -189,6 +189,219 @@ Packs with `follow_latest` policy can be updated:
 
 Ambiguous updates (multiple file candidates) require explicit selection via `--choose`.
 
+## Model Inventory
+
+The Model Inventory provides a complete view of all blobs (model files) in the store.
+
+### Blob Status
+
+| Status | Description |
+|--------|-------------|
+| `referenced` | Used by at least one pack |
+| `orphan` | Not referenced by any pack (safe to delete) |
+| `missing` | Referenced but file doesn't exist |
+| `backup_only` | Exists only on backup storage |
+
+### Blob Location
+
+| Location | Description |
+|----------|-------------|
+| `local_only` | Only on local disk |
+| `backup_only` | Only on backup storage |
+| `both` | Synced on both locations |
+| `nowhere` | Missing from both (error state) |
+
+### CLI Commands
+
+```bash
+# List all blobs with filters
+synapse inventory list [--kind checkpoint|lora|vae] [--status referenced|orphan]
+
+# Show orphan blobs only
+synapse inventory orphans
+
+# Show missing blobs
+synapse inventory missing
+
+# Cleanup orphan blobs (dry run)
+synapse inventory cleanup --dry-run
+
+# Cleanup orphan blobs (execute)
+synapse inventory cleanup --execute
+
+# Impact analysis - what depends on a blob?
+synapse inventory impacts <sha256>
+
+# Verify blob integrity
+synapse inventory verify [--all]
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/store/inventory | Get full inventory |
+| GET | /api/store/inventory/{sha256} | Get blob details |
+| GET | /api/store/inventory/{sha256}/impact | Impact analysis |
+| DELETE | /api/store/inventory/{sha256} | Delete blob |
+| POST | /api/store/inventory/cleanup-orphans | Cleanup orphans |
+| POST | /api/store/inventory/verify | Verify integrity |
+
+---
+
+## Backup Storage
+
+External backup storage for offloading models while keeping them recoverable.
+
+### Why Backup?
+
+- Models are **large** (checkpoints 6-12GB, LoRAs 100-500MB)
+- Local disk space is limited
+- Delete locally → restore from backup when needed
+- **No re-download** required!
+
+### Configuration
+
+```json
+// In config.json
+{
+  "backup": {
+    "enabled": true,
+    "path": "/mnt/external/synapse-backup",
+    "auto_backup_new": false,
+    "warn_before_delete_last_copy": true
+  }
+}
+```
+
+### Backup Structure
+
+Mirrors local storage exactly:
+```
+/mnt/external/synapse-backup/
+└── .synapse/
+    └── store/
+        └── data/
+            └── blobs/
+                └── sha256/
+                    └── ab/
+                        └── abc123...
+```
+
+### CLI Commands
+
+```bash
+# Check backup status
+synapse backup status
+
+# Backup a specific blob (local → backup)
+synapse backup blob <sha256>
+
+# Restore a blob from backup (backup → local)
+synapse backup restore <sha256>
+
+# Delete from backup only
+synapse backup delete <sha256> --force
+
+# Configure backup path
+synapse backup config --path /mnt/external/synapse-backup --enable
+```
+
+### Pack-Level Operations
+
+Pull and push entire packs between local and backup storage:
+
+```
+Granularity:
+
+  BLOB:   synapse backup blob/restore <sha256>    (single file)
+  PACK:   synapse backup pull/push <pack>         (all pack blobs)
+  ALL:    synapse backup sync                     (entire store)
+```
+
+```bash
+# Preview what would be restored for a pack (dry run - default)
+synapse backup pull MyPack
+
+# Actually restore all pack blobs from backup
+synapse backup pull MyPack --execute
+
+# Preview what would be backed up for a pack
+synapse backup push MyPack
+
+# Actually backup all pack blobs
+synapse backup push MyPack --execute
+
+# Backup pack and delete local copies (free disk space)
+synapse backup push MyPack --execute --cleanup
+```
+
+**Use case:** Stay on global profile but restore specific pack models when needed:
+```bash
+# Delete local models to save space (keeps backup)
+synapse backup push MyPack --execute --cleanup
+
+# Later: restore when needed, WITHOUT activating work profile
+synapse backup pull MyPack --execute
+
+# Models are available locally, you're still on global profile
+synapse status  # → profile: global
+```
+
+### Bulk Sync Operations
+
+```
+Direction:
+
+  to_backup:    LOCAL  ──────►  BACKUP
+                (copies all local-only blobs to external drive)
+
+  from_backup:  LOCAL  ◄──────  BACKUP
+                (restores all backup-only blobs to local disk)
+```
+
+```bash
+# Preview what would be backed up (dry run - default)
+synapse backup sync --direction to_backup
+
+# Actually backup all local-only blobs
+synapse backup sync --direction to_backup --execute
+
+# Preview what would be restored
+synapse backup sync --direction from_backup
+
+# Actually restore all backup-only blobs to local
+synapse backup sync --direction from_backup --execute
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/store/backup/status | Get backup status |
+| POST | /api/store/backup/blob/{sha256} | Backup blob |
+| POST | /api/store/backup/restore/{sha256} | Restore blob |
+| DELETE | /api/store/backup/{sha256} | Delete from backup |
+| POST | /api/store/backup/sync | Sync operations |
+
+### Guard Rails
+
+Before deleting a blob, the system checks:
+
+1. **Is it the last copy?** - Warning if only in one location
+2. **Is it referenced?** - Warning if used by packs
+3. **Is it active in UIs?** - Warning if currently symlinked
+
+### Auto-Restore
+
+When you run `synapse use MyPack` and a required blob is:
+- Missing locally
+- Present on backup
+
+The system **automatically restores** it from backup before building views.
+
+---
+
 ## API Endpoints
 
 | Method | Path | Description |
@@ -204,6 +417,8 @@ Ambiguous updates (multiple file candidates) require explicit selection via `--c
 | GET | /api/updates/plan | Get update plan |
 | POST | /api/updates/apply | Apply update |
 | GET | /api/search | Search packs |
+| GET | /api/store/inventory | Full inventory listing |
+| GET | /api/store/backup/status | Backup storage status |
 
 ## Testing
 

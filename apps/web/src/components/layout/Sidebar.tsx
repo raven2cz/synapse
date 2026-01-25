@@ -5,6 +5,7 @@ import {
   Search,
   Settings,
   Layers,
+  HardDrive,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDownloadsStore } from '../../stores/downloadsStore'
@@ -12,6 +13,7 @@ import { Logo } from '../ui/Logo'
 
 const navItems = [
   { to: '/', icon: Package, label: 'Packs' },
+  { to: '/inventory', icon: HardDrive, label: 'Model Inventory' },
   { to: '/profiles', icon: Layers, label: 'Profiles' },
   { to: '/browse', icon: Search, label: 'Browse Civitai' },
   { to: '/downloads', icon: Download, label: 'Downloads', badge: true },
