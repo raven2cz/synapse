@@ -1793,6 +1793,143 @@ def backup_push(
 
 
 # =============================================================================
+# State Sync Commands
+# =============================================================================
+
+@backup_app.command("state-status")
+def state_status():
+    """
+    Show sync status of the state/ directory.
+
+    Compares local state/ with backup state/ and shows differences.
+    """
+    store = get_store()
+
+    with console.status("Analyzing state files..."):
+        result = store.backup_service.get_state_sync_status()
+
+    if result.errors:
+        for err in result.errors:
+            if "not enabled" in err.lower():
+                output_warning("Backup not enabled")
+                console.print("\n[dim]Enable with: synapse backup config --enable --path /path/to/backup[/dim]")
+                return
+            elif "not connected" in err.lower():
+                output_warning("Backup not connected")
+                return
+            else:
+                output_error(err)
+        return
+
+    output_header("State Sync Status")
+
+    # Summary
+    summary = result.summary
+    console.print(f"[bold]Total files:[/bold] {summary.total_files}")
+    console.print(f"[green]Synced:[/green] {summary.synced}")
+    console.print(f"[cyan]Local only:[/cyan] {summary.local_only}")
+    console.print(f"[yellow]Backup only:[/yellow] {summary.backup_only}")
+    console.print(f"[magenta]Modified:[/magenta] {summary.modified}")
+
+    if summary.conflicts > 0:
+        console.print(f"[red]Conflicts:[/red] {summary.conflicts}")
+
+    if summary.last_sync:
+        console.print(f"\n[dim]Last sync: {summary.last_sync}[/dim]")
+
+    # Show files that need sync
+    needs_sync = [i for i in result.items if i.status.value != "synced"]
+    if needs_sync:
+        console.print(f"\n[bold]Files needing sync ({len(needs_sync)}):[/bold]")
+        for item in needs_sync[:20]:
+            status_color = {
+                "local_only": "cyan",
+                "backup_only": "yellow",
+                "modified": "magenta",
+                "conflict": "red",
+            }.get(item.status.value, "white")
+            console.print(f"  [{status_color}]{item.status.value:12}[/{status_color}] {item.relative_path}")
+
+        if len(needs_sync) > 20:
+            console.print(f"  [dim]... and {len(needs_sync) - 20} more[/dim]")
+
+        console.print(f"\n[dim]Sync with: synapse backup state-sync --direction to_backup[/dim]")
+    else:
+        output_success("All state files are synced!")
+
+
+@backup_app.command("state-sync")
+def state_sync(
+    direction: str = typer.Option(
+        "to_backup",
+        "--direction", "-d",
+        help="Sync direction: to_backup, from_backup, or bidirectional"
+    ),
+    execute: bool = typer.Option(
+        False,
+        "--execute", "-x",
+        help="Actually perform the sync (default is dry-run)"
+    ),
+):
+    """
+    Sync the state/ directory with backup storage.
+
+    Examples:
+        synapse backup state-sync                           # Preview sync to backup
+        synapse backup state-sync --execute                 # Sync to backup
+        synapse backup state-sync --direction from_backup   # Preview restore from backup
+        synapse backup state-sync -d bidirectional -x       # Bidirectional sync (newer wins)
+    """
+    store = get_store()
+    dry_run = not execute
+
+    action = "Would sync" if dry_run else "Syncing"
+    with console.status(f"{action} state files..."):
+        result = store.backup_service.sync_state(
+            direction=direction,
+            dry_run=dry_run,
+        )
+
+    if result.errors:
+        for err in result.errors:
+            if "not enabled" in err.lower():
+                output_error("Backup not enabled. Configure with: synapse backup config --enable --path /path")
+                raise typer.Exit(1)
+            elif "not connected" in err.lower():
+                output_error("Backup not connected")
+                raise typer.Exit(1)
+
+    output_header(f"State Sync: {direction}", "DRY RUN" if dry_run else "")
+
+    summary = result.summary
+    console.print(f"[bold]Total files:[/bold] {summary.total_files}")
+    console.print(f"[green]Already synced:[/green] {summary.synced}")
+
+    if summary.local_only > 0:
+        console.print(f"[cyan]Local only:[/cyan] {summary.local_only}")
+    if summary.backup_only > 0:
+        console.print(f"[yellow]Backup only:[/yellow] {summary.backup_only}")
+    if summary.modified > 0:
+        console.print(f"[magenta]Modified:[/magenta] {summary.modified}")
+
+    if not dry_run:
+        console.print(f"\n[green]✓ Synced {result.synced_files} file(s)[/green]")
+    else:
+        needs_sync = summary.local_only + summary.backup_only + summary.modified
+        if needs_sync > 0:
+            console.print(f"\n[dim]Run with --execute to sync {needs_sync} file(s)[/dim]")
+        else:
+            output_success("All state files are already synced!")
+
+    # Show errors
+    real_errors = [e for e in result.errors if not e.startswith("note:")]
+    if real_errors:
+        console.print(f"\n[yellow]Errors ({len(real_errors)}):[/yellow]")
+        for err in real_errors[:5]:
+            console.print(f"  • {err}")
+
+
+# =============================================================================
 # Main Entry Point
 # =============================================================================
 

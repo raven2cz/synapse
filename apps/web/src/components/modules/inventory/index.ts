@@ -1,6 +1,6 @@
 /**
- * Model Inventory Module
- * Exports all inventory components
+ * Inventory Module
+ * Exports all inventory components for blob storage and backup management
  */
 
 // Page and main components
@@ -21,6 +21,7 @@ export { BackupSyncWizard } from './BackupSyncWizard'
 export { ImpactsDialog } from './ImpactsDialog'
 export { VerifyProgressDialog } from './VerifyProgressDialog'
 export type { VerifyResult } from './VerifyProgressDialog'
+export { TransferProgressDialog } from './TransferProgressDialog'
 
 export * from './types'
 export * from './utils'

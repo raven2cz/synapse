@@ -14,6 +14,8 @@ Features:
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +26,9 @@ from urllib.parse import urlparse
 import requests
 
 from .layout import StoreLayout
+from .models import BlobManifest
+
+logger = logging.getLogger(__name__)
 
 
 class BlobStoreError(Exception):
@@ -431,13 +436,14 @@ class BlobStore:
             if not prefix_dir.is_dir():
                 continue
             for blob_file in prefix_dir.iterdir():
-                if blob_file.is_file() and not blob_file.name.endswith(".part"):
+                # Skip .part (partial downloads) and .meta (manifests)
+                if blob_file.is_file() and not blob_file.suffix:
                     expected = blob_file.name
                     if self.verify(expected):
                         valid.append(expected)
                     else:
                         invalid.append(expected)
-        
+
         return valid, invalid
     
     # =========================================================================
@@ -445,31 +451,34 @@ class BlobStore:
     # =========================================================================
     
     def list_blobs(self) -> List[str]:
-        """List all blob SHA256 hashes."""
+        """List all blob SHA256 hashes (excludes .part and .meta files)."""
         blobs = []
         blobs_path = self.layout.blobs_path
         if not blobs_path.exists():
             return blobs
-        
+
         for prefix_dir in blobs_path.iterdir():
             if not prefix_dir.is_dir():
                 continue
             for blob_file in prefix_dir.iterdir():
-                if blob_file.is_file() and not blob_file.name.endswith(".part"):
+                # Skip .part (partial downloads) and .meta (manifests)
+                if blob_file.is_file() and not blob_file.suffix:
                     blobs.append(blob_file.name)
-        
+
         return blobs
     
     def remove_blob(self, sha256: str) -> bool:
         """
-        Remove a blob from the store.
-        
+        Remove a blob from the store (and its manifest).
+
         Returns:
             True if blob was removed, False if it didn't exist
         """
         path = self.blob_path(sha256)
         if path.exists():
             path.unlink()
+            # Also remove manifest if exists
+            self.delete_manifest(sha256)
             # Remove empty parent directory
             try:
                 path.parent.rmdir()
@@ -564,3 +573,87 @@ class BlobStore:
         # Fall back to copy
         shutil.copy2(source_path, blob_path)
         return sha256
+
+    # =========================================================================
+    # Blob Manifest Operations (write-once metadata)
+    # =========================================================================
+
+    def manifest_path(self, sha256: str) -> Path:
+        """Get path to the manifest file for a blob."""
+        return self.layout.blob_manifest_path(sha256.lower())
+
+    def manifest_exists(self, sha256: str) -> bool:
+        """Check if a manifest exists for this blob."""
+        return self.manifest_path(sha256).exists()
+
+    def read_manifest(self, sha256: str) -> Optional[BlobManifest]:
+        """
+        Read manifest for a blob.
+
+        Returns:
+            BlobManifest if exists, None otherwise
+        """
+        path = self.manifest_path(sha256)
+        if not path.exists():
+            return None
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return BlobManifest.model_validate(data)
+        except Exception as e:
+            logger.warning(f"[BlobStore] Failed to read manifest {sha256[:12]}: {e}")
+            return None
+
+    def write_manifest(self, sha256: str, manifest: BlobManifest) -> bool:
+        """
+        Write manifest for a blob (write-once, never overwrites).
+
+        Args:
+            sha256: Blob hash
+            manifest: Manifest data
+
+        Returns:
+            True if written, False if manifest already exists (not an error)
+        """
+        path = self.manifest_path(sha256)
+
+        # Write-once: never overwrite existing manifest
+        if path.exists():
+            logger.debug(f"[BlobStore] Manifest already exists for {sha256[:12]}, skipping")
+            return False
+
+        # Ensure parent directory exists
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Write atomically via temp file
+            temp_path = path.with_suffix(".meta.tmp")
+            with open(temp_path, "w", encoding="utf-8") as f:
+                json.dump(manifest.model_dump(mode="json"), f, indent=2)
+            temp_path.replace(path)
+            logger.debug(f"[BlobStore] Created manifest for {sha256[:12]}")
+            return True
+        except Exception as e:
+            logger.error(f"[BlobStore] Failed to write manifest {sha256[:12]}: {e}")
+            # Clean up temp file if exists
+            temp_path = path.with_suffix(".meta.tmp")
+            if temp_path.exists():
+                temp_path.unlink()
+            return False
+
+    def delete_manifest(self, sha256: str) -> bool:
+        """
+        Delete manifest for a blob (used when blob is deleted).
+
+        Returns:
+            True if deleted, False if didn't exist
+        """
+        path = self.manifest_path(sha256)
+        if path.exists():
+            try:
+                path.unlink()
+                return True
+            except Exception as e:
+                logger.warning(f"[BlobStore] Failed to delete manifest {sha256[:12]}: {e}")
+        return False

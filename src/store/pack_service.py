@@ -40,6 +40,8 @@ from .models import (
     ArtifactIntegrity,
     ArtifactProvider,
     AssetKind,
+    BlobManifest,
+    BlobOrigin,
     CivitaiSelector,
     DependencySelector,
     ExposeConfig,
@@ -1358,6 +1360,9 @@ class PackService:
         if not lock:
             raise PackNotFoundError(f"No lock file for pack: {pack_name}")
 
+        # Load pack for expose filename lookup
+        pack = self.layout.load_pack(pack_name)
+
         installed = []
 
         for resolved in lock.resolved:
@@ -1367,8 +1372,12 @@ class PackService:
             if not urls:
                 continue
 
-            if sha256 and self.blob_store.blob_exists(sha256):
+            blob_already_existed = sha256 and self.blob_store.blob_exists(sha256)
+
+            if blob_already_existed:
                 installed.append(sha256)
+                # Ensure manifest exists even for pre-existing blobs
+                self._ensure_blob_manifest(sha256, resolved, pack)
                 continue
 
             try:
@@ -1389,7 +1398,60 @@ class PackService:
                     resolved.artifact.integrity.sha256_verified = True
                     self.layout.save_pack_lock(lock)
 
+                # Create manifest for newly downloaded blob
+                self._ensure_blob_manifest(actual_sha, resolved, pack)
+
             except Exception as e:
                 logger.error(f"[PackService] Failed to install {resolved.dependency_id}: {e}")
 
         return installed
+
+    def _ensure_blob_manifest(
+        self,
+        sha256: str,
+        resolved: ResolvedDependency,
+        pack: Optional[Pack],
+    ) -> None:
+        """
+        Ensure a manifest exists for a blob (write-once, never overwrites).
+
+        Called during blob installation to persist metadata for orphan recovery.
+        """
+        # Skip if manifest already exists
+        if self.blob_store.manifest_exists(sha256):
+            return
+
+        # Get expose filename from pack dependency, fall back to provider filename
+        expose_filename: Optional[str] = None
+        if pack:
+            dep = pack.get_dependency(resolved.dependency_id)
+            if dep:
+                expose_filename = dep.expose.filename
+
+        # Fall back to provider filename or SHA256 prefix
+        original_filename = (
+            expose_filename
+            or resolved.artifact.provider.filename
+            or f"{sha256[:12]}.bin"
+        )
+
+        # Build origin from provider
+        provider = resolved.artifact.provider
+        origin = BlobOrigin(
+            provider=provider.name,
+            model_id=provider.model_id,
+            version_id=provider.version_id,
+            file_id=provider.file_id,
+            filename=provider.filename,
+            repo_id=provider.repo_id,
+        )
+
+        # Create manifest
+        manifest = BlobManifest(
+            original_filename=original_filename,
+            kind=resolved.artifact.kind,
+            origin=origin,
+        )
+
+        # Write manifest (write-once)
+        self.blob_store.write_manifest(sha256, manifest)

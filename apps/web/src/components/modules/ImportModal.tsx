@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Link as LinkIcon, FileJson, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
+import { toast } from '@/stores/toastStore'
 
 interface ImportModalProps {
   isOpen: boolean
@@ -47,12 +48,14 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         warnings: data.warnings || [],
       })
       queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success(`Pack "${data.pack?.name || data.name}" imported successfully`)
     },
     onError: (err: Error) => {
       setResult({ success: false, errors: [err.message], warnings: [] })
+      toast.error(`Import failed: ${err.message}`)
     },
   })
-  
+
   const importFileMutation = useMutation({
     mutationFn: async (workflowFile: File) => {
       // Read file content and send as JSON
@@ -84,12 +87,14 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         warnings: data.warnings || [],
       })
       queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success(`Pack "${data.pack?.name || data.name}" imported from workflow`)
     },
     onError: (err: Error) => {
       setResult({ success: false, errors: [err.message], warnings: [] })
+      toast.error(`Import failed: ${err.message}`)
     },
   })
-  
+
   const handleImport = () => {
     setResult(null)
     if (tab === 'url' && url) {

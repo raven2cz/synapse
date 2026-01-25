@@ -235,7 +235,11 @@ class StoreLayout:
     def blob_part_path(self, sha256: str) -> Path:
         """Get path to a partial download for a blob."""
         return self.blob_path(sha256).with_suffix(".part")
-    
+
+    def blob_manifest_path(self, sha256: str) -> Path:
+        """Get path to the manifest file for a blob."""
+        return self.blob_path(sha256).with_suffix(".meta")
+
     # =========================================================================
     # Locking
     # =========================================================================

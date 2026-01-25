@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "synapse-store"
-version = "2.1.4"
+version = "2.2.0"
 description = "ComfyUI Asset Manager - Content-addressable storage with multi-UI support"
 readme = "README.md"
 license = "MIT"

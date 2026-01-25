@@ -202,8 +202,8 @@ export function BlobsTable({
       )}
 
       {/* Main Table */}
-      <Card padding="none" className="overflow-hidden">
-        <div className="overflow-x-auto">
+      <Card padding="none" className="overflow-visible">
+        <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-mid/50 bg-slate-deep/50">
@@ -275,7 +275,7 @@ export function BlobsTable({
                 </th>
 
                 {/* Used By */}
-                <th className="w-[150px] px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
+                <th className="w-[220px] px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
                   Used By
                 </th>
 
@@ -286,7 +286,7 @@ export function BlobsTable({
               </tr>
             </thead>
             <tbody>
-              {sortedItems.map((item) => (
+              {sortedItems.map((item, index) => (
                 <BlobRow
                   key={item.sha256}
                   item={item}
@@ -298,6 +298,7 @@ export function BlobsTable({
                   onRestore={onRestore}
                   onDelete={onDelete}
                   onShowImpacts={onShowImpacts}
+                  isNearBottom={index >= sortedItems.length - 3}
                 />
               ))}
             </tbody>
@@ -366,6 +367,7 @@ function BlobRow({
   onRestore,
   onDelete,
   onShowImpacts,
+  isNearBottom = false,
 }: {
   item: InventoryItem
   selected: boolean
@@ -376,6 +378,7 @@ function BlobRow({
   onRestore: (sha256: string) => Promise<void>
   onDelete: (sha256: string, target: 'local' | 'backup' | 'both') => void
   onShowImpacts: (item: InventoryItem) => void
+  isNearBottom?: boolean
 }) {
   const [isLoading, setIsLoading] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -456,13 +459,44 @@ function BlobRow({
 
       {/* Name */}
       <td className="px-4 py-3">
-        <div className="flex flex-col">
-          <span className="font-medium text-text-primary truncate max-w-[250px]">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-text-primary">
             {item.display_name}
           </span>
-          <span className="text-xs text-text-muted font-mono">
-            {item.sha256.slice(0, 12)}...
-          </span>
+          {/* Original filename from origin */}
+          {item.origin?.filename && item.origin.filename !== item.display_name && (
+            <span className="text-xs text-text-secondary">
+              {item.origin.filename}
+            </span>
+          )}
+          {/* SHA256 + Civitai link */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-text-muted font-mono">
+              {item.sha256.slice(0, 12)}...
+            </span>
+            {item.origin?.provider === 'civitai' && item.origin.model_id && (
+              <a
+                href={`https://civitai.com/models/${item.origin.model_id}${item.origin.version_id ? `?modelVersionId=${item.origin.version_id}` : ''}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-synapse hover:text-synapse-light hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Civitai
+              </a>
+            )}
+            {item.origin?.provider === 'huggingface' && item.origin.repo_id && (
+              <a
+                href={`https://huggingface.co/${item.origin.repo_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-synapse hover:text-synapse-light hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                HuggingFace
+              </a>
+            )}
+          </div>
         </div>
       </td>
 
@@ -492,23 +526,14 @@ function BlobRow({
       <td className="px-4 py-3">
         {item.used_by_packs.length > 0 ? (
           <div className="flex flex-wrap gap-1">
-            {item.used_by_packs.slice(0, 2).map((pack) => (
+            {item.used_by_packs.map((pack) => (
               <span
                 key={pack}
-                className="text-xs px-1.5 py-0.5 bg-slate-mid/30 rounded text-text-secondary truncate max-w-[60px]"
-                title={pack}
+                className="text-xs px-1.5 py-0.5 bg-slate-mid/30 rounded text-text-secondary whitespace-nowrap"
               >
                 {pack}
               </span>
             ))}
-            {item.used_by_packs.length > 2 && (
-              <span
-                className="text-xs px-1.5 py-0.5 bg-slate-mid/30 rounded text-text-muted"
-                title={item.used_by_packs.slice(2).join(', ')}
-              >
-                +{item.used_by_packs.length - 2}
-              </span>
-            )}
           </div>
         ) : (
           <span className="text-text-muted text-sm">-</span>
@@ -557,8 +582,11 @@ function BlobRow({
                   onClick={() => setShowMenu(false)}
                 />
 
-                {/* Menu */}
-                <div className="absolute right-0 top-full mt-1 z-20 w-48 py-1 bg-slate-dark border border-slate-mid rounded-lg shadow-xl">
+                {/* Menu - opens upward when near bottom of table */}
+                <div className={clsx(
+                  "absolute right-0 z-50 w-48 py-1 bg-slate-dark border border-slate-mid rounded-lg shadow-xl",
+                  isNearBottom ? "bottom-full mb-1" : "top-full mt-1"
+                )}>
                   {/* Copy SHA256 */}
                   <button
                     className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"

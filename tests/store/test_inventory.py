@@ -6,6 +6,8 @@ from pathlib import Path
 from src.store import Store
 from src.store.models import (
     AssetKind,
+    BlobManifest,
+    BlobOrigin,
     BlobStatus,
     BlobLocation,
     Pack,
@@ -397,6 +399,74 @@ class TestInventoryFiltering:
 
         assert all(item.status == BlobStatus.ORPHAN for item in inventory.items)
         assert len(inventory.items) == 1
+
+
+class TestOrphanManifest:
+    """Test orphan blob metadata from manifests."""
+
+    def test_orphan_with_manifest_shows_metadata(self, tmp_path):
+        """Orphan blob with manifest shows proper display_name and kind."""
+        from src.store.models import BlobManifest, BlobOrigin
+
+        store = Store(tmp_path)
+        store.init()
+
+        # Create orphan blob
+        blob_content = b"orphan blob with manifest"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Create manifest for it
+        origin = BlobOrigin(
+            provider=ProviderName.CIVITAI,
+            model_id=12345,
+            version_id=67890,
+            filename="original_from_civitai.safetensors",
+        )
+        manifest = BlobManifest(
+            original_filename="my_exposed_model.safetensors",
+            kind=AssetKind.LORA,
+            origin=origin,
+        )
+        store.blob_store.write_manifest(sha256, manifest)
+
+        # Get inventory
+        inventory = store.get_inventory()
+
+        # Find our orphan
+        orphan = next((i for i in inventory.items if i.sha256 == sha256), None)
+        assert orphan is not None
+        assert orphan.status == BlobStatus.ORPHAN
+
+        # Should have metadata from manifest
+        assert orphan.display_name == "my_exposed_model.safetensors"
+        assert orphan.kind == AssetKind.LORA
+        assert orphan.origin is not None
+        assert orphan.origin.provider == ProviderName.CIVITAI
+        assert orphan.origin.model_id == 12345
+
+    def test_orphan_without_manifest_shows_sha256(self, tmp_path):
+        """Orphan blob without manifest shows SHA256 prefix."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create orphan blob without manifest
+        blob_content = b"orphan blob without manifest"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        inventory = store.get_inventory()
+
+        orphan = next((i for i in inventory.items if i.sha256 == sha256), None)
+        assert orphan is not None
+        assert orphan.status == BlobStatus.ORPHAN
+
+        # Should fallback to SHA256 prefix
+        assert orphan.display_name == sha256[:12] + "..."
+        assert orphan.kind == AssetKind.UNKNOWN
+        assert orphan.origin is None
 
 
 # =============================================================================

@@ -99,6 +99,9 @@ export interface BackupStatus {
   free_space?: number
   last_sync?: string
   error?: string
+  // Config options
+  auto_backup_new?: boolean
+  warn_before_delete_last_copy?: boolean
 }
 
 export interface SyncItem {
@@ -121,6 +124,13 @@ export interface SyncResult {
 }
 
 export type BulkAction = 'backup' | 'restore' | 'delete_local' | 'delete_backup'
+
+export interface BackupConfigRequest {
+  enabled: boolean
+  path?: string
+  auto_backup_new: boolean
+  warn_before_delete_last_copy: boolean
+}
 
 export interface InventoryFilters {
   kind: AssetKind | 'all'
@@ -177,4 +187,87 @@ export interface PackPullPushResponse {
   cleanup?: boolean
   items: PackSyncResultItem[]
   errors: string[]
+}
+
+// State Sync Types
+
+export type StateSyncStatus = 'synced' | 'local_only' | 'backup_only' | 'modified' | 'conflict'
+
+export interface StateSyncItem {
+  relative_path: string
+  status: StateSyncStatus
+  local_mtime?: string
+  backup_mtime?: string
+  local_size?: number
+  backup_size?: number
+}
+
+export interface StateSyncSummary {
+  total_files: number
+  synced: number
+  local_only: number
+  backup_only: number
+  modified: number
+  conflicts: number
+  last_sync?: string
+}
+
+export interface StateSyncStatusResponse {
+  enabled: boolean
+  connected: boolean
+  dry_run?: boolean
+  direction?: string
+  summary: StateSyncSummary
+  items: StateSyncItem[]
+  errors: string[]
+}
+
+export interface StateSyncResult {
+  dry_run: boolean
+  direction: string
+  summary: StateSyncSummary
+  synced_files: number
+  items: StateSyncItem[]
+  errors: string[]
+}
+
+// =============================================================================
+// Transfer Progress Types (for backup/restore/download operations)
+// =============================================================================
+
+export type TransferOperation = 'backup' | 'restore' | 'download' | 'cleanup' | 'verify'
+
+export type TransferStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
+
+export interface TransferItem {
+  sha256: string
+  display_name: string
+  size_bytes: number
+  status: TransferStatus
+  error?: string
+  bytes_transferred?: number
+}
+
+export interface TransferProgress {
+  operation: TransferOperation
+  status: TransferStatus
+  // Counts
+  total_items: number
+  completed_items: number
+  failed_items: number
+  // Bytes
+  total_bytes: number
+  transferred_bytes: number
+  // Current item being processed
+  current_item?: TransferItem
+  // Timing
+  started_at?: string
+  elapsed_seconds?: number
+  eta_seconds?: number
+  bytes_per_second?: number
+  // Results
+  items: TransferItem[]
+  errors: string[]
+  // Can be resumed if failed
+  can_resume: boolean
 }

@@ -483,11 +483,20 @@ def get_inventory(
     """
     from .models import AssetKind, BlobStatus
 
+    logger.info(
+        "[API] GET /inventory (kind=%s, status=%s, verify=%s, limit=%d)",
+        kind,
+        status,
+        include_verification,
+        limit,
+    )
+
     kind_filter = None
     if kind and kind != "all":
         try:
             kind_filter = AssetKind(kind)
         except ValueError:
+            logger.warning("[API] Invalid kind filter: %s", kind)
             raise HTTPException(400, f"Invalid kind: {kind}")
 
     status_filter = None
@@ -495,13 +504,18 @@ def get_inventory(
         try:
             status_filter = BlobStatus(status)
         except ValueError:
+            logger.warning("[API] Invalid status filter: %s", status)
             raise HTTPException(400, f"Invalid status: {status}")
 
-    inventory = store.get_inventory(
-        kind_filter=kind_filter,
-        status_filter=status_filter,
-        include_verification=include_verification,
-    )
+    try:
+        inventory = store.get_inventory(
+            kind_filter=kind_filter,
+            status_filter=status_filter,
+            include_verification=include_verification,
+        )
+    except Exception as e:
+        logger.error("[API] Failed to get inventory: %s", e, exc_info=True)
+        raise HTTPException(500, f"Failed to get inventory: {str(e)}")
 
     # Sort items
     if sort_by == "size_desc":
@@ -516,6 +530,8 @@ def get_inventory(
     # Paginate
     total = len(inventory.items)
     inventory.items = inventory.items[offset:offset + limit]
+
+    logger.debug("[API] Returning %d items (total=%d)", len(inventory.items), total)
 
     return {
         "generated_at": inventory.generated_at,
@@ -574,11 +590,27 @@ def cleanup_orphans(
 
     NEVER removes referenced blobs. Use dry_run=true to preview.
     """
-    result = store.cleanup_orphans(
-        dry_run=request.dry_run,
-        max_items=request.max_items,
+    logger.info(
+        "[API] POST /inventory/cleanup-orphans (dry_run=%s, max_items=%d)",
+        request.dry_run,
+        request.max_items,
     )
-    return result.model_dump()
+
+    try:
+        result = store.cleanup_orphans(
+            dry_run=request.dry_run,
+            max_items=request.max_items,
+        )
+        logger.info(
+            "[API] Cleanup result: found=%d, deleted=%d, freed=%.2f MB",
+            result.orphans_found,
+            result.orphans_deleted,
+            result.bytes_freed / 1024 / 1024 if result.bytes_freed else 0,
+        )
+        return result.model_dump()
+    except Exception as e:
+        logger.error("[API] Cleanup failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Cleanup failed: {str(e)}")
 
 
 @store_router.delete("/inventory/{sha256}", response_model=Dict[str, Any])
@@ -594,12 +626,27 @@ def delete_blob(
     Without force=true, only orphan blobs can be deleted.
     Returns 409 Conflict if blob is referenced and force=false.
     """
-    result = store.delete_blob(sha256, force=force, target=target)
+    logger.info(
+        "[API] DELETE /inventory/%s (force=%s, target=%s)",
+        sha256[:12] if len(sha256) >= 12 else sha256,
+        force,
+        target,
+    )
 
-    if not result.get("deleted") and "impacts" in result:
-        raise HTTPException(409, detail=result)
+    try:
+        result = store.delete_blob(sha256, force=force, target=target)
 
-    return result
+        if not result.get("deleted") and "impacts" in result:
+            logger.info("[API] Delete blocked: blob is referenced")
+            raise HTTPException(409, detail=result)
+
+        logger.info("[API] Delete result: deleted=%s", result.get("deleted"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[API] Delete failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Delete failed: {str(e)}")
 
 
 @store_router.post("/inventory/verify", response_model=Dict[str, Any])
@@ -612,10 +659,26 @@ def verify_blobs(
 
     Checks SHA256 hashes of blobs. Use all=true to verify all blobs.
     """
-    return store.verify_blobs(
-        sha256_list=request.sha256,
-        all_blobs=request.all,
+    logger.info(
+        "[API] POST /inventory/verify (all=%s, specific=%d)",
+        request.all,
+        len(request.sha256 or []),
     )
+
+    try:
+        result = store.verify_blobs(
+            sha256_list=request.sha256,
+            all_blobs=request.all,
+        )
+        logger.info(
+            "[API] Verify result: %d verified, %d invalid",
+            result.get("verified", 0),
+            len(result.get("invalid", [])),
+        )
+        return result
+    except Exception as e:
+        logger.error("[API] Verify failed: %s", e, exc_info=True)
+        raise HTTPException(500, f"Verification failed: {str(e)}")
 
 
 # =============================================================================
@@ -982,6 +1045,139 @@ def get_pack_backup_status(
         }
     except PackNotFoundError:
         raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================================
+# State Sync Endpoints
+# =============================================================================
+
+class StateSyncRequest(BaseModel):
+    """Request for state sync operation."""
+    direction: str = "to_backup"  # "to_backup", "from_backup", "bidirectional"
+    dry_run: bool = True
+
+
+@store_router.get("/state/sync-status", response_model=Dict[str, Any])
+def get_state_sync_status(store=Depends(require_initialized)):
+    """
+    Get the sync status of the state/ directory.
+
+    Returns summary and list of files with their sync status.
+    """
+    try:
+        result = store.backup_service.get_state_sync_status()
+        return {
+            "enabled": store.backup_service.config.enabled,
+            "connected": store.backup_service.is_connected(),
+            "dry_run": result.dry_run,
+            "direction": result.direction,
+            "summary": {
+                "total_files": result.summary.total_files,
+                "synced": result.summary.synced,
+                "local_only": result.summary.local_only,
+                "backup_only": result.summary.backup_only,
+                "modified": result.summary.modified,
+                "conflicts": result.summary.conflicts,
+                "last_sync": result.summary.last_sync,
+            },
+            "items": [
+                {
+                    "relative_path": item.relative_path,
+                    "status": item.status.value,
+                    "local_mtime": item.local_mtime,
+                    "backup_mtime": item.backup_mtime,
+                    "local_size": item.local_size,
+                    "backup_size": item.backup_size,
+                }
+                for item in result.items
+            ],
+            "errors": result.errors,
+        }
+    except BackupNotEnabledError:
+        return {
+            "enabled": False,
+            "connected": False,
+            "summary": {
+                "total_files": 0,
+                "synced": 0,
+                "local_only": 0,
+                "backup_only": 0,
+                "modified": 0,
+                "conflicts": 0,
+                "last_sync": None,
+            },
+            "items": [],
+            "errors": ["Backup not enabled"],
+        }
+    except BackupNotConnectedError:
+        return {
+            "enabled": True,
+            "connected": False,
+            "summary": {
+                "total_files": 0,
+                "synced": 0,
+                "local_only": 0,
+                "backup_only": 0,
+                "modified": 0,
+                "conflicts": 0,
+                "last_sync": None,
+            },
+            "items": [],
+            "errors": ["Backup storage not connected"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@store_router.post("/state/sync", response_model=Dict[str, Any])
+def sync_state(
+    request: StateSyncRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """
+    Sync the state/ directory with backup storage.
+
+    Args:
+        direction: "to_backup", "from_backup", or "bidirectional"
+        dry_run: If true, just show what would be synced
+    """
+    try:
+        result = store.backup_service.sync_state(
+            direction=request.direction,
+            dry_run=request.dry_run,
+        )
+        return {
+            "dry_run": result.dry_run,
+            "direction": result.direction,
+            "summary": {
+                "total_files": result.summary.total_files,
+                "synced": result.summary.synced,
+                "local_only": result.summary.local_only,
+                "backup_only": result.summary.backup_only,
+                "modified": result.summary.modified,
+                "conflicts": result.summary.conflicts,
+                "last_sync": result.summary.last_sync,
+            },
+            "synced_files": result.synced_files,
+            "items": [
+                {
+                    "relative_path": item.relative_path,
+                    "status": item.status.value,
+                    "local_mtime": item.local_mtime,
+                    "backup_mtime": item.backup_mtime,
+                    "local_size": item.local_size,
+                    "backup_size": item.backup_size,
+                }
+                for item in result.items
+            ],
+            "errors": result.errors,
+        }
+    except BackupNotEnabledError:
+        raise HTTPException(status_code=400, detail="Backup not enabled")
+    except BackupNotConnectedError:
+        raise HTTPException(status_code=503, detail="Backup storage not connected")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

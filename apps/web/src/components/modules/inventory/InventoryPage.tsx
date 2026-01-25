@@ -1,5 +1,5 @@
 /**
- * InventoryPage - Main Model Inventory page
+ * InventoryPage - Main Inventory page
  *
  * Features:
  * - Dashboard with stats cards
@@ -15,6 +15,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { HardDrive, RefreshCw } from 'lucide-react'
 import { Button } from '../../ui/Button'
+import { toast } from '../../../stores/toastStore'
 import { BreathingOrb } from '../../ui/BreathingOrb'
 import { InventoryStats } from './InventoryStats'
 import { InventoryFilters } from './InventoryFilters'
@@ -68,19 +69,34 @@ const api = {
   },
 
   async cleanupOrphans(dryRun: boolean): Promise<CleanupResult> {
-    const res = await fetch(`/api/store/inventory/cleanup-orphans?dry_run=${dryRun}`, {
+    const res = await fetch('/api/store/inventory/cleanup-orphans', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: dryRun, max_items: 0 }),
     })
-    if (!res.ok) throw new Error('Failed to cleanup orphans')
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('[Inventory] Cleanup failed:', res.status, errorText)
+      throw new Error(`Failed to cleanup orphans: ${res.status}`)
+    }
     return res.json()
   },
 
   async syncBackup(direction: 'to_backup' | 'from_backup', dryRun: boolean): Promise<SyncResult> {
-    const res = await fetch(
-      `/api/store/backup/sync?direction=${direction}&dry_run=${dryRun}`,
-      { method: 'POST' }
-    )
-    if (!res.ok) throw new Error('Failed to sync backup')
+    const res = await fetch('/api/store/backup/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        direction,
+        dry_run: dryRun,
+        only_missing: true,
+      }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('[Inventory] Sync backup failed:', res.status, errorText)
+      throw new Error(`Failed to sync backup: ${res.status}`)
+    }
     return res.json()
   },
 
@@ -91,8 +107,16 @@ const api = {
   },
 
   async verifyIntegrity(): Promise<VerifyResult> {
-    const res = await fetch('/api/store/inventory/verify', { method: 'POST' })
-    if (!res.ok) throw new Error('Failed to verify integrity')
+    const res = await fetch('/api/store/inventory/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      console.error('[Inventory] Verify failed:', res.status, errorText)
+      throw new Error(`Failed to verify integrity: ${res.status}`)
+    }
     return res.json()
   },
 }
@@ -134,22 +158,36 @@ export function InventoryPage() {
     refetchInterval: 30000, // Refresh every 30s
   })
 
-  // Fetch backup status
+  // Fetch backup status - dynamic check for connection state
   const { data: backupStatus } = useQuery({
     queryKey: ['backup-status'],
     queryFn: api.getBackupStatus,
     refetchInterval: 10000, // Check connection every 10s
+    refetchOnWindowFocus: true, // Immediate check when tab becomes active
+    staleTime: 5000, // Consider fresh for 5s to avoid flicker
   })
 
   // Mutations
   const backupMutation = useMutation({
     mutationFn: api.backupBlob,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      toast.success('Blob backed up successfully')
+    },
+    onError: (error: Error) => {
+      toast.error(`Backup failed: ${error.message}`)
+    },
   })
 
   const restoreMutation = useMutation({
     mutationFn: api.restoreBlob,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      toast.success('Blob restored successfully')
+    },
+    onError: (error: Error) => {
+      toast.error(`Restore failed: ${error.message}`)
+    },
   })
 
   const deleteMutation = useMutation({
@@ -158,6 +196,10 @@ export function InventoryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       setDeleteDialogOpen(false)
+      toast.success('Blob deleted successfully')
+    },
+    onError: (error: Error) => {
+      toast.error(`Delete failed: ${error.message}`)
     },
   })
 
@@ -233,24 +275,29 @@ export function InventoryPage() {
 
   const handleBulkAction = useCallback(
     async (sha256s: string[], action: BulkAction) => {
-      // Process sequentially for now
-      for (const sha256 of sha256s) {
-        switch (action) {
-          case 'backup':
-            await handleBackup(sha256)
-            break
-          case 'restore':
-            await handleRestore(sha256)
-            break
-          case 'delete_local':
-            await api.deleteBlob(sha256, 'local')
-            break
-          case 'delete_backup':
-            await api.deleteBlob(sha256, 'backup')
-            break
+      try {
+        // Process sequentially for now
+        for (const sha256 of sha256s) {
+          switch (action) {
+            case 'backup':
+              await handleBackup(sha256)
+              break
+            case 'restore':
+              await handleRestore(sha256)
+              break
+            case 'delete_local':
+              await api.deleteBlob(sha256, 'local')
+              break
+            case 'delete_backup':
+              await api.deleteBlob(sha256, 'backup')
+              break
+          }
         }
+        queryClient.invalidateQueries({ queryKey: ['inventory'] })
+        toast.success(`Bulk ${action} completed for ${sha256s.length} blob(s)`)
+      } catch (error) {
+        toast.error(`Bulk action failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
-      queryClient.invalidateQueries({ queryKey: ['inventory'] })
     },
     [handleBackup, handleRestore, queryClient]
   )
@@ -277,9 +324,14 @@ export function InventoryPage() {
       })
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] })
+        toast.success('Doctor completed successfully')
+      } else {
+        const err = await res.text()
+        toast.error(`Doctor failed: ${err}`)
       }
     } catch (err) {
       console.error('Doctor failed:', err)
+      toast.error('Doctor failed')
     }
   }, [queryClient])
 
@@ -325,7 +377,7 @@ export function InventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
             <HardDrive className="w-7 h-7 text-synapse" />
-            Model Inventory
+            Inventory
           </h1>
           <p className="text-text-muted mt-1">
             Manage your model storage and backups

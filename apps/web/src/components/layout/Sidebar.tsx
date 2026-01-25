@@ -13,7 +13,7 @@ import { Logo } from '../ui/Logo'
 
 const navItems = [
   { to: '/', icon: Package, label: 'Packs' },
-  { to: '/inventory', icon: HardDrive, label: 'Model Inventory' },
+  { to: '/inventory', icon: HardDrive, label: 'Inventory' },
   { to: '/profiles', icon: Layers, label: 'Profiles' },
   { to: '/browse', icon: Search, label: 'Browse Civitai' },
   { to: '/downloads', icon: Download, label: 'Downloads', badge: true },

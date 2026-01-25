@@ -497,6 +497,10 @@ export function PackDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
       queryClient.invalidateQueries({ queryKey: ['packs'] })
       setShowBaseModelResolver(false)
+      toast.success('Base model resolved')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to resolve base model: ${error.message}`)
     },
   })
 
@@ -513,7 +517,11 @@ export function PackDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success('Pack deleted')
       navigate('/')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete pack: ${error.message}`)
     },
   })
 
@@ -597,13 +605,14 @@ export function PackDetailPage() {
       // Refetch active downloads to show progress
       refetchActiveDownloads()
     },
-    onError: (error, asset) => {
+    onError: (error: Error, asset) => {
       console.error('[PackDetailPage] Download failed for:', asset.name, error)
       setDownloadingAssets(prev => {
         const next = new Set(prev)
         next.delete(asset.name)
         return next
       })
+      toast.error(`Download failed for ${asset.name}: ${error.message}`)
     },
   })
 
@@ -631,9 +640,11 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Download-all success:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success(`Started downloading ${data?.download_count || 'all'} assets`)
     },
-    onError: (err) => {
+    onError: (err: Error) => {
       console.error('[PackDetailPage] Download-all mutation error:', err)
+      toast.error(`Download failed: ${err.message}`)
     },
   })
 
@@ -733,6 +744,10 @@ export function PackDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
       queryClient.invalidateQueries({ queryKey: ['packs'] })
       setShowEditModal(false)
+      toast.success('Pack updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update pack: ${error.message}`)
     },
   })
 
@@ -756,6 +771,10 @@ export function PackDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
       setShowParametersModal(false)
+      toast.success('Parameters updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update parameters: ${error.message}`)
     },
   })
 
@@ -775,6 +794,10 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Workflow generated:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success('Workflow generated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to generate workflow: ${error.message}`)
     },
   })
 
@@ -796,6 +819,10 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Symlink created:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success('Workflow symlink created')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create symlink: ${error.message}`)
     },
   })
 
@@ -815,6 +842,10 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Symlink removed:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success('Workflow symlink removed')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to remove symlink: ${error.message}`)
     },
   })
 
@@ -834,6 +865,10 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Workflow deleted:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success('Workflow deleted')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete workflow: ${error.message}`)
     },
   })
 
@@ -854,6 +889,10 @@ export function PackDetailPage() {
     onSuccess: (data) => {
       console.log('[PackDetailPage] Resource deleted:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      toast.success('Resource deleted')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete resource: ${error.message}`)
     },
   })
 
@@ -880,6 +919,10 @@ export function PackDetailPage() {
       console.log('[PackDetailPage] Workflow uploaded:', data)
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
       setShowUploadWorkflowModal(false)
+      toast.success('Workflow uploaded')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to upload workflow: ${error.message}`)
     },
   })
 

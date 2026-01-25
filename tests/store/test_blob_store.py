@@ -281,6 +281,213 @@ class TestBlobStore:
             assert not partial2.exists()
 
 
+class TestBlobManifest:
+    """Tests for blob manifest operations (write-once metadata)."""
+
+    def test_manifest_path(self):
+        """Test manifest path is blob path with .meta suffix."""
+        from src.store import StoreLayout, BlobStore
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            manifest_path = store.manifest_path(sha)
+            blob_path = store.blob_path(sha)
+
+            assert manifest_path == blob_path.with_suffix(".meta")
+            assert manifest_path.name == sha + ".meta"
+
+    def test_manifest_exists_false_initially(self):
+        """Test that non-existent manifest returns False."""
+        from src.store import StoreLayout, BlobStore
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef" * 10 + "1234"
+            assert not store.manifest_exists(sha)
+
+    def test_write_and_read_manifest(self):
+        """Test writing and reading manifest."""
+        from src.store import StoreLayout, BlobStore
+        from src.store.models import BlobManifest, AssetKind, BlobOrigin, ProviderName
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+            origin = BlobOrigin(
+                provider=ProviderName.CIVITAI,
+                model_id=12345,
+                version_id=67890,
+                filename="mymodel.safetensors",
+            )
+            manifest = BlobManifest(
+                original_filename="exposed_name.safetensors",
+                kind=AssetKind.CHECKPOINT,
+                origin=origin,
+            )
+
+            # Write
+            result = store.write_manifest(sha, manifest)
+            assert result is True
+            assert store.manifest_exists(sha)
+
+            # Read
+            loaded = store.read_manifest(sha)
+            assert loaded is not None
+            assert loaded.original_filename == "exposed_name.safetensors"
+            assert loaded.kind == AssetKind.CHECKPOINT
+            assert loaded.origin.provider == ProviderName.CIVITAI
+            assert loaded.origin.model_id == 12345
+
+    def test_manifest_write_once(self):
+        """Test that manifest is write-once (never overwrites)."""
+        from src.store import StoreLayout, BlobStore
+        from src.store.models import BlobManifest, AssetKind
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef" * 10 + "1234"
+
+            # First write
+            manifest1 = BlobManifest(
+                original_filename="first.safetensors",
+                kind=AssetKind.LORA,
+            )
+            result1 = store.write_manifest(sha, manifest1)
+            assert result1 is True
+
+            # Second write should return False (not overwrite)
+            manifest2 = BlobManifest(
+                original_filename="second.safetensors",
+                kind=AssetKind.VAE,
+            )
+            result2 = store.write_manifest(sha, manifest2)
+            assert result2 is False
+
+            # Original manifest should be preserved
+            loaded = store.read_manifest(sha)
+            assert loaded.original_filename == "first.safetensors"
+            assert loaded.kind == AssetKind.LORA
+
+    def test_delete_manifest(self):
+        """Test manifest deletion."""
+        from src.store import StoreLayout, BlobStore
+        from src.store.models import BlobManifest, AssetKind
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef" * 10 + "1234"
+
+            manifest = BlobManifest(
+                original_filename="to_delete.safetensors",
+                kind=AssetKind.EMBEDDING,
+            )
+            store.write_manifest(sha, manifest)
+            assert store.manifest_exists(sha)
+
+            # Delete
+            result = store.delete_manifest(sha)
+            assert result is True
+            assert not store.manifest_exists(sha)
+
+            # Delete again returns False
+            assert not store.delete_manifest(sha)
+
+    def test_remove_blob_also_removes_manifest(self):
+        """Test that removing blob also removes its manifest."""
+        from src.store import StoreLayout, BlobStore
+        from src.store.models import BlobManifest, AssetKind
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            # Create blob
+            source = Path(tmpdir) / "source.bin"
+            source.write_bytes(b"blob content")
+            sha = store.adopt(source)
+
+            # Create manifest
+            manifest = BlobManifest(
+                original_filename="test.safetensors",
+                kind=AssetKind.LORA,
+            )
+            store.write_manifest(sha, manifest)
+
+            assert store.blob_exists(sha)
+            assert store.manifest_exists(sha)
+
+            # Remove blob
+            store.remove_blob(sha)
+
+            # Both should be gone
+            assert not store.blob_exists(sha)
+            assert not store.manifest_exists(sha)
+
+    def test_list_blobs_excludes_manifests(self):
+        """Test that list_blobs doesn't include .meta files."""
+        from src.store import StoreLayout, BlobStore
+        from src.store.models import BlobManifest, AssetKind
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            # Create blob with manifest
+            source = Path(tmpdir) / "source.bin"
+            source.write_bytes(b"blob content")
+            sha = store.adopt(source)
+
+            manifest = BlobManifest(
+                original_filename="test.safetensors",
+                kind=AssetKind.LORA,
+            )
+            store.write_manifest(sha, manifest)
+
+            # List should only show the blob, not the manifest
+            blobs = store.list_blobs()
+            assert len(blobs) == 1
+            assert blobs[0] == sha
+
+    def test_read_invalid_manifest_returns_none(self):
+        """Test that reading corrupted manifest returns None."""
+        from src.store import StoreLayout, BlobStore
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            layout = StoreLayout(Path(tmpdir))
+            layout.init_store()
+            store = BlobStore(layout)
+
+            sha = "abcdef" * 10 + "1234"
+
+            # Create invalid manifest file
+            manifest_path = store.manifest_path(sha)
+            manifest_path.parent.mkdir(parents=True, exist_ok=True)
+            manifest_path.write_text("not valid json {{{")
+
+            # Read should return None, not raise
+            result = store.read_manifest(sha)
+            assert result is None
+
+
 class TestComputeSha256:
     """Tests for SHA256 computation."""
     

@@ -1040,6 +1040,25 @@ class ImpactAnalysis(BaseModel):
 
 
 # =============================================================================
+# Blob Manifest Model (for orphan metadata persistence)
+# =============================================================================
+
+class BlobManifest(BaseModel):
+    """
+    Write-once manifest for blob metadata persistence.
+
+    Created when a blob is first adopted by any pack.
+    Immutable after creation - never updated.
+    Used as fallback for orphan blob display.
+    """
+    version: int = 1  # Schema version
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    original_filename: str  # Display name from first pack
+    kind: AssetKind  # Asset kind (checkpoint, lora, etc.)
+    origin: Optional[BlobOrigin] = None  # Provider info if available
+
+
+# =============================================================================
 # Backup Storage Models
 # =============================================================================
 
@@ -1050,9 +1069,13 @@ class BackupStatus(BaseModel):
     path: Optional[str] = None
     total_blobs: int = 0
     total_bytes: int = 0
+    total_space: Optional[int] = None  # Total space on backup drive
     free_space: Optional[int] = None
     last_sync: Optional[str] = None
     error: Optional[str] = None
+    # Config options (for UI)
+    auto_backup_new: bool = False
+    warn_before_delete_last_copy: bool = True
 
 
 class BackupOperationResult(BaseModel):
@@ -1098,16 +1121,64 @@ class SyncResult(BaseModel):
 # API Response Wrapper
 # =============================================================================
 
+# =============================================================================
+# State Sync Models (for state/ directory backup)
+# =============================================================================
+
+class StateSyncStatus(str, Enum):
+    """Status of a file in state sync."""
+    SYNCED = "synced"              # Same on both sides
+    LOCAL_ONLY = "local_only"      # Only on local
+    BACKUP_ONLY = "backup_only"    # Only on backup
+    MODIFIED = "modified"          # Different on local vs backup
+    CONFLICT = "conflict"          # Both modified since last sync
+
+
+class StateSyncItem(BaseModel):
+    """A single file in the state sync."""
+    relative_path: str  # e.g., "packs/MyPack/pack.json"
+    status: StateSyncStatus
+    local_mtime: Optional[str] = None
+    backup_mtime: Optional[str] = None
+    local_size: Optional[int] = None
+    backup_size: Optional[int] = None
+
+
+class StateSyncSummary(BaseModel):
+    """Summary of state sync status."""
+    total_files: int = 0
+    synced: int = 0
+    local_only: int = 0
+    backup_only: int = 0
+    modified: int = 0
+    conflicts: int = 0
+    last_sync: Optional[str] = None
+
+
+class StateSyncResult(BaseModel):
+    """Result of a state sync operation."""
+    dry_run: bool
+    direction: str  # "to_backup", "from_backup", "bidirectional"
+    summary: StateSyncSummary
+    items: List[StateSyncItem] = Field(default_factory=list)
+    synced_files: int = 0
+    errors: List[str] = Field(default_factory=list)
+
+
+# =============================================================================
+# API Response Wrapper
+# =============================================================================
+
 class APIResponse(BaseModel):
     """Standard API response wrapper."""
     ok: bool
     result: Optional[Any] = None
     error: Optional[Dict[str, Any]] = None
-    
+
     @classmethod
     def success(cls, result: Any) -> "APIResponse":
         return cls(ok=True, result=result)
-    
+
     @classmethod
     def failure(cls, code: str, message: str, details: Optional[Dict[str, Any]] = None) -> "APIResponse":
         return cls(ok=False, error={"code": code, "message": message, "details": details or {}})

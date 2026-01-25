@@ -11,12 +11,15 @@ Provides comprehensive blob inventory with:
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
 
 from .blob_store import BlobStore
 from .layout import StoreLayout
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .backup_service import BackupService
@@ -94,13 +97,23 @@ class InventoryService:
         Returns:
             Complete inventory response with summary and items
         """
+        # NOTE: No routine logging - this is called frequently for UI refresh
+        # Only log errors
+
         # Step 1: Get all physical blobs (local)
-        local_blobs = set(self.blob_store.list_blobs())
+        try:
+            local_blobs = set(self.blob_store.list_blobs())
+        except Exception as e:
+            logger.error("[Inventory] Failed to list local blobs: %s", e, exc_info=True)
+            raise
 
         # Step 1b: Get backup blobs if backup service is available
         backup_blobs: Set[str] = set()
         if self.backup_service and self.backup_service.is_connected():
-            backup_blobs = set(self.backup_service.list_backup_blobs())
+            try:
+                backup_blobs = set(self.backup_service.list_backup_blobs())
+            except Exception as e:
+                logger.warning("[Inventory] Failed to list backup blobs: %s", e)
 
         # All physical blobs (union of local and backup)
         all_physical_blobs = local_blobs | backup_blobs
@@ -210,9 +223,11 @@ class InventoryService:
         Returns:
             Dict mapping SHA256 hashes to list of pack references
         """
+        # NOTE: No routine logging - this is called frequently for UI refresh
         ref_map: Dict[str, List[PackReference]] = {}
+        packs = self.layout.list_packs()
 
-        for pack_name in self.layout.list_packs():
+        for pack_name in packs:
             try:
                 lock = self.layout.load_pack_lock(pack_name)
                 pack = self.layout.load_pack(pack_name)
@@ -256,7 +271,8 @@ class InventoryService:
                         size_bytes=resolved.artifact.size_bytes,
                         origin=origin,
                     ))
-            except Exception:
+            except Exception as e:
+                logger.warning("[Inventory] Error processing pack '%s': %s", pack_name, e)
                 continue  # Skip packs with missing/invalid locks
 
         return ref_map
@@ -303,7 +319,7 @@ class InventoryService:
                     size_bytes = ref.size_bytes
                     break
 
-        # Determine display name (priority: expose > origin filename > sha256)
+        # Determine display name (priority: expose > origin filename > manifest > sha256)
         display_name = sha256[:12] + "..."
         kind = AssetKind.UNKNOWN
         origin = None
@@ -318,6 +334,13 @@ class InventoryService:
                 display_name = first_ref.expose_filename
             elif first_ref.origin and first_ref.origin.filename:
                 display_name = first_ref.origin.filename
+        else:
+            # No pack references - try to read manifest for orphan blobs
+            manifest = self.blob_store.read_manifest(sha256)
+            if manifest:
+                display_name = manifest.original_filename
+                kind = manifest.kind
+                origin = manifest.origin
 
         # Get unique pack names
         used_by_packs = list(set(ref.pack_name for ref in refs))
@@ -367,6 +390,14 @@ class InventoryService:
 
         bytes_by_kind: Dict[str, int] = {}
 
+        # Backup statistics
+        blobs_local_only = 0
+        blobs_backup_only = 0
+        blobs_both = 0
+        bytes_local_only = 0
+        bytes_backup_only = 0
+        bytes_synced = 0
+
         for item in items:
             summary.blobs_total += 1
 
@@ -384,6 +415,17 @@ class InventoryService:
             # Only count size for items that exist locally
             if item.on_local:
                 summary.bytes_total += item.size_bytes
+
+            # Backup location statistics
+            if item.on_local and item.on_backup:
+                blobs_both += 1
+                bytes_synced += item.size_bytes
+            elif item.on_local and not item.on_backup:
+                blobs_local_only += 1
+                bytes_local_only += item.size_bytes
+            elif not item.on_local and item.on_backup:
+                blobs_backup_only += 1
+                bytes_backup_only += item.size_bytes
 
             # Bytes by kind
             kind_key = item.kind.value
@@ -403,6 +445,25 @@ class InventoryService:
         except Exception:
             pass
 
+        # Add backup statistics if backup service is available
+        if self.backup_service:
+            backup_status = self.backup_service.get_status()
+            summary.backup = BackupStats(
+                enabled=backup_status.enabled,
+                connected=backup_status.connected,
+                path=backup_status.path,
+                blobs_local_only=blobs_local_only,
+                blobs_backup_only=blobs_backup_only,
+                blobs_both=blobs_both,
+                bytes_local_only=bytes_local_only,
+                bytes_backup_only=bytes_backup_only,
+                bytes_synced=bytes_synced,
+                free_space=backup_status.free_space,
+                total_space=backup_status.total_space,
+                last_sync=backup_status.last_sync,
+                error=backup_status.error,
+            )
+
         return summary
 
     def cleanup_orphans(self, dry_run: bool = True, max_items: int = 0) -> CleanupResult:
@@ -418,11 +479,23 @@ class InventoryService:
         Returns:
             Cleanup result with details
         """
-        inventory = self.build_inventory(status_filter=BlobStatus.ORPHAN)
+        logger.info(
+            "[Inventory] Starting cleanup_orphans (dry_run=%s, max_items=%d)",
+            dry_run,
+            max_items,
+        )
+
+        try:
+            inventory = self.build_inventory(status_filter=BlobStatus.ORPHAN)
+            logger.info("[Inventory] Found %d orphan blobs", len(inventory.items))
+        except Exception as e:
+            logger.error("[Inventory] Failed to build inventory for cleanup: %s", e, exc_info=True)
+            raise
 
         items_to_delete = inventory.items
         if max_items > 0:
             items_to_delete = items_to_delete[:max_items]
+            logger.debug("[Inventory] Limited to %d items (max_items=%d)", len(items_to_delete), max_items)
 
         result = CleanupResult(
             dry_run=dry_run,
@@ -435,17 +508,44 @@ class InventoryService:
         if dry_run:
             result.deleted = items_to_delete
             result.bytes_freed = sum(i.size_bytes for i in items_to_delete)
+            logger.info(
+                "[Inventory] Dry run complete: would delete %d blobs (%.2f MB)",
+                len(items_to_delete),
+                result.bytes_freed / 1024 / 1024,
+            )
             return result
 
         # Actually delete
-        for item in items_to_delete:
+        logger.info("[Inventory] Starting deletion of %d orphan blobs", len(items_to_delete))
+        for i, item in enumerate(items_to_delete):
             try:
+                logger.debug(
+                    "[Inventory] Deleting blob %d/%d: %s (%s)",
+                    i + 1,
+                    len(items_to_delete),
+                    item.sha256[:12],
+                    item.display_name,
+                )
                 if self.blob_store.remove_blob(item.sha256):
                     result.orphans_deleted += 1
                     result.bytes_freed += item.size_bytes
                     result.deleted.append(item)
+                    logger.debug("[Inventory] Successfully deleted %s", item.sha256[:12])
+                else:
+                    logger.warning("[Inventory] remove_blob returned False for %s", item.sha256[:12])
             except Exception as e:
-                result.errors.append(f"{item.sha256}: {str(e)}")
+                error_msg = f"{item.sha256}: {str(e)}"
+                result.errors.append(error_msg)
+                logger.error("[Inventory] Failed to delete %s: %s", item.sha256[:12], e, exc_info=True)
+
+        if result.errors:
+            logger.warning("[Inventory] Cleanup completed with %d errors", len(result.errors))
+        else:
+            logger.info(
+                "[Inventory] Cleanup complete: deleted %d blobs, freed %.2f MB",
+                result.orphans_deleted,
+                result.bytes_freed / 1024 / 1024,
+            )
 
         return result
 
@@ -459,11 +559,18 @@ class InventoryService:
         Returns:
             Impact analysis
         """
-        inventory = self.build_inventory()
+        logger.debug("[Inventory] Analyzing impacts for blob %s", sha256[:12] if len(sha256) >= 12 else sha256)
+
+        try:
+            inventory = self.build_inventory()
+        except Exception as e:
+            logger.error("[Inventory] Failed to build inventory for impacts: %s", e, exc_info=True)
+            raise
 
         item = next((i for i in inventory.items if i.sha256 == sha256.lower()), None)
 
         if not item:
+            logger.debug("[Inventory] Blob %s not found in inventory", sha256[:12])
             return ImpactAnalysis(
                 sha256=sha256,
                 status=BlobStatus.MISSING,
@@ -483,6 +590,14 @@ class InventoryService:
                 f"This blob is used by {pack_count} pack(s). "
                 f"Deleting will cause MISSING status."
             )
+            logger.debug(
+                "[Inventory] Blob %s is REFERENCED by %d packs: %s",
+                sha256[:12],
+                pack_count,
+                item.used_by_packs,
+            )
+        else:
+            logger.debug("[Inventory] Blob %s is %s, can_delete=%s", sha256[:12], item.status, can_delete)
 
         return ImpactAnalysis(
             sha256=sha256,
@@ -511,9 +626,25 @@ class InventoryService:
         Returns:
             Dict with deletion result
         """
-        impacts = self.get_impacts(sha256)
+        logger.info(
+            "[Inventory] delete_blob called (sha256=%s, force=%s, target=%s)",
+            sha256[:12] if len(sha256) >= 12 else sha256,
+            force,
+            target,
+        )
+
+        try:
+            impacts = self.get_impacts(sha256)
+        except Exception as e:
+            logger.error("[Inventory] Failed to get impacts for delete: %s", e, exc_info=True)
+            raise
 
         if not impacts.can_delete_safely and not force:
+            logger.info(
+                "[Inventory] Refusing to delete %s: blob is referenced by %d packs",
+                sha256[:12],
+                len(impacts.used_by_packs),
+            )
             return {
                 "deleted": False,
                 "sha256": sha256,
@@ -523,15 +654,28 @@ class InventoryService:
 
         # For now, only support local deletion
         if target in ("local", "both"):
-            removed = self.blob_store.remove_blob(sha256)
-            return {
-                "deleted": removed,
-                "sha256": sha256,
-                "bytes_freed": impacts.size_bytes if removed else 0,
-                "deleted_from": ["local"] if removed else [],
-                "remaining_on": "nowhere",  # TODO: Check backup
-            }
+            try:
+                removed = self.blob_store.remove_blob(sha256)
+                if removed:
+                    logger.info(
+                        "[Inventory] Successfully deleted blob %s (%.2f MB)",
+                        sha256[:12],
+                        impacts.size_bytes / 1024 / 1024,
+                    )
+                else:
+                    logger.warning("[Inventory] remove_blob returned False for %s", sha256[:12])
+                return {
+                    "deleted": removed,
+                    "sha256": sha256,
+                    "bytes_freed": impacts.size_bytes if removed else 0,
+                    "deleted_from": ["local"] if removed else [],
+                    "remaining_on": "nowhere",  # TODO: Check backup
+                }
+            except Exception as e:
+                logger.error("[Inventory] Failed to remove blob %s: %s", sha256[:12], e, exc_info=True)
+                raise
 
+        logger.warning("[Inventory] Unsupported target '%s' for delete", target)
         return {
             "deleted": False,
             "sha256": sha256,
@@ -554,20 +698,45 @@ class InventoryService:
             Verification result
         """
         import time
+
+        logger.info(
+            "[Inventory] Starting blob verification (all_blobs=%s, specific=%d)",
+            all_blobs,
+            len(sha256_list or []),
+        )
         start = time.time()
 
-        if all_blobs:
-            valid, invalid = self.blob_store.verify_all()
-        else:
-            valid = []
-            invalid = []
-            for h in (sha256_list or []):
-                if self.blob_store.verify(h):
-                    valid.append(h)
-                else:
-                    invalid.append(h)
+        try:
+            if all_blobs:
+                valid, invalid = self.blob_store.verify_all()
+            else:
+                valid = []
+                invalid = []
+                for h in (sha256_list or []):
+                    if self.blob_store.verify(h):
+                        valid.append(h)
+                    else:
+                        invalid.append(h)
+                        logger.warning("[Inventory] Blob verification failed: %s", h[:12])
+        except Exception as e:
+            logger.error("[Inventory] Blob verification failed: %s", e, exc_info=True)
+            raise
 
         duration_ms = int((time.time() - start) * 1000)
+
+        if invalid:
+            logger.warning(
+                "[Inventory] Verification complete: %d valid, %d INVALID in %dms",
+                len(valid),
+                len(invalid),
+                duration_ms,
+            )
+        else:
+            logger.info(
+                "[Inventory] Verification complete: %d valid, 0 invalid in %dms",
+                len(valid),
+                duration_ms,
+            )
 
         return {
             "verified": len(valid) + len(invalid),

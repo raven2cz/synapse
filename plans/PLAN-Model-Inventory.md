@@ -3259,6 +3259,12 @@ class TestAutoRestore:
 - Civitai API key input
 - UI attachment configuration
 - Theme/appearance (pokud existuje)
+- ✅ **Backup Storage konfigurace** (implementováno 2026-01-25):
+  - Enable/disable backup toggle
+  - Backup path input
+  - Auto-backup new models toggle
+  - Warn before delete last copy toggle
+  - Connection status display
 
 ---
 
@@ -3885,6 +3891,372 @@ Všechny priority P1-P5, R1-R2 byly opraveny:
 - T1-T3: Chybějící testy
 
 **Verify:** Všech 448 testů prošlo.
+
+---
+
+## 14. Settings - Backup Storage Configuration (2026-01-25)
+
+### 14.1 Problém
+
+V InventoryStats.tsx bylo tlačítko "Configure in Settings →" které nikam nevedlo - Backup Storage konfigurace v Settings chyběla.
+
+### 14.2 Implementace
+
+**Backend:**
+- ✅ `BackupStatus` model rozšířen o `auto_backup_new`, `warn_before_delete_last_copy`, `total_space`
+- ✅ `backup_service.py` - všechny `get_status()` returns nyní vrací config options
+
+**Frontend:**
+- ✅ `SettingsPage.tsx` - nová sekce "Backup Storage" s:
+  - Enable/disable toggle
+  - Backup path input
+  - Connection status display (connected/disconnected + stats)
+  - Auto-backup new models toggle
+  - Warn before delete last copy toggle
+  - Save button s API call na `PUT /api/store/backup/config`
+- ✅ `InventoryStats.tsx` - tlačítko "Configure in Settings →" nyní naviguje na `/settings#backup-config`
+- ✅ `types.ts` - přidán `BackupConfigRequest` interface
+
+**Soubory:**
+| Soubor | Změna |
+|--------|-------|
+| `src/store/models.py` | `BackupStatus` rozšířen |
+| `src/store/backup_service.py` | Config options ve všech status returns |
+| `apps/web/src/components/modules/SettingsPage.tsx` | Backup Storage Configuration sekce |
+| `apps/web/src/components/modules/inventory/InventoryStats.tsx` | Navigace na Settings |
+| `apps/web/src/components/modules/inventory/types.ts` | `BackupConfigRequest` |
+
+**Verify:** Všech 448 testů prošlo.
+
+---
+
+*Implementováno: 2026-01-25*
+
+---
+
+## 15. Settings Cleanup & Notifications (2026-01-25)
+
+### 15.1 Povinné pravidlo: Toast Notifications
+
+**KRITICKÉ:** Všechny operace ukládání, odpovědi API a akce MUSÍ používat interní toast notification systém:
+- ✅ Úspěch → `toast.success('Message')`
+- ❌ Chyba → `toast.error('Error message')`
+
+```typescript
+// Příklad správné implementace
+const handleSave = async () => {
+  try {
+    await saveOperation()
+    toast.success('Settings saved successfully')
+  } catch (error) {
+    toast.error('Failed to save settings')
+  }
+}
+```
+
+### 15.2 Provedené změny
+
+| Změna | Popis |
+|-------|-------|
+| ✅ Jeden Save Settings tlačítko | Odstraněn duplicitní "Save Backup Settings", vše ukládá jedno tlačítko |
+| ✅ Backup config integrován | `handleSave()` nyní ukládá i backup konfiguraci |
+| ✅ Doctor/Clean tlačítka odstraněny | Duplikáty - již existují v Model Inventory > Quick Actions |
+| ✅ Init Store zachován | Zůstává pro první inicializaci store |
+| ⚠️ Diagnostics - TODO | Sekce označena jako TODO - zvážit přesun do Profiles tab |
+
+### 15.3 Diagnostics sekce
+
+**Status:** ⚠️ K REVIZI
+
+Diagnostics sekce v Settings je zastaralá:
+- Pouze kontroluje ComfyUI path
+- Nevaliduje všechny UI paths (forge, a1111, sdnext)
+- Lépe by patřila do Profiles tab jako "UI Health Check"
+
+**Doporučení:**
+- Přesunout do Profiles tab
+- Rozšířit o validaci všech UI paths
+- Přidat kontrolu symlinků a oprávnění
+
+**Verify:** Všech 448 testů prošlo.
+
+### 15.4 Další opravy (2026-01-25)
+
+| Změna | Popis |
+|-------|-------|
+| ✅ Init Store zvýraznění | Primary variant když store není inicializovaný, secondary když je |
+| ✅ Init Store text | "Init Store" vs "Re-init Store" podle stavu |
+| ✅ InventoryPage toast | Přidány toast.success/error do všech mutací (backup, restore, delete, bulk action, doctor) |
+| ✅ Invalidace queries | Init Store nyní invaliduje i `backup-status` pro refresh stavu inicializace |
+
+**Verify:** Všech 448 testů prošlo.
+
+---
+
+*Implementováno: 2026-01-25*
+
+---
+
+## 16. ✅ Záloha state/ adresáře
+
+**Status:** ✅ IMPLEMENTOVÁNO 2026-01-25
+
+### Implementované komponenty:
+
+1. **Backend - Modely** (`src/store/models.py`):
+   - `StateSyncStatus` enum (synced, local_only, backup_only, modified, conflict)
+   - `StateSyncItem` model pro jednotlivé soubory
+   - `StateSyncSummary` pro přehled
+   - `StateSyncResult` pro výsledek operace
+
+2. **Backend - Service** (`src/store/backup_service.py`):
+   - `backup_state_path` property
+   - `get_state_sync_status()` - vrací aktuální stav
+   - `sync_state(direction, dry_run)` - synchronizace souborů
+   - `backup_state_file(rel_path)` - záloha jednoho souboru
+   - `restore_state_file(rel_path)` - obnova jednoho souboru
+
+3. **API endpointy** (`src/store/api.py`):
+   - `GET /api/store/state/sync-status` - stav synchronizace
+   - `POST /api/store/state/sync` - provedení synchronizace
+
+4. **CLI příkazy** (`src/store/cli.py`):
+   - `synapse backup state-status` - zobrazí stav
+   - `synapse backup state-sync [--direction] [--execute]` - synchronizace
+
+5. **UI komponenty** (`apps/web/src/components/modules/inventory/`):
+   - `StateSyncCard.tsx` - karta zobrazující stav a akce
+   - Typy v `types.ts`
+   - Integrace do `InventoryStats.tsx` jako 5. karta
+
+---
+
+### Původní návrh (pro referenci):
+
+### 16.1 Motivace
+
+Aktuální backup řešení zálohuje pouze `data/blobs/` (model soubory).
+Adresář `state/` obsahuje:
+- Pack metadata (pack.json, lock.json)
+- **Previews** (stovky obrázků/videí - mohou být velké!)
+- Workflows (.json)
+- Profiles (profile.json)
+- Config (config.json, ui_sets.json)
+
+**Doporučený přístup:**
+- `state/` by měl být verzován v **git** (je to navrženo jako git-versioned)
+- Pro uživatele bez git by měla existovat možnost sync na externí disk
+
+### 16.2 ⚠️ Rizika
+
+**Git konflikt:**
+Pokud je `state/` git repo a provedeme rsync/sync z externího disku, může to:
+- Rozbít git status (uncommitted changes)
+- Přepsat lokální změny
+- Způsobit merge konflikty
+
+**Doporučení:**
+- Varování v UI pokud je `.git/` detekován ve `state/`
+- Nabídnout pouze "export" místo "sync" pro git uživatele
+
+### 16.3 Co by bylo potřeba implementovat
+
+#### Backend - BackupService rozšíření
+
+```python
+# src/store/backup_service.py
+
+class BackupService:
+    # Nové properties
+    @property
+    def backup_state_path(self) -> Optional[Path]:
+        """Get backup state directory path."""
+        root = self.backup_root
+        if not root:
+            return None
+        return root / ".synapse" / "store" / "state"
+
+    # Nové metody
+    def sync_state_to_backup(
+        self,
+        dry_run: bool = True,
+        exclude_git: bool = True,
+    ) -> StateSyncResult:
+        """Sync state/ directory to backup storage."""
+        pass
+
+    def sync_state_from_backup(
+        self,
+        dry_run: bool = True,
+        exclude_git: bool = True,
+    ) -> StateSyncResult:
+        """Restore state/ directory from backup storage."""
+        pass
+
+    def get_state_sync_status(self) -> StateSyncStatus:
+        """Get status of state/ sync (local vs backup diff)."""
+        pass
+```
+
+#### Nové modely
+
+```python
+# src/store/models.py
+
+class StateSyncStatus(BaseModel):
+    """Status of state/ directory sync."""
+    local_packs: int
+    backup_packs: int
+    packs_local_only: List[str]
+    packs_backup_only: List[str]
+    packs_modified: List[str]  # Different content
+    local_bytes: int
+    backup_bytes: int
+    has_git: bool  # Warning if .git exists
+    last_sync: Optional[str]
+
+class StateSyncResult(BaseModel):
+    """Result of state/ sync operation."""
+    dry_run: bool
+    direction: Literal['to_backup', 'from_backup']
+    packs_synced: int
+    bytes_synced: int
+    files_synced: int
+    errors: List[str]
+    warnings: List[str]  # e.g., "Skipped .git directory"
+```
+
+#### API endpointy
+
+```python
+# src/store/api.py
+
+@router.get("/backup/state-status")
+async def get_state_sync_status() -> StateSyncStatus:
+    """Get state/ sync status."""
+    pass
+
+@router.post("/backup/sync-state")
+async def sync_state(
+    direction: Literal['to_backup', 'from_backup'],
+    dry_run: bool = True,
+    exclude_git: bool = True,
+) -> StateSyncResult:
+    """Sync state/ directory."""
+    pass
+```
+
+#### CLI příkazy
+
+```bash
+# synapse backup state-status
+# Zobrazí stav synchronizace state/ adresáře
+
+synapse backup state-status
+# Output:
+# State Sync Status
+# ─────────────────────────────────────
+# Local packs:     15
+# Backup packs:    12
+# Local-only:      3 (pack-a, pack-b, pack-c)
+# Backup-only:     0
+# Modified:        2 (pack-x, pack-y)
+# Local size:      2.5 GB
+# Backup size:     2.1 GB
+# ⚠ Git detected:  Yes (use --exclude-git)
+
+# synapse backup push-state [--dry-run] [--exclude-git]
+synapse backup push-state --dry-run
+# Would sync 5 packs (450 MB) to backup
+
+synapse backup push-state
+# Syncing state/ to backup...
+# ✓ Synced 5 packs (450 MB)
+
+# synapse backup pull-state [--dry-run] [--exclude-git]
+synapse backup pull-state --dry-run
+# Would restore 2 packs (180 MB) from backup
+# ⚠ Warning: This will overwrite local changes!
+```
+
+#### UI komponenty
+
+```
+InventoryStats.tsx
+├── Nová karta "State Backup" vedle "Backup Storage"
+│   ├── Počet packů local vs backup
+│   ├── Velikost local vs backup
+│   ├── Warning pokud .git detected
+│   └── Quick actions: "Sync to Backup", "Restore from Backup"
+
+InventoryPage.tsx
+├── StateSyncWizard (nový dialog)
+│   ├── Dry-run preview (co se změní)
+│   ├── Exclude options (git, specific packs)
+│   ├── Direction selector (push/pull)
+│   └── Progress indicator
+
+SettingsPage.tsx
+├── Backup Storage sekce rozšířena
+│   ├── Checkbox "Also sync pack metadata (state/)"
+│   └── Warning text o git
+```
+
+#### Testy
+
+```python
+# tests/store/test_state_backup.py
+
+class TestStateSyncStatus:
+    def test_detects_local_only_packs(self)
+    def test_detects_backup_only_packs(self)
+    def test_detects_modified_packs(self)
+    def test_detects_git_directory(self)
+    def test_calculates_sizes(self)
+
+class TestStateSyncToBackup:
+    def test_dry_run_returns_preview(self)
+    def test_syncs_new_packs(self)
+    def test_syncs_modified_packs(self)
+    def test_excludes_git_by_default(self)
+    def test_preserves_backup_only_packs(self)
+
+class TestStateSyncFromBackup:
+    def test_dry_run_returns_preview(self)
+    def test_restores_backup_only_packs(self)
+    def test_warns_about_overwrites(self)
+    def test_excludes_git_by_default(self)
+
+class TestStateSyncCLI:
+    def test_state_status_command(self)
+    def test_push_state_dry_run(self)
+    def test_push_state_execute(self)
+    def test_pull_state_dry_run(self)
+    def test_pull_state_execute(self)
+```
+
+### 16.4 Implementační priority
+
+1. **Backend modely a service** - StateSyncStatus, StateSyncResult, metody v BackupService
+2. **API endpointy** - GET /state-status, POST /sync-state
+3. **CLI příkazy** - state-status, push-state, pull-state
+4. **Backend testy** - Kompletní pokrytí
+5. **UI - StateSyncWizard** - Dialog pro sync operace
+6. **UI - InventoryStats rozšíření** - State Backup karta
+7. **UI - Settings integrace** - Checkbox a warning
+8. **Frontend testy** - Vitest pro nové komponenty
+
+### 16.5 Poznámky
+
+- Implementace by měla používat rsync-like algoritmus (copy only changed files)
+- Hardlinky/symlinky by měly být správně ošetřeny
+- Velké preview soubory by měly mít progress indikátor
+- Zvážit delta sync pro efektivitu
+
+---
+
+*Návrh vytvořen: 2026-01-25*
+*Status: NEIMPLEMENTOVÁNO - pouze dokumentace pro budoucí referenci*
 
 ---
 

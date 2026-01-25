@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Settings, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Key, FolderOpen, Eye, EyeOff, Database, Layers, Wrench, Trash2, Zap } from 'lucide-react'
+import { Settings, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Key, FolderOpen, Eye, EyeOff, Database, Layers, Zap, Cloud, Link2, Unlink } from 'lucide-react'
 import { Card, CardTitle, CardDescription } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { useState, useEffect } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { toast } from '../../stores/toastStore'
+import type { BackupStatus, BackupConfigRequest } from './inventory/types'
+import { formatBytes } from '../../lib/utils/format'
 
 interface SettingsResponse {
   comfyui_path: string
@@ -52,6 +54,12 @@ export function SettingsPage() {
   })
   const [storeDefaultUiSet, setStoreDefaultUiSet] = useState('local')
 
+  // Backup storage settings
+  const [backupEnabled, setBackupEnabled] = useState(false)
+  const [backupPath, setBackupPath] = useState('')
+  const [autoBackupNew, setAutoBackupNew] = useState(false)
+  const [warnBeforeDeleteLastCopy, setWarnBeforeDeleteLastCopy] = useState(true)
+
   const { data: settings } = useQuery<SettingsResponse>({
     queryKey: ['settings'],
     queryFn: async () => {
@@ -80,6 +88,56 @@ export function SettingsPage() {
     },
   })
 
+  // Backup status query - also tells us if store is initialized
+  const { data: backupStatus, error: backupError } = useQuery<BackupStatus>({
+    queryKey: ['backup-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/store/backup/status')
+      if (!res.ok) {
+        if (res.status === 400) {
+          // Store not initialized
+          throw new Error('STORE_NOT_INITIALIZED')
+        }
+        throw new Error('Failed to fetch backup status')
+      }
+      return res.json()
+    },
+    retry: false, // Don't retry if store is not initialized
+  })
+
+  // Store is initialized if backup status query succeeded
+  const isStoreInitialized = !!backupStatus && !backupError
+
+  // Sync backup state from backend
+  useEffect(() => {
+    if (backupStatus) {
+      setBackupEnabled(backupStatus.enabled)
+      setBackupPath(backupStatus.path || '')
+      setAutoBackupNew(backupStatus.auto_backup_new || false)
+      setWarnBeforeDeleteLastCopy(backupStatus.warn_before_delete_last_copy ?? true)
+    }
+  }, [backupStatus])
+
+  // Backup config mutation
+  const updateBackupConfigMutation = useMutation({
+    mutationFn: async (config: BackupConfigRequest) => {
+      const res = await fetch('/api/store/backup/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      })
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ detail: 'Failed to update backup config' }))
+        throw new Error(error.detail || 'Failed to update backup config')
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['backup-status'] })
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+    },
+  })
+
   const updateSettingsMutation = useMutation({
     mutationFn: async (updates: Partial<SettingsResponse> & { civitai_token?: string; huggingface_token?: string }) => {
       const res = await fetch('/api/system/settings', {
@@ -99,23 +157,41 @@ export function SettingsPage() {
     },
   })
 
-  const handleSave = () => {
-    const updates: any = {
-      comfyui_path: storeUiRoots.comfyui || comfyuiPath, // Fallback to comfyuiPath if not set in UI roots
-      nsfw_blur_enabled: nsfwBlurEnabled,
-      // Store v2 settings
-      store_root: storeRoot,
-      store_ui_roots: storeUiRoots,
-      store_default_ui_set: storeDefaultUiSet,
+  const handleSave = async () => {
+    try {
+      // Save general settings
+      const updates: any = {
+        comfyui_path: storeUiRoots.comfyui || comfyuiPath,
+        nsfw_blur_enabled: nsfwBlurEnabled,
+        store_root: storeRoot,
+        store_ui_roots: storeUiRoots,
+        store_default_ui_set: storeDefaultUiSet,
+      }
+      if (civitaiToken) updates.civitai_token = civitaiToken
+      if (hfToken) updates.huggingface_token = hfToken
+
+      // Save backup config
+      const backupConfig: BackupConfigRequest = {
+        enabled: backupEnabled,
+        path: backupPath || undefined,
+        auto_backup_new: autoBackupNew,
+        warn_before_delete_last_copy: warnBeforeDeleteLastCopy,
+      }
+
+      // Execute both saves
+      await Promise.all([
+        updateSettingsMutation.mutateAsync(updates),
+        updateBackupConfigMutation.mutateAsync(backupConfig),
+      ])
+
+      toast.success('Settings saved successfully')
+    } catch (error) {
+      toast.error('Failed to save settings')
     }
-    if (civitaiToken) updates.civitai_token = civitaiToken
-    if (hfToken) updates.huggingface_token = hfToken
-    updateSettingsMutation.mutate(updates)
   }
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Header */}
       {/* Header */}
       <div className="mb-6 flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
@@ -157,6 +233,147 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        {/* Backup Storage Configuration */}
+        <div id="backup-config">
+        <Card>
+          <CardTitle>
+            <Cloud className="w-5 h-5 inline-block mr-2 text-indigo-400" />
+            Backup Storage
+          </CardTitle>
+          <CardDescription>Configure external backup storage for models</CardDescription>
+
+          <div className="mt-4 space-y-4">
+            {/* Enable/Disable toggle */}
+            <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+              <div>
+                <span className="text-slate-100">Enable Backup Storage</span>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Store model copies on external drive (USB, NAS, network share)
+                </p>
+              </div>
+              <button
+                onClick={() => setBackupEnabled(!backupEnabled)}
+                className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
+                  backupEnabled ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
+                    backupEnabled ? 'left-7' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Backup Path */}
+            <div>
+              <label className="block text-sm text-slate-400 mb-2">
+                Backup Root Path
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={backupPath}
+                  onChange={(e) => setBackupPath(e.target.value)}
+                  placeholder="/mnt/usb/my-backup or /run/media/user/DRIVE or D:\Backup"
+                  disabled={!backupEnabled}
+                  className={`flex-1 px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 ${
+                    !backupEnabled ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Root folder on external drive. Synapse will create <code className="text-slate-400">/.synapse/store/data/blobs/</code> inside.
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                💡 Pack metadata, previews & workflows live in <code className="text-slate-300">state/</code> — use git for those.
+              </p>
+            </div>
+
+            {/* Connection Status */}
+            {backupEnabled && (
+              <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+                <div className="flex items-center gap-2">
+                  {backupStatus?.connected ? (
+                    <>
+                      <Link2 className="w-4 h-4 text-green-400" />
+                      <span className="text-green-400">Connected</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlink className="w-4 h-4 text-amber-400" />
+                      <span className="text-amber-400">
+                        {backupStatus?.error || 'Disconnected'}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {backupStatus?.connected && backupStatus.total_bytes !== undefined && (
+                  <div className="text-sm text-slate-400">
+                    {formatBytes(backupStatus.total_bytes)} used
+                    {backupStatus.free_space !== undefined && (
+                      <span className="text-slate-500 ml-2">
+                        ({formatBytes(backupStatus.free_space)} free)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Auto-backup new blobs */}
+            <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+              <div>
+                <span className={`${!backupEnabled ? 'text-slate-500' : 'text-slate-100'}`}>
+                  Auto-backup new models
+                </span>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Automatically copy new models to backup storage
+                </p>
+              </div>
+              <button
+                onClick={() => setAutoBackupNew(!autoBackupNew)}
+                disabled={!backupEnabled}
+                className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
+                  autoBackupNew && backupEnabled ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-700'
+                } ${!backupEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
+                    autoBackupNew ? 'left-7' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Warn before delete last copy */}
+            <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+              <div>
+                <span className={`${!backupEnabled ? 'text-slate-500' : 'text-slate-100'}`}>
+                  Warn before deleting last copy
+                </span>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Show warning when deleting a model that exists only in one location
+                </p>
+              </div>
+              <button
+                onClick={() => setWarnBeforeDeleteLastCopy(!warnBeforeDeleteLastCopy)}
+                disabled={!backupEnabled}
+                className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
+                  warnBeforeDeleteLastCopy && backupEnabled ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-700'
+                } ${!backupEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                <span
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
+                    warnBeforeDeleteLastCopy ? 'left-7' : 'left-1'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </Card>
+        </div>
 
         {/* API Tokens */}
         <Card>
@@ -265,12 +482,14 @@ export function SettingsPage() {
               </div>
               <button
                 onClick={() => setNsfwBlur(!nsfwBlurEnabled)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${nsfwBlurEnabled ? 'bg-indigo-500' : 'bg-slate-700'
-                  }`}
+                className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
+                  nsfwBlurEnabled ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-700'
+                }`}
               >
                 <span
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${nsfwBlurEnabled ? 'left-7' : 'left-1'
-                    }`}
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
+                    nsfwBlurEnabled ? 'left-7' : 'left-1'
+                  }`}
                 />
               </button>
             </div>
@@ -346,7 +565,7 @@ export function SettingsPage() {
             {/* Store Actions */}
             <div className="flex gap-2 pt-2">
               <Button
-                variant="primary"
+                variant={isStoreInitialized ? 'secondary' : 'primary'}
                 size="sm"
                 leftIcon={<Zap className="w-4 h-4" />}
                 onClick={async () => {
@@ -358,7 +577,10 @@ export function SettingsPage() {
                     })
                     if (res.ok) {
                       toast.success('Store initialized successfully')
+                      // Refresh all store-dependent queries
+                      queryClient.invalidateQueries({ queryKey: ['backup-status'] })
                       queryClient.invalidateQueries({ queryKey: ['profiles-status'] })
+                      queryClient.invalidateQueries({ queryKey: ['inventory'] })
                     } else {
                       const err = await res.text()
                       toast.error(`Init failed: ${err}`)
@@ -369,62 +591,13 @@ export function SettingsPage() {
                   }
                 }}
               >
-                Init Store
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Wrench className="w-4 h-4" />}
-                onClick={async () => {
-                  try {
-                    const res = await fetch('/api/store/doctor', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ rebuild_views: true })
-                    })
-                    if (res.ok) {
-                      toast.success('Doctor completed successfully')
-                      queryClient.invalidateQueries({ queryKey: ['profiles-status'] })
-                    } else {
-                      toast.error('Doctor failed')
-                    }
-                  } catch (e) {
-                    console.error('Doctor failed:', e)
-                    toast.error('Doctor failed')
-                  }
-                }}
-              >
-                Doctor
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Trash2 className="w-4 h-4" />}
-                onClick={async () => {
-                  try {
-                    const res = await fetch('/api/store/clean', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ tmp: true, partial: true })
-                    })
-                    if (res.ok) {
-                      toast.success('Cleanup completed')
-                    } else {
-                      toast.error('Cleanup failed')
-                    }
-                  } catch (e) {
-                    console.error('Clean failed:', e)
-                    toast.error('Cleanup failed')
-                  }
-                }}
-              >
-                Clean
+                {isStoreInitialized ? 'Re-init Store' : 'Init Store'}
               </Button>
             </div>
           </div>
         </Card>
 
-        {/* Diagnostics */}
+        {/* Diagnostics - TODO: Move to Profiles tab or remove */}
         <Card>
           <div className="flex items-center justify-between">
             <div>
@@ -524,7 +697,7 @@ export function SettingsPage() {
             variant="primary"
             leftIcon={<Save className="w-4 h-4" />}
             onClick={handleSave}
-            isLoading={updateSettingsMutation.isPending}
+            isLoading={updateSettingsMutation.isPending || updateBackupConfigMutation.isPending}
           >
             Save Settings
           </Button>
