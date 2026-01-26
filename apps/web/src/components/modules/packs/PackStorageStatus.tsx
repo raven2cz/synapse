@@ -32,11 +32,11 @@ export function PackStorageStatus({
   let StatusIcon: React.ElementType
 
   if (!backupEnabled) {
-    statusText = 'Backup disabled'
+    statusText = 'Not configured'
     statusColor = 'text-text-muted'
     StatusIcon = CloudOff
   } else if (!backupConnected) {
-    statusText = 'Backup offline'
+    statusText = 'Offline'
     statusColor = 'text-amber-400'
     StatusIcon = CloudOff
   } else if (hasMissing) {

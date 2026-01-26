@@ -81,6 +81,8 @@ export interface CleanupResult {
 
 export interface ImpactAnalysis {
   sha256: string
+  display_name: string
+  kind?: AssetKind
   status: BlobStatus
   size_bytes: number
   used_by_packs: string[]

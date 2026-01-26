@@ -53,19 +53,28 @@ const api = {
 
   async backupBlob(sha256: string): Promise<void> {
     const res = await fetch(`/api/store/backup/blob/${sha256}`, { method: 'POST' })
-    if (!res.ok) throw new Error('Failed to backup blob')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to backup blob')
+    }
   },
 
   async restoreBlob(sha256: string): Promise<void> {
     const res = await fetch(`/api/store/backup/restore/${sha256}`, { method: 'POST' })
-    if (!res.ok) throw new Error('Failed to restore blob')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to restore blob')
+    }
   },
 
   async deleteBlob(sha256: string, target: 'local' | 'backup' | 'both'): Promise<void> {
     const res = await fetch(`/api/store/inventory/${sha256}?target=${target}`, {
       method: 'DELETE',
     })
-    if (!res.ok) throw new Error('Failed to delete blob')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to delete blob')
+    }
   },
 
   async cleanupOrphans(dryRun: boolean): Promise<CleanupResult> {
@@ -102,7 +111,10 @@ const api = {
 
   async getImpactAnalysis(sha256: string): Promise<ImpactAnalysis> {
     const res = await fetch(`/api/store/inventory/${sha256}/impact`)
-    if (!res.ok) throw new Error('Failed to get impact analysis')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to get impact analysis')
+    }
     return res.json()
   },
 
@@ -117,7 +129,20 @@ const api = {
       console.error('[Inventory] Verify failed:', res.status, errorText)
       throw new Error(`Failed to verify integrity: ${res.status}`)
     }
-    return res.json()
+    // Transform API response to match VerifyResult interface
+    // API returns: { verified, valid: string[], invalid: string[], duration_ms }
+    // UI expects: { total, verified, failed, bytes_verified, errors: Array<{sha256, error}> }
+    const data = await res.json()
+    return {
+      total: data.verified || 0,
+      verified: (data.valid || []).length,
+      failed: (data.invalid || []).length,
+      bytes_verified: 0, // API doesn't provide this
+      errors: (data.invalid || []).map((sha256: string) => ({
+        sha256,
+        error: 'Hash mismatch',
+      })),
+    }
   },
 }
 
@@ -462,6 +487,7 @@ export function InventoryPage() {
         direction={syncDirection}
         onPreview={handleSyncPreview}
         onExecute={handleSyncExecute}
+        onExecuteBlob={syncDirection === 'to_backup' ? api.backupBlob : api.restoreBlob}
         onComplete={handleSyncComplete}
       />
 

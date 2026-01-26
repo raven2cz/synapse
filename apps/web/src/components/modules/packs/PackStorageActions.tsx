@@ -52,7 +52,7 @@ export function PackStorageActions({
   if (!backupEnabled) {
     return (
       <div className={clsx('text-sm text-text-muted italic', className)}>
-        Enable backup in Settings to use storage actions
+        Configure external backup in Settings to sync models
       </div>
     )
   }
@@ -60,14 +60,14 @@ export function PackStorageActions({
   if (!backupConnected) {
     return (
       <div className={clsx('text-sm text-amber-400 italic', className)}>
-        Backup storage offline
+        External backup storage offline
       </div>
     )
   }
 
   return (
     <div className={clsx('flex items-center gap-2 flex-wrap', className)}>
-      {/* Pull button */}
+      {/* Restore from backup button */}
       <Button
         size="sm"
         variant={canPull ? 'primary' : 'ghost'}
@@ -77,17 +77,17 @@ export function PackStorageActions({
           'gap-1.5',
           canPull && 'bg-blue-600 hover:bg-blue-500'
         )}
-        title={canPull ? `Restore ${summary.backup_only} blobs from backup` : 'No blobs to restore'}
+        title={canPull ? `Restore ${summary.backup_only} models from external backup` : 'All models already on local disk'}
       >
         {isPulling ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
           <ArrowDown className="w-4 h-4" />
         )}
-        Pull
+        Restore
       </Button>
 
-      {/* Push button */}
+      {/* Backup to external storage button */}
       <Button
         size="sm"
         variant={canPush ? 'primary' : 'ghost'}
@@ -97,28 +97,28 @@ export function PackStorageActions({
           'gap-1.5',
           canPush && 'bg-amber-600 hover:bg-amber-500'
         )}
-        title={canPush ? `Backup ${summary.local_only} blobs to backup storage` : 'No blobs to backup'}
+        title={canPush ? `Backup ${summary.local_only} models to external storage` : 'All models already backed up'}
       >
         {isPushing && !isPulling ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
           <ArrowUp className="w-4 h-4" />
         )}
-        Push
+        Backup
       </Button>
 
-      {/* Push & Free Space button */}
+      {/* Backup and free local space button */}
       <Button
         size="sm"
         variant="ghost"
         onClick={onPushAndFree}
         disabled={!canPushAndFree || isLoading}
         className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-        title="Backup to external storage and delete local copies"
+        title="Backup models to external storage and delete local copies to free disk space"
       >
         <ArrowUp className="w-4 h-4" />
         <Trash2 className="w-3 h-3" />
-        Push & Free
+        Backup & Free
       </Button>
     </div>
   )

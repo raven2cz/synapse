@@ -1202,5 +1202,202 @@ class TestDeletePackCleanup:
         assert result.pack_name == "UnusedPack"
 
 
+# =============================================================================
+# API Response Contract Tests
+# =============================================================================
+# These tests ensure API responses match what the frontend expects.
+# When you change an API response format, you MUST update the frontend interface!
+
+
+class TestAPIResponseContracts:
+    """
+    Tests that verify API responses match frontend interface expectations.
+
+    CRITICAL: These tests prevent API/UI contract mismatches that cause
+    silent failures or crashes in the frontend.
+    """
+
+    def test_verify_blobs_response_format(self, tmp_path):
+        """
+        Verify that verify_blobs returns the expected format.
+
+        Frontend VerifyResult interface (InventoryPage.tsx) expects transformation from:
+        - API: { verified, valid: string[], invalid: string[], duration_ms }
+        - UI:  { total, verified, failed, bytes_verified, errors: Array<{sha256, error}> }
+
+        The frontend transforms the API response - this test documents the API contract.
+        """
+        from src.store import Store
+
+        store = Store(tmp_path)
+        store.init()
+
+        # Create some blobs
+        content = b"test content"
+        blob_path = tmp_path / "test_blob.bin"
+        blob_path.write_bytes(content)
+        sha256 = store.blob_store.adopt(blob_path)
+
+        result = store.verify_blobs(all_blobs=True)
+
+        # Document exact API response format
+        assert "verified" in result, "API must return 'verified' (count of total verified)"
+        assert "valid" in result, "API must return 'valid' (list of valid sha256)"
+        assert "invalid" in result, "API must return 'invalid' (list of invalid sha256)"
+        assert "duration_ms" in result, "API must return 'duration_ms'"
+
+        # Type checks
+        assert isinstance(result["verified"], int)
+        assert isinstance(result["valid"], list)
+        assert isinstance(result["invalid"], list)
+        assert isinstance(result["duration_ms"], int)
+
+        # Value checks
+        assert result["verified"] == 1
+        assert sha256 in result["valid"]
+        assert len(result["invalid"]) == 0
+
+    def test_delete_blob_response_format(self, tmp_path):
+        """
+        Verify that delete_blob returns the expected format.
+
+        Frontend expects:
+        - deleted: bool
+        - sha256: string
+        - bytes_freed: number (when deleted)
+        - deleted_from: string[] (when deleted)
+        - remaining_on: string | string[] (where blob still exists)
+        - reason: string (when not deleted)
+        - impacts: object (when blocked by references)
+        """
+        from src.store import Store
+
+        store = Store(tmp_path)
+        store.init()
+
+        # Create an orphan blob
+        content = b"orphan blob"
+        blob_path = tmp_path / "orphan.bin"
+        blob_path.write_bytes(content)
+        sha256 = store.blob_store.adopt(blob_path)
+
+        result = store.delete_blob(sha256, target="local")
+
+        # Document exact API response format
+        assert "deleted" in result, "API must return 'deleted' boolean"
+        assert "sha256" in result, "API must return 'sha256'"
+
+        if result["deleted"]:
+            assert "bytes_freed" in result, "When deleted, must return 'bytes_freed'"
+            assert "deleted_from" in result, "When deleted, must return 'deleted_from' list"
+            assert isinstance(result["deleted_from"], list)
+        else:
+            assert "reason" in result or "impacts" in result, \
+                "When not deleted, must return 'reason' or 'impacts'"
+
+    def test_backup_blob_response_format(self, tmp_path):
+        """
+        Verify that backup_blob returns the expected format.
+
+        Frontend expects BackupOperationResult:
+        - success: bool
+        - sha256: string
+        - bytes_copied: number
+        - duration_ms: number
+        - verified: bool | null
+        - error: string | null
+        """
+        from src.store import Store
+        from src.store.models import BackupConfig
+
+        store = Store(tmp_path)
+        store.init()
+
+        # Setup backup
+        backup_path = tmp_path / "backup"
+        backup_path.mkdir()
+        store.configure_backup(BackupConfig(enabled=True, path=str(backup_path)))
+
+        # Create a blob
+        content = b"blob to backup"
+        blob_path = tmp_path / "blob.bin"
+        blob_path.write_bytes(content)
+        sha256 = store.blob_store.adopt(blob_path)
+
+        result = store.backup_blob(sha256)
+
+        # Document exact API response format
+        assert hasattr(result, 'success'), "API must return 'success' boolean"
+        assert hasattr(result, 'sha256'), "API must return 'sha256'"
+        assert hasattr(result, 'bytes_copied'), "API must return 'bytes_copied'"
+        assert hasattr(result, 'duration_ms'), "API must return 'duration_ms'"
+
+        # The result is a Pydantic model, check the actual values
+        assert result.success is True
+        assert result.sha256 == sha256
+        assert result.bytes_copied == len(content)
+
+    def test_inventory_response_format(self, tmp_path):
+        """
+        Verify that get_inventory returns the expected format.
+
+        Frontend expects InventoryResponse with:
+        - generated_at: string
+        - summary: InventorySummary
+        - items: InventoryItem[]
+        """
+        from src.store import Store
+
+        store = Store(tmp_path)
+        store.init()
+
+        inventory = store.get_inventory()
+
+        # Document exact API response format
+        assert hasattr(inventory, 'generated_at'), "Must have 'generated_at'"
+        assert hasattr(inventory, 'summary'), "Must have 'summary'"
+        assert hasattr(inventory, 'items'), "Must have 'items'"
+
+        # Summary must have required fields
+        summary = inventory.summary
+        assert hasattr(summary, 'blobs_total'), "Summary must have 'blobs_total'"
+        assert hasattr(summary, 'blobs_referenced'), "Summary must have 'blobs_referenced'"
+        assert hasattr(summary, 'blobs_orphan'), "Summary must have 'blobs_orphan'"
+        assert hasattr(summary, 'blobs_missing'), "Summary must have 'blobs_missing'"
+
+    def test_resolved_dependency_has_artifact_not_artifacts(self, tmp_path):
+        """
+        Verify that ResolvedDependency uses 'artifact' (singular), not 'artifacts'.
+
+        Regression test for bug #20: pack-status endpoint used resolved.artifacts
+        but ResolvedDependency model has resolved.artifact (singular).
+        """
+        from src.store.models import (
+            ResolvedDependency,
+            ResolvedArtifact,
+            AssetKind,
+            ArtifactProvider,
+            ProviderName,
+        )
+
+        # Create a resolved dependency with all required fields
+        resolved = ResolvedDependency(
+            dependency_id="test_dep",
+            artifact=ResolvedArtifact(
+                kind=AssetKind.LORA,
+                sha256="abc123",
+                size_bytes=1000,
+                provider=ArtifactProvider(name=ProviderName.CIVITAI),
+            ),
+        )
+
+        # MUST have artifact (singular)
+        assert hasattr(resolved, 'artifact'), "ResolvedDependency must have 'artifact' attribute"
+        assert resolved.artifact is not None
+
+        # MUST NOT have artifacts (plural) - this was the bug
+        assert not hasattr(resolved, 'artifacts'), "ResolvedDependency must NOT have 'artifacts' (plural)"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

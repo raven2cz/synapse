@@ -118,11 +118,14 @@ export function ImpactsDialog({
               {/* Blob summary */}
               <Card padding="md">
                 <div className="flex items-start gap-3">
-                  <AssetKindIcon kind={analysis.status === 'referenced' ? 'checkpoint' : 'unknown'} size="lg" />
+                  <AssetKindIcon kind={analysis.kind || 'unknown'} size="lg" />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="font-mono text-sm text-text-secondary truncate">
-                        {analysis.sha256.slice(0, 16)}...
+                    <div className="font-medium text-text-primary truncate">
+                      {analysis.display_name || analysis.sha256.slice(0, 16) + '...'}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="font-mono text-xs text-text-muted truncate">
+                        {analysis.sha256.slice(0, 12)}...
                       </div>
                       <StatusBadge status={analysis.status} size="sm" />
                     </div>

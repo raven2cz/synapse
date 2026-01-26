@@ -650,6 +650,9 @@ Rozsireni delete endpointu o cilove umisteni.
 - `target=local` → OK pokud je na backupu
 - `target=backup` → OK pokud je lokalne
 
+> ⚠️ **BUG OPRAVEN 2026-01-25:** Původní implementace NEIMPLEMENTOVALA `target=backup`!
+> Viz sekce 17 "KRITICKÁ CHYBA: Delete from Backup NEFUNGOVALO"
+
 **Response:**
 ```json
 {
@@ -4262,3 +4265,305 @@ class TestStateSyncCLI:
 
 *Review provedeno: 2026-01-24*
 *Opravy provedeny: 2026-01-24*
+
+---
+
+## 17. 🔴 KRITICKÁ CHYBA: Delete from Backup NEFUNGOVALO (2026-01-25)
+
+### 17.1 Popis chyby
+
+**Symptom:** Uživatel klikl na "Delete from Backup" u modelu, který existoval pouze na záloze. Toast zobrazil "success", ale:
+- Blob NEBYL smazán ze zálohy
+- Tabulka se neaktualizovala
+
+**Příčina:** V `inventory_service.py` funkce `delete_blob()` měla NEKOMPLETNÍ implementaci:
+
+```python
+# CHYBNÝ KÓD - target="backup" nikdy neprošel!
+if target in ("local", "both"):
+    # ... mazání z local storage
+
+# CHYBĚLO:
+# if target in ("backup", "both"):
+#     # ... mazání z backup storage
+```
+
+Backend vracal `{"deleted": false, "reason": "Target 'backup' not supported yet"}`, ale:
+1. API (`api.py`) nekontroloval `deleted` field správně - vracel 200 OK
+2. Frontend (`InventoryPage.tsx`) nezobrazoval error message
+
+### 17.2 Opravy
+
+**Soubor: `src/store/inventory_service.py`**
+```python
+# Delete from backup if requested
+if target in ("backup", "both"):
+    try:
+        if self.backup_service and self.backup_service.is_connected():
+            backup_path = self.backup_service.backup_blob_path(sha256)
+            if backup_path and backup_path.exists():
+                result = self.backup_service.delete_from_backup(sha256, confirm=True)
+                if result.success:
+                    deleted_from.append("backup")
+                else:
+                    raise RuntimeError(f"Backup delete failed: {result.error}")
+```
+
+**Soubor: `src/store/api.py`**
+```python
+if not result.get("deleted"):
+    if "impacts" in result:
+        raise HTTPException(409, detail=result)
+    else:
+        reason = result.get("reason", "Unknown error")
+        raise HTTPException(400, detail=reason)
+```
+
+**Soubor: `apps/web/src/components/modules/inventory/InventoryPage.tsx`**
+```typescript
+async deleteBlob(sha256: string, target: 'local' | 'backup' | 'both'): Promise<void> {
+  const res = await fetch(`/api/store/inventory/${sha256}?target=${target}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const errorText = await res.text()
+    throw new Error(errorText || 'Failed to delete blob')
+  }
+}
+```
+
+### 17.3 Nové testy
+
+Přidány do `tests/store/test_inventory.py` v třídě `TestDeleteBlob`:
+
+| Test | Popis |
+|------|-------|
+| `test_delete_from_backup_target` | Mazání z backupu když blob existuje v obou lokacích |
+| `test_delete_from_both_targets` | Mazání z obou lokací (`target="both"`) |
+| `test_delete_backup_only_blob_with_backup_target` | **KLÍČOVÝ TEST** - mazání blobu existujícího pouze na záloze |
+
+### 17.4 Poučení
+
+⚠️ **Specifikace v sekci 3.2 (řádky 640-662) byla korektní**, ale implementace ji plně neimplementovala!
+
+Plán specifikoval:
+```
+target=backup → OK pokud je lokalne
+```
+
+Ale kód toto vůbec neřešil - `target="backup"` propadl bez akce.
+
+**Pravidlo:** Při implementaci funkce s více větvemi (local/backup/both) VŽDY:
+1. Implementovat VŠECHNY větve
+2. Napsat test pro KAŽDOU větev
+3. Explicitně testovat edge case (blob pouze na jednom místě)
+
+### 17.5 Verifikace
+
+```
+./scripts/verify.sh --quick
+✅ 461 passed, 7 skipped
+```
+
+---
+
+*Opraveno: 2026-01-25*
+
+---
+
+## 18. 🔴 KRITICKÁ CHYBA: VerifyProgressDialog - černá obrazovka (2026-01-25)
+
+### 18.1 Popis chyby
+
+**Symptom:** Po dokončení verifikace dialog zmizel, ale zůstala černá obrazovka (backdrop) a uživatel nemohl nic dělat.
+
+**Příčina:** Nesoulad mezi API odpovědí a očekávaným rozhraním:
+
+| API vrací | UI očekává |
+|-----------|------------|
+| `verified` (číslo) | `total` |
+| `valid` (string[]) | `verified` (počet) |
+| `invalid` (string[]) | `failed` (počet) |
+| - | `bytes_verified` |
+| - | `errors` (Array<{sha256, error}>) |
+
+Když `result.errors` bylo `undefined`, volání `result.errors.length` v VerifyProgressDialog.tsx:257 crashlo React komponentu, ale backdrop zůstal viditelný.
+
+### 18.2 Oprava
+
+**Soubor: `apps/web/src/components/modules/inventory/InventoryPage.tsx`**
+
+Transformace API odpovědi na správný formát:
+
+```typescript
+async verifyIntegrity(): Promise<VerifyResult> {
+  const res = await fetch('/api/store/inventory/verify', { ... })
+  // Transform API response to match VerifyResult interface
+  // API returns: { verified, valid: string[], invalid: string[], duration_ms }
+  // UI expects: { total, verified, failed, bytes_verified, errors: Array<{sha256, error}> }
+  const data = await res.json()
+  return {
+    total: data.verified || 0,
+    verified: (data.valid || []).length,
+    failed: (data.invalid || []).length,
+    bytes_verified: 0,
+    errors: (data.invalid || []).map((sha256: string) => ({
+      sha256,
+      error: 'Hash mismatch',
+    })),
+  }
+}
+```
+
+### 18.3 Poučení
+
+⚠️ **API kontrakty musí být vždy synchronizované s frontend interfaces!**
+
+Pravidla:
+1. Při změně API odpovědi VŽDY aktualizovat frontend typy
+2. Při změně frontend typů VŽDY zkontrolovat API
+3. Defensive programming: `(data.field || [])` místo přímého přístupu
+
+### 18.4 Verifikace
+
+```
+./scripts/verify.sh --quick
+✅ 461 passed, 7 skipped
+```
+
+---
+
+*Opraveno: 2026-01-25*
+
+---
+
+## 19. 🔴 KRITICKÁ CHYBA: is_enabled() metoda neexistovala (2026-01-25)
+
+### 19.1 Popis chyby
+
+**Symptom:** V Pack Detail stránce sekce Storage ukazovala "Backup disabled" a "Enable backup in Settings", přestože backup byl povolen a připojen.
+
+**Příčina:** API endpoint `/backup/pack-status/{pack_name}` volal neexistující metodu:
+
+```python
+# api.py:1003 - CHYBA!
+"backup_enabled": store.backup_service.is_enabled(),  # AttributeError!
+```
+
+`BackupService` měla `is_connected()`, ale NE `is_enabled()`.
+
+Výsledek:
+1. API endpoint vyhodil `AttributeError`
+2. Frontend query selhala
+3. Frontend zobrazil fallback "Backup disabled"
+
+### 19.2 Oprava
+
+Přidána chybějící metoda do `src/store/backup_service.py`:
+
+```python
+def is_enabled(self) -> bool:
+    """Quick check if backup is enabled in config."""
+    return self.config.enabled
+```
+
+### 19.3 Druhá část opravy - Storage karta
+
+Storage karta v PackDetailPage se vůbec nezobrazovala při selhání query.
+
+Změněno z:
+```tsx
+{isLoading ? <Skeleton /> : backupStatus && <Card>...</Card>}
+// ↑ Když backupStatus undefined, NEZOBRAZÍ SE NIC
+```
+
+Na:
+```tsx
+<Card>
+  {isLoading ? <Skeleton /> : backupStatus ? <Buttons /> : <ErrorMessage />}
+</Card>
+// ↑ Karta vždy viditelná, zobrazí error message při selhání
+```
+
+### 19.4 Verifikace
+
+```
+./scripts/verify.sh --quick
+✅ 465 passed, 7 skipped
+```
+
+---
+
+*Opraveno: 2026-01-25*
+
+---
+
+## 20. 🔴 KRITICKÁ CHYBA: resolved.artifacts vs resolved.artifact (2026-01-25)
+
+### 20.1 Popis chyby
+
+**Symptom:** Pack Detail page stále zobrazovala "Backup disabled" i po opravě #19 a restartu serveru.
+
+**Příčina:** API endpoint `/backup/pack-status/{pack_name}` používal neexistující atribut:
+
+```python
+# api.py:1029-1031 - CHYBA!
+if not resolved or not resolved.artifacts:  # AttributeError!
+    continue
+for artifact in resolved.artifacts:  # PLURAL - neexistuje!
+```
+
+Model `ResolvedDependency` má `artifact` (SINGULAR), ne `artifacts` (PLURAL):
+
+```python
+class ResolvedDependency(BaseModel):
+    dependency_id: str
+    artifact: ResolvedArtifact  # ← SINGULAR!
+```
+
+Výsledek:
+1. API endpoint vyhodil `'ResolvedDependency' object has no attribute 'artifacts'`
+2. HTTP 500 Internal Server Error
+3. Frontend query selhala
+4. Frontend zobrazil fallback "Backup disabled"
+
+### 20.2 Oprava
+
+Změněno v `src/store/api.py`:
+
+```python
+# PŘED (ŠPATNĚ):
+if not resolved or not resolved.artifacts:
+    continue
+for artifact in resolved.artifacts:
+
+# PO (SPRÁVNĚ):
+if not resolved or not resolved.artifact:
+    continue
+artifact = resolved.artifact
+```
+
+### 20.3 Regresní test
+
+Přidán test do `tests/store/test_api_critical.py`:
+
+```python
+def test_resolved_dependency_has_artifact_not_artifacts(self, tmp_path):
+    """Regression test for bug #20."""
+    from src.store.models import ResolvedDependency, ResolvedArtifact
+
+    resolved = ResolvedDependency(...)
+
+    assert hasattr(resolved, 'artifact')       # MUST exist
+    assert not hasattr(resolved, 'artifacts')  # MUST NOT exist
+```
+
+### 20.4 Verifikace
+
+```bash
+# Po restartu serveru:
+curl -s "http://localhost:8000/api/store/backup/pack-status/Pack_Name" | python3 -m json.tool
+# Vrátí: { "pack": "...", "backup_enabled": true, "backup_connected": true, ... }
+```
+
+---
+
+*Opraveno: 2026-01-25*

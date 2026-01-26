@@ -1031,6 +1031,8 @@ class CleanupResult(BaseModel):
 class ImpactAnalysis(BaseModel):
     """Analysis of what would break if a blob is deleted."""
     sha256: str
+    display_name: str = ""  # Human-readable name (from manifest or pack reference)
+    kind: Optional[AssetKind] = None  # Asset type (checkpoint, lora, etc.)
     status: BlobStatus
     size_bytes: int
     used_by_packs: List[str] = Field(default_factory=list)

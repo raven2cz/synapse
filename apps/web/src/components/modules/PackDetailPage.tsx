@@ -2149,32 +2149,33 @@ export function PackDetailPage() {
         )}
       </Card>
 
-      {/* Storage Actions - Pack Backup */}
-      {isBackupStatusLoading ? (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold text-text-primary">Storage</h3>
+      {/* Backup Storage - Pack backup/restore to external storage */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <DownloadCloud className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-text-primary">Backup Storage</h3>
+            </div>
+            {isBackupStatusLoading ? (
               <div className="h-5 w-24 bg-slate-mid/50 rounded animate-pulse" />
-            </div>
-            <div className="flex gap-2">
-              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
-              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
-              <div className="h-8 w-24 bg-slate-mid/50 rounded animate-pulse" />
-            </div>
-          </div>
-        </Card>
-      ) : backupStatus && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold text-text-primary">Storage</h3>
+            ) : backupStatus ? (
               <PackStorageStatus
                 summary={backupStatus.summary}
                 backupEnabled={backupStatus.backup_enabled}
                 backupConnected={backupStatus.backup_connected}
               />
+            ) : (
+              <span className="text-sm text-text-muted">Loading...</span>
+            )}
+          </div>
+          {isBackupStatusLoading ? (
+            <div className="flex gap-2">
+              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
+              <div className="h-8 w-16 bg-slate-mid/50 rounded animate-pulse" />
+              <div className="h-8 w-24 bg-slate-mid/50 rounded animate-pulse" />
             </div>
+          ) : backupStatus ? (
             <PackStorageActions
               summary={backupStatus.summary}
               backupEnabled={backupStatus.backup_enabled}
@@ -2191,23 +2192,36 @@ export function PackDetailPage() {
               isPulling={pullPackMutation.isPending}
               isPushing={pushPackMutation.isPending}
             />
-          </div>
-
-          {/* Blob table - show only if there are blobs */}
-          {backupStatus.blobs.length > 0 && (
-            <PackBlobsTable blobs={backupStatus.blobs} className="mt-3" />
+          ) : (
+            <span className="text-sm text-red-400">Failed to load backup status</span>
           )}
-        </Card>
-      )}
+        </div>
+
+        {/* Blob table - show only if there are blobs */}
+        {backupStatus && backupStatus.blobs.length > 0 && (
+          <PackBlobsTable blobs={backupStatus.blobs} className="mt-3" />
+        )}
+      </Card>
 
       {/* Pull Confirmation Dialog */}
       <PullConfirmDialog
         isOpen={showPullDialog}
         onClose={() => setShowPullDialog(false)}
         onConfirm={() => pullPackMutation.mutate()}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+          queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+        }}
         packName={packName}
         blobs={backupStatus?.blobs || []}
         isLoading={pullPackMutation.isPending}
+        restoreFn={async (sha256: string) => {
+          const res = await fetch(`/api/store/backup/restore/${sha256}`, { method: 'POST' })
+          if (!res.ok) {
+            const errorText = await res.text()
+            throw new Error(errorText || 'Failed to restore blob')
+          }
+        }}
       />
 
       {/* Push Confirmation Dialog */}
@@ -2215,10 +2229,28 @@ export function PackDetailPage() {
         isOpen={showPushDialog}
         onClose={() => setShowPushDialog(false)}
         onConfirm={(cleanup) => pushPackMutation.mutate({ cleanup })}
+        onComplete={() => {
+          queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+          queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+        }}
         packName={packName}
         blobs={backupStatus?.blobs || []}
         isLoading={pushPackMutation.isPending}
         initialCleanup={pushWithCleanup}
+        backupFn={async (sha256: string) => {
+          const res = await fetch(`/api/store/backup/blob/${sha256}`, { method: 'POST' })
+          if (!res.ok) {
+            const errorText = await res.text()
+            throw new Error(errorText || 'Failed to backup blob')
+          }
+        }}
+        deleteFn={async (sha256: string) => {
+          const res = await fetch(`/api/store/inventory/${sha256}?target=local`, { method: 'DELETE' })
+          if (!res.ok) {
+            const errorText = await res.text()
+            throw new Error(errorText || 'Failed to delete local blob')
+          }
+        }}
       />
 
       {/* Assets/Dependencies */}

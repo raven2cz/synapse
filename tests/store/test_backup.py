@@ -34,6 +34,22 @@ from src.store.models import (
 class TestBackupStatus:
     """Test backup status checking."""
 
+    def test_is_enabled_method_exists(self, tmp_path):
+        """Verify is_enabled() method exists and works (regression test for bug #19)."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Default: not enabled
+        assert store.backup_service.is_enabled() is False
+
+        # After enabling
+        backup_path = tmp_path / "backup"
+        backup_path.mkdir()
+        config = BackupConfig(enabled=True, path=str(backup_path))
+        store.configure_backup(config)
+
+        assert store.backup_service.is_enabled() is True
+
     def test_status_disabled(self, tmp_path):
         """Status shows disabled when backup not enabled."""
         store = Store(tmp_path)

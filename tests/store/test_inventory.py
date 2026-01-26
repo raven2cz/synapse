@@ -329,6 +329,107 @@ class TestDeleteBlob:
         assert result["deleted"] is True
         assert not store.blob_store.blob_exists(sha256)
 
+    def test_delete_from_backup_target(self, tmp_path):
+        """Deleting blob from backup storage with target='backup'."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create a local blob
+        content = b"blob to backup and delete from backup"
+        sha256 = store.blob_store.adopt(_create_temp_file(tmp_path, content))
+
+        # Setup backup storage
+        backup_path = tmp_path / "backup"
+        backup_path.mkdir()
+        from src.store.models import BackupConfig
+        config = BackupConfig(enabled=True, path=str(backup_path))
+        store.configure_backup(config)
+
+        # Backup the blob
+        backup_result = store.backup_blob(sha256)
+        assert backup_result.success is True
+
+        # Verify blob exists in both locations
+        assert store.blob_store.blob_exists(sha256)
+        backup_blob_path = store.backup_service.backup_blob_path(sha256)
+        assert backup_blob_path.exists()
+
+        # Delete from backup only
+        result = store.delete_blob(sha256, target="backup")
+
+        assert result["deleted"] is True
+        assert "backup" in result["deleted_from"]
+        # Local should still exist
+        assert store.blob_store.blob_exists(sha256)
+        # Backup should be gone
+        assert not backup_blob_path.exists()
+
+    def test_delete_from_both_targets(self, tmp_path):
+        """Deleting blob from both local and backup with target='both'."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create a local blob
+        content = b"blob to delete from both locations"
+        sha256 = store.blob_store.adopt(_create_temp_file(tmp_path, content))
+
+        # Setup backup storage
+        backup_path = tmp_path / "backup"
+        backup_path.mkdir()
+        from src.store.models import BackupConfig
+        config = BackupConfig(enabled=True, path=str(backup_path))
+        store.configure_backup(config)
+
+        # Backup the blob
+        backup_result = store.backup_blob(sha256)
+        assert backup_result.success is True
+
+        # Verify blob exists in both locations
+        assert store.blob_store.blob_exists(sha256)
+        backup_blob_path = store.backup_service.backup_blob_path(sha256)
+        assert backup_blob_path.exists()
+
+        # Delete from both
+        result = store.delete_blob(sha256, target="both")
+
+        assert result["deleted"] is True
+        assert "local" in result["deleted_from"]
+        assert "backup" in result["deleted_from"]
+        # Both should be gone
+        assert not store.blob_store.blob_exists(sha256)
+        assert not backup_blob_path.exists()
+
+    def test_delete_backup_only_blob_with_backup_target(self, tmp_path):
+        """Deleting blob that exists only in backup (simulates UI 'Delete from Backup')."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Setup backup storage with a blob that only exists there
+        backup_path = tmp_path / "backup"
+        backup_path.mkdir()
+        from src.store.models import BackupConfig
+        config = BackupConfig(enabled=True, path=str(backup_path))
+        store.configure_backup(config)
+
+        # Create blob directly in backup (simulating backup-only blob)
+        sha256 = "a" * 64
+        prefix = sha256[:2]
+        blob_dir = backup_path / ".synapse" / "store" / "data" / "blobs" / "sha256" / prefix
+        blob_dir.mkdir(parents=True)
+        backup_blob_file = blob_dir / sha256
+        backup_blob_file.write_bytes(b"backup only content")
+
+        # Verify blob exists only in backup
+        assert not store.blob_store.blob_exists(sha256)
+        assert backup_blob_file.exists()
+
+        # Delete from backup
+        result = store.delete_blob(sha256, target="backup")
+
+        assert result["deleted"] is True
+        assert "backup" in result["deleted_from"]
+        assert not backup_blob_file.exists()
+
 
 class TestVerifyBlobs:
     """Test blob verification."""

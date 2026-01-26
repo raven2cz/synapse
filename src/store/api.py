@@ -556,6 +556,27 @@ def get_inventory_summary(store=Depends(require_initialized)):
     return summary.model_dump()
 
 
+@store_router.get("/inventory/{sha256}/impact", response_model=Dict[str, Any])
+def get_blob_impact(
+    sha256: str,
+    store=Depends(require_initialized),
+):
+    """
+    Get impact analysis for a specific blob.
+
+    Returns what would be affected if the blob was deleted.
+    IMPORTANT: This route must be defined BEFORE /inventory/{sha256} to avoid path matching issues.
+    """
+    logger.info("[API] GET /inventory/%s/impact", sha256[:12] if len(sha256) >= 12 else sha256)
+    try:
+        impacts = store.get_blob_impacts(sha256)
+        logger.debug("[API] Impact analysis: can_delete=%s, packs=%s", impacts.can_delete_safely, impacts.used_by_packs)
+        return impacts.model_dump()
+    except Exception as e:
+        logger.error("[API] Failed to get impact analysis for %s: %s", sha256[:12], e, exc_info=True)
+        raise HTTPException(500, f"Failed to get impact analysis: {str(e)}")
+
+
 @store_router.get("/inventory/{sha256}", response_model=Dict[str, Any])
 def get_blob_detail(
     sha256: str,
@@ -636,11 +657,16 @@ def delete_blob(
     try:
         result = store.delete_blob(sha256, force=force, target=target)
 
-        if not result.get("deleted") and "impacts" in result:
-            logger.info("[API] Delete blocked: blob is referenced")
-            raise HTTPException(409, detail=result)
+        if not result.get("deleted"):
+            if "impacts" in result:
+                logger.info("[API] Delete blocked: blob is referenced")
+                raise HTTPException(409, detail=result)
+            else:
+                reason = result.get("reason", "Unknown error")
+                logger.warning("[API] Delete failed: %s", reason)
+                raise HTTPException(400, detail=reason)
 
-        logger.info("[API] Delete result: deleted=%s", result.get("deleted"))
+        logger.info("[API] Delete result: deleted=%s, from=%s", result.get("deleted"), result.get("deleted_from"))
         return result
     except HTTPException:
         raise
@@ -968,14 +994,22 @@ def get_pack_backup_status(
     Returns location (local_only, backup_only, both, nowhere) for each blob.
     Useful for UI to determine which actions are available.
     """
+    # Ensure backup config is loaded (same as /backup/status does)
+    backup_status = store.get_backup_status()
+    backup_enabled = backup_status.enabled
+    backup_connected = backup_status.connected
+
+    logger.info(f"[pack-status] Called for pack: {pack_name}, backup_enabled={backup_enabled}, backup_connected={backup_connected}")
+
     try:
         pack = store.layout.load_pack(pack_name)
+        logger.info(f"[pack-status] Loaded pack with {len(pack.dependencies)} dependencies")
         lock = store.layout.load_pack_lock(pack_name)
         if not lock:
             return {
                 "pack": pack_name,
-                "backup_enabled": store.backup_service.is_enabled(),
-                "backup_connected": store.backup_service.is_connected(),
+                "backup_enabled": backup_enabled,
+                "backup_connected": backup_connected,
                 "blobs": [],
                 "summary": {
                     "total": 0,
@@ -1000,46 +1034,46 @@ def get_pack_backup_status(
 
         for dep in pack.dependencies:
             resolved = lock.get_resolved(dep.id)
-            if not resolved or not resolved.artifacts:
+            if not resolved or not resolved.artifact:
                 continue
-            for artifact in resolved.artifacts:
-                if not artifact.sha256:
-                    continue
-                sha256 = artifact.sha256
-                on_local = store.blob_store.exists(sha256)
-                on_backup = store.backup_service.blob_exists_on_backup(sha256) if store.backup_service.is_connected() else False
+            artifact = resolved.artifact
+            if not artifact.sha256:
+                continue
+            sha256 = artifact.sha256
+            on_local = store.blob_store.blob_exists(sha256)
+            on_backup = store.backup_service.blob_exists_on_backup(sha256) if backup_connected else False
 
-                if on_local and on_backup:
-                    location = "both"
-                    summary["both"] += 1
-                elif on_local:
-                    location = "local_only"
-                    summary["local_only"] += 1
-                elif on_backup:
-                    location = "backup_only"
-                    summary["backup_only"] += 1
-                else:
-                    location = "nowhere"
-                    summary["nowhere"] += 1
+            if on_local and on_backup:
+                location = "both"
+                summary["both"] += 1
+            elif on_local:
+                location = "local_only"
+                summary["local_only"] += 1
+            elif on_backup:
+                location = "backup_only"
+                summary["backup_only"] += 1
+            else:
+                location = "nowhere"
+                summary["nowhere"] += 1
 
-                summary["total"] += 1
-                size = artifact.size or 0
-                summary["total_bytes"] += size
+            summary["total"] += 1
+            size = artifact.size_bytes or 0
+            summary["total_bytes"] += size
 
-                blobs.append({
-                    "sha256": sha256,
-                    "display_name": artifact.filename or dep.name,
-                    "kind": dep.kind.value if hasattr(dep.kind, "value") else str(dep.kind),
-                    "size_bytes": size,
-                    "location": location,
-                    "on_local": on_local,
-                    "on_backup": on_backup,
-                })
+            blobs.append({
+                "sha256": sha256,
+                "display_name": artifact.provider.filename or dep.id,
+                "kind": dep.kind.value if hasattr(dep.kind, "value") else str(dep.kind),
+                "size_bytes": size,
+                "location": location,
+                "on_local": on_local,
+                "on_backup": on_backup,
+            })
 
         return {
             "pack": pack_name,
-            "backup_enabled": store.backup_service.is_enabled(),
-            "backup_connected": store.backup_service.is_connected(),
+            "backup_enabled": backup_enabled,
+            "backup_connected": backup_connected,
             "blobs": blobs,
             "summary": summary,
         }

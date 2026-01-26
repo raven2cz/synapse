@@ -242,6 +242,10 @@ class BackupService:
             warn_before_delete_last_copy=self.config.warn_before_delete_last_copy,
         )
 
+    def is_enabled(self) -> bool:
+        """Quick check if backup is enabled in config."""
+        return self.config.enabled
+
     def is_connected(self) -> bool:
         """Quick check if backup is connected."""
         status = self.get_status()

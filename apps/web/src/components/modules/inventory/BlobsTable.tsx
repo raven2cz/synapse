@@ -7,7 +7,8 @@
  * - Quick actions (Backup, Restore, Delete)
  * - Context menu with full action set
  */
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { clsx } from 'clsx'
 import {
   Upload,
@@ -62,6 +63,8 @@ export function BlobsTable({
     key: 'size_bytes',
     direction: 'desc',
   })
+  // Track which row's context menu is open (exclusive - only one at a time)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   // Sorting
   const sortedItems = useMemo(() => {
@@ -204,7 +207,7 @@ export function BlobsTable({
       {/* Main Table */}
       <Card padding="none" className="overflow-visible">
         <div className="overflow-x-auto overflow-y-visible">
-          <table className="w-full">
+          <table className="w-full min-w-[900px]">
             <thead>
               <tr className="border-b border-slate-mid/50 bg-slate-deep/50">
                 {/* Checkbox */}
@@ -279,14 +282,14 @@ export function BlobsTable({
                   Used By
                 </th>
 
-                {/* Actions */}
-                <th className="w-[130px] px-4 py-3 text-right text-xs font-medium text-text-muted uppercase">
+                {/* Actions - sticky */}
+                <th className="w-[130px] px-4 py-3 text-right text-xs font-medium text-text-muted uppercase sticky right-0 bg-slate-deep/95 backdrop-blur-sm shadow-[-8px_0_16px_-8px_rgba(0,0,0,0.3)]">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody>
-              {sortedItems.map((item, index) => (
+              {sortedItems.map((item) => (
                 <BlobRow
                   key={item.sha256}
                   item={item}
@@ -298,7 +301,8 @@ export function BlobsTable({
                   onRestore={onRestore}
                   onDelete={onDelete}
                   onShowImpacts={onShowImpacts}
-                  isNearBottom={index >= sortedItems.length - 3}
+                  isMenuOpen={openMenuId === item.sha256}
+                  onMenuToggle={(open) => setOpenMenuId(open ? item.sha256 : null)}
                 />
               ))}
             </tbody>
@@ -367,7 +371,8 @@ function BlobRow({
   onRestore,
   onDelete,
   onShowImpacts,
-  isNearBottom = false,
+  isMenuOpen,
+  onMenuToggle,
 }: {
   item: InventoryItem
   selected: boolean
@@ -378,15 +383,35 @@ function BlobRow({
   onRestore: (sha256: string) => Promise<void>
   onDelete: (sha256: string, target: 'local' | 'backup' | 'both') => void
   onShowImpacts: (item: InventoryItem) => void
-  isNearBottom?: boolean
+  isMenuOpen: boolean
+  onMenuToggle: (open: boolean) => void
 }) {
   const [isLoading, setIsLoading] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
   const [copiedSha, setCopiedSha] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 })
+
+  // Update menu position when opening
+  useEffect(() => {
+    if (isMenuOpen && menuButtonRef.current) {
+      const rect = menuButtonRef.current.getBoundingClientRect()
+      const menuWidth = 192 // w-48 = 12rem = 192px
+      const menuHeight = 200 // approximate height
+      const viewportHeight = window.innerHeight
+
+      // Check if menu would go off bottom of viewport
+      const wouldOverflowBottom = rect.bottom + menuHeight > viewportHeight
+
+      setMenuPosition({
+        top: wouldOverflowBottom ? rect.top - menuHeight : rect.bottom + 4,
+        left: rect.right - menuWidth,
+      })
+    }
+  }, [isMenuOpen])
 
   const handleAction = async (action: () => void | Promise<void>) => {
     setIsLoading(true)
-    setShowMenu(false)
+    onMenuToggle(false)
     try {
       await action()
     } finally {
@@ -395,7 +420,7 @@ function BlobRow({
   }
 
   const handleDelete = (target: 'local' | 'backup' | 'both') => {
-    setShowMenu(false)
+    onMenuToggle(false)
     onDelete(item.sha256, target)
   }
 
@@ -403,7 +428,7 @@ function BlobRow({
     await copyToClipboard(item.sha256)
     setCopiedSha(true)
     setTimeout(() => setCopiedSha(false), 2000)
-    setShowMenu(false)
+    onMenuToggle(false)
   }
 
   // Determine quick action button
@@ -540,8 +565,8 @@ function BlobRow({
         )}
       </td>
 
-      {/* Actions */}
-      <td className="px-4 py-3">
+      {/* Actions - sticky */}
+      <td className="px-4 py-3 sticky right-0 bg-slate-dark/95 backdrop-blur-sm shadow-[-8px_0_16px_-8px_rgba(0,0,0,0.3)]">
         <div className="flex items-center justify-end gap-1">
           {/* Quick Action Button */}
           {quickAction && (
@@ -565,127 +590,128 @@ function BlobRow({
             </button>
           )}
 
-          {/* Context Menu */}
-          <div className="relative">
-            <button
-              className="p-1.5 rounded hover:bg-slate-mid/50 text-text-muted hover:text-text-primary transition-colors"
-              onClick={() => setShowMenu(!showMenu)}
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
+          {/* Context Menu Button */}
+          <button
+            ref={menuButtonRef}
+            className="p-1.5 rounded hover:bg-slate-mid/50 text-text-muted hover:text-text-primary transition-colors"
+            onClick={() => onMenuToggle(!isMenuOpen)}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
 
-            {showMenu && (
-              <>
-                {/* Backdrop */}
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowMenu(false)}
-                />
+          {/* Context Menu - rendered via portal for proper z-index */}
+          {isMenuOpen && createPortal(
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-[100]"
+                onClick={() => onMenuToggle(false)}
+              />
 
-                {/* Menu - opens upward when near bottom of table */}
-                <div className={clsx(
-                  "absolute right-0 z-50 w-48 py-1 bg-slate-dark border border-slate-mid rounded-lg shadow-xl",
-                  isNearBottom ? "bottom-full mb-1" : "top-full mt-1"
-                )}>
-                  {/* Copy SHA256 */}
+              {/* Menu */}
+              <div
+                className="fixed z-[101] w-48 py-1 bg-slate-dark border border-slate-mid rounded-lg shadow-xl"
+                style={{ top: menuPosition.top, left: menuPosition.left }}
+              >
+                {/* Copy SHA256 */}
+                <button
+                  className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
+                  onClick={handleCopySha}
+                >
+                  {copiedSha ? (
+                    <Check className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                  {copiedSha ? 'Copied!' : 'Copy SHA256'}
+                </button>
+
+                {/* Show Impacts */}
+                {item.status === 'referenced' && (
                   <button
                     className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                    onClick={handleCopySha}
+                    onClick={() => {
+                      onShowImpacts(item)
+                      onMenuToggle(false)
+                    }}
                   >
-                    {copiedSha ? (
-                      <Check className="w-4 h-4 text-green-500" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
-                    {copiedSha ? 'Copied!' : 'Copy SHA256'}
+                    <Info className="w-4 h-4" />
+                    Show Impacts
                   </button>
+                )}
 
-                  {/* Show Impacts */}
-                  {item.status === 'referenced' && (
-                    <button
-                      className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                      onClick={() => {
-                        onShowImpacts(item)
-                        setShowMenu(false)
-                      }}
-                    >
-                      <Info className="w-4 h-4" />
-                      Show Impacts
-                    </button>
-                  )}
+                <div className="border-t border-slate-mid/50 my-1" />
 
-                  <div className="border-t border-slate-mid/50 my-1" />
+                {/* Backup/Restore actions */}
+                {backupEnabled && backupConnected && (
+                  <>
+                    {item.location === 'local_only' && (
+                      <button
+                        className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
+                        onClick={() => handleAction(() => onBackup(item.sha256))}
+                      >
+                        <Upload className="w-4 h-4" />
+                        Backup to External
+                      </button>
+                    )}
 
-                  {/* Backup/Restore actions */}
-                  {backupEnabled && backupConnected && (
-                    <>
-                      {item.location === 'local_only' && (
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                          onClick={() => handleAction(() => onBackup(item.sha256))}
-                        >
-                          <Upload className="w-4 h-4" />
-                          Backup to External
-                        </button>
-                      )}
+                    {item.location === 'backup_only' && (
+                      <button
+                        className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
+                        onClick={() => handleAction(() => onRestore(item.sha256))}
+                      >
+                        <Download className="w-4 h-4" />
+                        Restore from Backup
+                      </button>
+                    )}
+                  </>
+                )}
 
-                      {item.location === 'backup_only' && (
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                          onClick={() => handleAction(() => onRestore(item.sha256))}
-                        >
-                          <Download className="w-4 h-4" />
-                          Restore from Backup
-                        </button>
-                      )}
-                    </>
-                  )}
+                {/* Delete actions */}
+                {item.on_local && item.status === 'orphan' && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
+                    onClick={() => handleDelete('local')}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete from Local
+                  </button>
+                )}
 
-                  {/* Delete actions */}
-                  {item.on_local && item.status === 'orphan' && (
-                    <button
-                      className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
-                      onClick={() => handleDelete('local')}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete from Local
-                    </button>
-                  )}
+                {item.on_backup && backupConnected && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
+                    onClick={() => handleDelete('backup')}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete from Backup
+                  </button>
+                )}
 
-                  {item.on_backup && backupConnected && (
-                    <button
-                      className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
-                      onClick={() => handleDelete('backup')}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete from Backup
-                    </button>
-                  )}
+                {item.location === 'both' && item.status === 'orphan' && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
+                    onClick={() => handleDelete('both')}
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                    Delete Everywhere
+                  </button>
+                )}
 
-                  {item.location === 'both' && item.status === 'orphan' && (
-                    <button
-                      className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
-                      onClick={() => handleDelete('both')}
-                    >
-                      <AlertTriangle className="w-4 h-4" />
-                      Delete Everywhere
-                    </button>
-                  )}
-
-                  {/* Re-download for missing */}
-                  {item.status === 'missing' && item.origin && (
-                    <button
-                      className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                      onClick={() => setShowMenu(false)}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Re-download from {item.origin.provider}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+                {/* Re-download for missing */}
+                {item.status === 'missing' && item.origin && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
+                    onClick={() => onMenuToggle(false)}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Re-download from {item.origin.provider}
+                  </button>
+                )}
+              </div>
+            </>,
+            document.body
+          )}
         </div>
       </td>
     </tr>

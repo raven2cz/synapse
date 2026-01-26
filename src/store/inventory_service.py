@@ -573,6 +573,8 @@ class InventoryService:
             logger.debug("[Inventory] Blob %s not found in inventory", sha256[:12])
             return ImpactAnalysis(
                 sha256=sha256,
+                display_name=sha256[:12] + "...",
+                kind=None,
                 status=BlobStatus.MISSING,
                 size_bytes=0,
                 used_by_packs=[],
@@ -601,6 +603,8 @@ class InventoryService:
 
         return ImpactAnalysis(
             sha256=sha256,
+            display_name=item.display_name,
+            kind=item.kind,
             status=item.status,
             size_bytes=item.size_bytes,
             used_by_packs=item.used_by_packs,
@@ -652,34 +656,87 @@ class InventoryService:
                 "impacts": impacts,
             }
 
-        # For now, only support local deletion
+        deleted_from = []
+        bytes_freed = 0
+
+        # Delete from local if requested
         if target in ("local", "both"):
             try:
-                removed = self.blob_store.remove_blob(sha256)
-                if removed:
-                    logger.info(
-                        "[Inventory] Successfully deleted blob %s (%.2f MB)",
-                        sha256[:12],
-                        impacts.size_bytes / 1024 / 1024,
-                    )
+                if self.blob_store.blob_exists(sha256):
+                    removed = self.blob_store.remove_blob(sha256)
+                    if removed:
+                        logger.info(
+                            "[Inventory] Deleted blob %s from local (%.2f MB)",
+                            sha256[:12],
+                            impacts.size_bytes / 1024 / 1024,
+                        )
+                        deleted_from.append("local")
+                        bytes_freed += impacts.size_bytes
+                    else:
+                        logger.warning("[Inventory] remove_blob returned False for %s", sha256[:12])
                 else:
-                    logger.warning("[Inventory] remove_blob returned False for %s", sha256[:12])
-                return {
-                    "deleted": removed,
-                    "sha256": sha256,
-                    "bytes_freed": impacts.size_bytes if removed else 0,
-                    "deleted_from": ["local"] if removed else [],
-                    "remaining_on": "nowhere",  # TODO: Check backup
-                }
+                    logger.debug("[Inventory] Blob %s not on local, skipping local delete", sha256[:12])
             except Exception as e:
-                logger.error("[Inventory] Failed to remove blob %s: %s", sha256[:12], e, exc_info=True)
+                logger.error("[Inventory] Failed to remove blob %s from local: %s", sha256[:12], e, exc_info=True)
                 raise
 
-        logger.warning("[Inventory] Unsupported target '%s' for delete", target)
+        # Delete from backup if requested
+        if target in ("backup", "both"):
+            try:
+                if self.backup_service and self.backup_service.is_connected():
+                    backup_path = self.backup_service.backup_blob_path(sha256)
+                    if backup_path and backup_path.exists():
+                        result = self.backup_service.delete_from_backup(sha256, confirm=True)
+                        if result.success:
+                            logger.info(
+                                "[Inventory] Deleted blob %s from backup (%.2f MB)",
+                                sha256[:12],
+                                impacts.size_bytes / 1024 / 1024,
+                            )
+                            deleted_from.append("backup")
+                            if "local" not in deleted_from:
+                                bytes_freed += impacts.size_bytes
+                        else:
+                            logger.error("[Inventory] Failed to delete from backup: %s", result.error)
+                            raise RuntimeError(f"Backup delete failed: {result.error}")
+                    else:
+                        logger.debug("[Inventory] Blob %s not on backup, skipping backup delete", sha256[:12])
+                else:
+                    if target == "backup":
+                        raise RuntimeError("Backup storage not connected")
+                    logger.warning("[Inventory] Backup not connected, skipping backup delete for target=%s", target)
+            except RuntimeError:
+                raise
+            except Exception as e:
+                logger.error("[Inventory] Failed to delete blob %s from backup: %s", sha256[:12], e, exc_info=True)
+                raise
+
+        # Determine where blob remains
+        remaining_on = []
+        if self.blob_store.blob_exists(sha256):
+            remaining_on.append("local")
+        if self.backup_service and self.backup_service.is_connected():
+            backup_path = self.backup_service.backup_blob_path(sha256)
+            if backup_path and backup_path.exists():
+                remaining_on.append("backup")
+
+        deleted = len(deleted_from) > 0
+        if not deleted and target in ("backup", "both"):
+            # Nothing was deleted - this is an error if we targeted backup
+            return {
+                "deleted": False,
+                "sha256": sha256,
+                "reason": "Blob not found in target location(s)",
+                "deleted_from": [],
+                "remaining_on": remaining_on,
+            }
+
         return {
-            "deleted": False,
+            "deleted": deleted,
             "sha256": sha256,
-            "reason": f"Target '{target}' not supported yet",
+            "bytes_freed": bytes_freed,
+            "deleted_from": deleted_from,
+            "remaining_on": "nowhere" if not remaining_on else remaining_on,
         }
 
     def verify_blobs(

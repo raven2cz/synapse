@@ -42,7 +42,10 @@ interface InventoryStatsProps {
 const stateSyncApi = {
   async getStatus(): Promise<StateSyncStatusResponse> {
     const res = await fetch('/api/store/state/sync-status')
-    if (!res.ok) throw new Error('Failed to fetch state sync status')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to fetch state sync status')
+    }
     return res.json()
   },
   async sync(direction: string, dryRun: boolean): Promise<StateSyncResult> {
@@ -51,7 +54,10 @@ const stateSyncApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ direction, dry_run: dryRun }),
     })
-    if (!res.ok) throw new Error('Failed to sync state')
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to sync state')
+    }
     return res.json()
   },
 }
