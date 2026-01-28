@@ -643,18 +643,43 @@ class InventoryService:
             logger.error("[Inventory] Failed to get impacts for delete: %s", e, exc_info=True)
             raise
 
-        if not impacts.can_delete_safely and not force:
+        # Check if this delete would remove the LAST copy of a referenced blob
+        # It's safe to delete from one location if a copy remains in the other
+        on_local = self.blob_store.blob_exists(sha256)
+        on_backup = (
+            self.backup_service
+            and self.backup_service.is_connected()
+            and self.backup_service.backup_blob_path(sha256) is not None
+            and self.backup_service.backup_blob_path(sha256).exists()
+        )
+
+        would_be_last_copy = False
+        if target == "both":
+            would_be_last_copy = True  # Deleting everywhere = definitely last copy
+        elif target == "local" and not on_backup:
+            would_be_last_copy = True  # No backup, local is last
+        elif target == "backup" and not on_local:
+            would_be_last_copy = True  # No local, backup is last
+
+        if not impacts.can_delete_safely and would_be_last_copy and not force:
             logger.info(
-                "[Inventory] Refusing to delete %s: blob is referenced by %d packs",
+                "[Inventory] Refusing to delete %s: blob is referenced by %d packs and this is the last copy",
                 sha256[:12],
                 len(impacts.used_by_packs),
             )
             return {
                 "deleted": False,
                 "sha256": sha256,
-                "reason": "Blob is referenced by packs",
+                "reason": "Blob is referenced by packs and this is the last copy",
                 "impacts": impacts,
             }
+
+        if not impacts.can_delete_safely and not would_be_last_copy:
+            logger.info(
+                "[Inventory] Allowing delete of referenced blob %s from %s (copy remains in other location)",
+                sha256[:12],
+                target,
+            )
 
         deleted_from = []
         bytes_freed = 0
@@ -721,12 +746,24 @@ class InventoryService:
                 remaining_on.append("backup")
 
         deleted = len(deleted_from) > 0
-        if not deleted and target in ("backup", "both"):
-            # Nothing was deleted - this is an error if we targeted backup
+        if not deleted:
+            # Nothing was deleted - blob was not in the target location(s)
+            # For target="local", if blob exists on backup but not local, consider it success
+            # (the goal of "free local space" is achieved - there's nothing to free)
+            if target == "local" and "backup" in remaining_on:
+                logger.info("[Inventory] Blob %s not on local but exists on backup - treating as success (already freed)", sha256[:12])
+                return {
+                    "deleted": True,  # Goal achieved - local is clear
+                    "sha256": sha256,
+                    "bytes_freed": 0,
+                    "deleted_from": [],
+                    "remaining_on": remaining_on,
+                    "note": "Blob was already not on local storage",
+                }
             return {
                 "deleted": False,
                 "sha256": sha256,
-                "reason": "Blob not found in target location(s)",
+                "reason": f"Blob not found on {target}" if target != "both" else "Blob not found in any location",
                 "deleted_from": [],
                 "remaining_on": remaining_on,
             }

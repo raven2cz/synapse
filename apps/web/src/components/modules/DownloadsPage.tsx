@@ -81,6 +81,11 @@ export function DownloadsPage() {
     await fetch('/api/packs/downloads/completed', { method: 'DELETE' })
     refetch()
   }
+
+  const dismissDownload = async (downloadId: string) => {
+    await fetch(`/api/packs/downloads/${downloadId}`, { method: 'DELETE' })
+    refetch()
+  }
   
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -146,7 +151,7 @@ export function DownloadsPage() {
               onClick={clearCompleted}
             >
               <Trash2 className="w-4 h-4" />
-              Clear Completed
+              Clear All
             </Button>
           )}
         </div>
@@ -200,12 +205,25 @@ export function DownloadsPage() {
                     </p>
                   </div>
                 </div>
-                <span className={clsx(
-                  'text-sm font-medium capitalize',
-                  getStatusColor(download.status)
-                )}>
-                  {download.status}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={clsx(
+                    'text-sm font-medium capitalize',
+                    getStatusColor(download.status)
+                  )}>
+                    {download.status}
+                  </span>
+                  {['completed', 'failed', 'cancelled'].includes(download.status) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => dismissDownload(download.download_id)}
+                      className="text-text-muted hover:text-text-primary"
+                      title="Dismiss"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
               
               {/* Progress for downloading */}

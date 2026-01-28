@@ -660,7 +660,9 @@ def delete_blob(
         if not result.get("deleted"):
             if "impacts" in result:
                 logger.info("[API] Delete blocked: blob is referenced")
-                raise HTTPException(409, detail=result)
+                # Convert ImpactAnalysis pydantic model to dict for JSON serialization
+                serializable_result = {**result, "impacts": result["impacts"].model_dump()}
+                raise HTTPException(409, detail=serializable_result)
             else:
                 reason = result.get("reason", "Unknown error")
                 logger.warning("[API] Delete failed: %s", reason)
@@ -2263,11 +2265,17 @@ async def download_asset(
     
     if not download_url:
         raise HTTPException(status_code=400, detail="No download URL available for this asset")
-    
+
+    # Check if Civitai API key is configured for Civitai downloads
+    if "civitai.com" in download_url and not store.blob_store.api_key:
+        logger.warning(f"[download-asset] No Civitai API key configured! Download may fail.")
+
     # Determine filename
     filename = request.filename or resolved_filename or f"{request.asset_name}.safetensors"
-    
+
     logger.info(f"[download-asset] Downloading {filename} from {download_url[:100]}...")
+    if store.blob_store.api_key:
+        logger.debug(f"[download-asset] Using Civitai API key: {store.blob_store.api_key[:8]}...")
     
     # Create download tracking entry
     download_id = str(uuid.uuid4())[:8]
@@ -2333,7 +2341,28 @@ async def download_asset(
                 expected_sha256=None,
                 progress_callback=progress_callback,
             )
-            
+
+            # Validate downloaded file is not HTML/error page
+            blob_path = store.blob_store.blob_path(sha256)
+            blob_size = blob_path.stat().st_size
+
+            # Check if file is suspiciously small (likely error page)
+            MIN_MODEL_SIZE = 100_000  # 100KB minimum for models
+            if blob_size < MIN_MODEL_SIZE:
+                # Read first bytes to check if HTML
+                with open(blob_path, 'rb') as f:
+                    header = f.read(100)
+                if b'<!DOCTYPE' in header or b'<html' in header.lower():
+                    # Delete the corrupt blob
+                    store.blob_store.remove_blob(sha256)
+                    raise RuntimeError(
+                        f"Download failed: received HTML error page instead of model file. "
+                        f"Size: {blob_size} bytes. This usually means Civitai returned an error. "
+                        f"Try again later or check if the model is still available."
+                    )
+                else:
+                    logger.warning(f"[download-asset] Downloaded file is small ({blob_size} bytes), but not HTML. Proceeding.")
+
             # Create symlink to ComfyUI models folder
             # Map asset type to directory
             type_map = {
@@ -2412,15 +2441,6 @@ def get_download_progress(download_id: str):
     return _active_downloads[download_id]
 
 
-@v2_packs_router.delete("/downloads/{download_id}")
-def cancel_download(download_id: str):
-    """Cancel a download."""
-    if download_id in _active_downloads:
-        _active_downloads[download_id]["status"] = "cancelled"
-        del _active_downloads[download_id]
-    return {"cancelled": download_id}
-
-
 @v2_packs_router.delete("/downloads/completed")
 def clear_completed_downloads():
     """Clear completed/failed downloads from tracking."""
@@ -2430,6 +2450,16 @@ def clear_completed_downloads():
     ]
     for k in to_remove:
         del _active_downloads[k]
+    return {"cleared": len(to_remove)}
+
+
+@v2_packs_router.delete("/downloads/{download_id}")
+def cancel_download(download_id: str):
+    """Cancel a download."""
+    if download_id in _active_downloads:
+        _active_downloads[download_id]["status"] = "cancelled"
+        del _active_downloads[download_id]
+    return {"cancelled": download_id}
     return {"cleared": len(to_remove)}
 
 
@@ -2490,7 +2520,7 @@ def delete_dependency_resource(
         deleted_dependency = False
         blob_path = None
         
-        # Delete blob if exists
+        # Delete blob if exists (but KEEP resolved info in lock.json for re-download!)
         if lock:
             resolved = lock.get_resolved(dep_id)
             if resolved and resolved.artifact.sha256:
@@ -2502,11 +2532,10 @@ def delete_dependency_resource(
                     os.unlink(blob_path)
                     deleted_blob = True
                     logger.info(f"[delete-resource] Deleted blob: {blob_path}")
-                
-                # Clear from lock
-                if resolved:
-                    lock.resolved = [r for r in lock.resolved if r.dependency_id != dep_id]
-                    store.layout.save_pack_lock(lock)
+
+                # NOTE: We intentionally keep the resolved entry in lock.json!
+                # It contains download URLs needed for re-downloading.
+                # The UI should check blob existence to show download button.
         
         # Delete dependency from pack.json if requested
         if delete_dependency:

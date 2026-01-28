@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X,
   ArrowUp,
@@ -65,6 +65,8 @@ export function PushConfirmDialog({
 }: PushConfirmDialogProps) {
   const [cleanup, setCleanup] = useState(initialCleanup)
   const [cleanupPhase, setCleanupPhase] = useState(false)
+  // R2: Use ref to prevent double-triggering cleanup phase due to stale closure
+  const cleanupStartedRef = useRef(false)
 
   // R1: Sync cleanup state when initialCleanup prop changes
   useEffect(() => {
@@ -86,11 +88,20 @@ export function PushConfirmDialog({
     operation: cleanupPhase ? 'cleanup' : 'backup',
     onComplete: async () => {
       // If cleanup is enabled and we just finished backup phase, start cleanup phase
-      if (cleanup && !cleanupPhase && deleteFn) {
+      // R2: Use ref to prevent double-triggering due to stale closure capturing old cleanupPhase value
+      if (cleanup && !cleanupStartedRef.current && deleteFn) {
+        cleanupStartedRef.current = true
         setCleanupPhase(true)
-        // Get all local blobs that need to be deleted
-        const localBlobs = blobs.filter(b => b.on_local)
-        const deleteItems: TransferOperationItem[] = localBlobs.map(blob => ({
+        // Get blobs that actually have local copies to delete
+        // Filter out backup_only blobs (location === 'backup_only' means on_local should be false)
+        // This prevents infinite loops when cache shows on_local=true but blob is actually backup_only
+        const blobsToDelete = blobs.filter(b => b.on_local && b.location !== 'backup_only')
+        if (blobsToDelete.length === 0) {
+          // Nothing to delete, operation complete
+          onComplete?.()
+          return
+        }
+        const deleteItems: TransferOperationItem[] = blobsToDelete.map(blob => ({
           sha256: blob.sha256,
           display_name: blob.display_name,
           size_bytes: blob.size_bytes,
@@ -107,6 +118,7 @@ export function PushConfirmDialog({
     if (!isOpen) {
       reset()
       setCleanupPhase(false)
+      cleanupStartedRef.current = false
     }
   }, [isOpen, reset])
 
@@ -114,8 +126,9 @@ export function PushConfirmDialog({
 
   // Blobs that need backup (local only)
   const blobsToBackup = blobs.filter(b => b.location === 'local_only')
-  // All local blobs (for cleanup calculation)
-  const localBlobs = blobs.filter(b => b.on_local)
+  // All local blobs (for cleanup calculation) - MUST filter out backup_only to prevent infinite loops
+  // backup_only blobs have location='backup_only' even if on_local might be true in stale cache
+  const localBlobs = blobs.filter(b => b.on_local && b.location !== 'backup_only')
   const totalBytesToBackup = blobsToBackup.reduce((sum, b) => sum + b.size_bytes, 0)
   const totalBytesToFree = localBlobs.reduce((sum, b) => sum + b.size_bytes, 0)
 
@@ -131,7 +144,8 @@ export function PushConfirmDialog({
   const completedItems = progress?.completed_items || 0
   const failedItems = progress?.failed_items || 0
   const totalItems = progress?.total_items || activeItems.length
-  const progressPercent = totalBytes > 0 ? (transferredBytes / totalBytes) * 100 : 0
+  // Force 100% when completed (progress might not update in time for fast operations)
+  const progressPercent = isCompleted ? 100 : (totalBytes > 0 ? (transferredBytes / totalBytes) * 100 : 0)
   const bytesPerSecond = progress?.bytes_per_second || 0
   const etaSeconds = progress?.eta_seconds
   const elapsedSeconds = progress?.elapsed_seconds || 0
@@ -344,7 +358,7 @@ export function PushConfirmDialog({
 
                 <div className="flex justify-between text-xs text-text-muted">
                   <span>
-                    {formatBytes(transferredBytes)} / {formatBytes(totalBytes)}
+                    {formatBytes(isCompleted ? totalBytes : transferredBytes)} / {formatBytes(totalBytes)}
                   </span>
                   {isRunning && bytesPerSecond > 0 && (
                     <span>
@@ -395,7 +409,10 @@ export function PushConfirmDialog({
                 <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                   <span className="text-sm text-green-400">
-                    Successfully freed {formatBytes(totalBytesToFree)} of local space
+                    {/* Use progress.total_bytes which reflects actual items processed */}
+                    {(progress?.total_bytes || 0) > 0
+                      ? `Successfully freed ${formatBytes(progress?.total_bytes || 0)} of local space`
+                      : 'Local space already freed'}
                   </span>
                 </div>
               )}

@@ -6,7 +6,7 @@ import {
   AlertTriangle, Check, Search, Loader2, X, Database,
   HardDrive, Globe, Package, Info, Copy, ChevronRight, ChevronDown, Edit3,
   FileJson, DownloadCloud, FolderOpen, Gauge, Timer,
-  ArrowLeftRight, RotateCcw, Zap, ZoomIn, ZoomOut
+  ArrowLeftRight, RotateCcw, Zap, ZoomIn, ZoomOut, Cloud
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -407,6 +407,9 @@ export function PackDetailPage() {
         return []
       }
     },
+    // Always fetch fresh data when component mounts (fixes issue when returning from Downloads page)
+    refetchOnMount: 'always',
+    staleTime: 0,
     // Poll when there are active downloads for THIS pack OR when we just started a download
     refetchInterval: (query) => {
       const downloads = query.state.data as DownloadProgress[] | undefined
@@ -466,6 +469,20 @@ export function PackDetailPage() {
     if (completed.length > 0) {
       console.log('[PackDetailPage] Completed downloads:', completed.map(d => d.asset_name))
 
+      // Show toast for failed downloads
+      const failed = completed.filter(d => d.status === 'failed')
+      failed.forEach(d => {
+        const errorMsg = d.error || 'Download failed'
+        console.error('[PackDetailPage] Download failed:', d.asset_name, errorMsg)
+        toast.error(`Failed to download ${d.filename}: ${errorMsg}`)
+      })
+
+      // Show toast for successful downloads
+      const successful = completed.filter(d => d.status === 'completed')
+      successful.forEach(d => {
+        toast.success(`Downloaded ${d.filename}`)
+      })
+
       // Remove completed from downloadingAssets
       setDownloadingAssets(prev => {
         const next = new Set(prev)
@@ -473,8 +490,9 @@ export function PackDetailPage() {
         return next
       })
 
-      // Refresh pack data to get updated status
+      // Refresh pack data and backup status to get updated status
       queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
     }
   }, [activeDownloads, packName, queryClient])
 
@@ -501,6 +519,29 @@ export function PackDetailPage() {
     },
     onError: (error: Error) => {
       toast.error(`Failed to resolve base model: ${error.message}`)
+    },
+  })
+
+  // Resolve pack mutation (for unresolved dependencies)
+  const resolvePackMutation = useMutation({
+    mutationFn: async () => {
+      console.log('[PackDetailPage] Resolving pack:', packName)
+      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/resolve`, {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to resolve: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+      queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+      toast.success('Dependencies resolved')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to resolve: ${error.message}`)
     },
   })
 
@@ -2211,6 +2252,7 @@ export function PackDetailPage() {
         onComplete={() => {
           queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
           queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+          queryClient.invalidateQueries({ queryKey: ['inventory'] })
         }}
         packName={packName}
         blobs={backupStatus?.blobs || []}
@@ -2232,6 +2274,7 @@ export function PackDetailPage() {
         onComplete={() => {
           queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
           queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+          queryClient.invalidateQueries({ queryKey: ['inventory'] })
         }}
         packName={packName}
         blobs={backupStatus?.blobs || []}
@@ -2298,7 +2341,15 @@ export function PackDetailPage() {
                 // Ready to download = has URL but not installed
                 const readyToDownload = !!asset.url && !isInstalled
 
-                console.log(`[PackDetailPage] Asset ${asset.name}: status=${asset.status}, installed=${isInstalled}, url=${asset.url ? 'yes' : 'no'}, canDownload=${canDownload}, readyToDownload=${readyToDownload}, downloading=${isDownloading}`)
+                // Check if blob is available on backup storage
+                const backupBlob = asset.sha256
+                  ? backupStatus?.blobs?.find(b => b.sha256 === asset.sha256)
+                  : undefined
+                const isOnBackup = backupBlob && typeof backupBlob === 'object' && backupBlob.on_backup
+                // Backup-only: available on backup but NOT installed locally - can restore instead of download
+                const isBackupOnly = isOnBackup && !isInstalled
+
+                console.log(`[PackDetailPage] Asset ${asset.name}: status=${asset.status}, installed=${isInstalled}, url=${asset.url ? 'yes' : 'no'}, canDownload=${canDownload}, readyToDownload=${readyToDownload}, downloading=${isDownloading}, isBackupOnly=${isBackupOnly}`)
 
                 return (
                   <div
@@ -2309,11 +2360,13 @@ export function PackDetailPage() {
                         ? "bg-synapse/10 border-synapse/50"
                         : isInstalled
                           ? "bg-green-900/30 border-green-500/50"
-                          : needsResolve
-                            ? "bg-amber-900/30 border-amber-500/50"
-                            : readyToDownload
-                              ? "bg-blue-900/20 border-blue-500/30"
-                              : "bg-slate-dark border-slate-mid"
+                          : isBackupOnly
+                            ? "bg-sky-900/30 border-sky-500/50"  // Available on backup - can restore
+                            : needsResolve
+                              ? "bg-amber-900/30 border-amber-500/50"
+                              : readyToDownload
+                                ? "bg-blue-900/20 border-blue-500/30"
+                                : "bg-slate-dark border-slate-mid"
                     )}
                   >
                     {/* Main row */}
@@ -2327,6 +2380,10 @@ export function PackDetailPage() {
                         ) : isInstalled ? (
                           <div className="w-8 h-8 rounded-full bg-green-500/30 flex items-center justify-center flex-shrink-0">
                             <Check className="w-5 h-5 text-green-400" />
+                          </div>
+                        ) : isBackupOnly ? (
+                          <div className="w-8 h-8 rounded-full bg-sky-500/30 flex items-center justify-center flex-shrink-0" title="Available on backup storage">
+                            <Cloud className="w-5 h-5 text-sky-400" />
                           </div>
                         ) : needsResolve ? (
                           <div className="w-8 h-8 rounded-full bg-amber-500/30 flex items-center justify-center flex-shrink-0">
@@ -2375,8 +2432,34 @@ export function PackDetailPage() {
 
                       {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Restore from Backup button - for assets available on backup but not locally */}
+                        {isBackupOnly && asset.sha256 && (
+                          <button
+                            onClick={async () => {
+                              console.log('[PackDetailPage] Restore from backup:', asset.name, asset.sha256)
+                              try {
+                                const res = await fetch(`/api/store/backup/restore/${asset.sha256}`, { method: 'POST' })
+                                if (!res.ok) {
+                                  const errorText = await res.text()
+                                  throw new Error(errorText || 'Failed to restore')
+                                }
+                                toast.success(`Restored ${asset.name} from backup`)
+                                queryClient.invalidateQueries({ queryKey: ['pack', packName] })
+                                queryClient.invalidateQueries({ queryKey: ['pack-backup-status', packName] })
+                                queryClient.invalidateQueries({ queryKey: ['inventory'] })
+                              } catch (error) {
+                                toast.error(`Restore failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+                              }
+                            }}
+                            className="p-2 bg-sky-500 text-white rounded-lg hover:bg-sky-400 transition-colors"
+                            title="Restore from Backup Storage"
+                          >
+                            <Cloud className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {/* Download button for assets with URL that are not installed */}
-                        {canDownload && !isDownloading && (
+                        {canDownload && !isDownloading && !isBackupOnly && (
                           <button
                             onClick={() => {
                               console.log('[PackDetailPage] Download clicked:', asset.name, asset.url)
@@ -2402,6 +2485,20 @@ export function PackDetailPage() {
                           >
                             Select Model
                           </button>
+                        )}
+
+                        {/* Resolve button for unresolved non-base-model dependencies */}
+                        {!isBaseModel && needsResolve && !resolvePackMutation.isPending && (
+                          <button
+                            onClick={() => resolvePackMutation.mutate()}
+                            className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-colors"
+                            title="Re-resolve dependency to get download URL"
+                          >
+                            Resolve
+                          </button>
+                        )}
+                        {!isBaseModel && needsResolve && resolvePackMutation.isPending && (
+                          <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
                         )}
 
                         {/* Change base model button (only show if INSTALLED) */}
@@ -2570,7 +2667,13 @@ export function PackDetailPage() {
                           <code className="truncate flex-1" title={asset.local_path}>{asset.local_path}</code>
                         </div>
                       )}
-                      {!asset.local_path && asset.url && !isDownloading && (
+                      {!asset.local_path && isBackupOnly && (
+                        <div className="flex items-center gap-2 text-sky-400">
+                          <Cloud className="w-3 h-3" />
+                          <span>Available on backup - click cloud to restore</span>
+                        </div>
+                      )}
+                      {!asset.local_path && asset.url && !isDownloading && !isBackupOnly && (
                         <div className="flex items-center gap-2 text-text-muted">
                           <Globe className="w-3 h-3" />
                           <span className="truncate flex-1" title={asset.url}>Ready to download</span>

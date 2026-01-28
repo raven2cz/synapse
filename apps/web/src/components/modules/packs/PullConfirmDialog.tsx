@@ -93,7 +93,8 @@ export function PullConfirmDialog({
   const completedItems = progress?.completed_items || 0
   const failedItems = progress?.failed_items || 0
   const totalItems = progress?.total_items || blobsToRestore.length
-  const progressPercent = totalBytes > 0 ? (transferredBytes / totalBytes) * 100 : 0
+  // Force 100% when completed (progress might not update in time for fast operations)
+  const progressPercent = isCompleted ? 100 : (totalBytes > 0 ? (transferredBytes / totalBytes) * 100 : 0)
   const bytesPerSecond = progress?.bytes_per_second || 0
   const etaSeconds = progress?.eta_seconds
   const elapsedSeconds = progress?.elapsed_seconds || 0
@@ -228,7 +229,7 @@ export function PullConfirmDialog({
 
                 <div className="flex justify-between text-xs text-text-muted">
                   <span>
-                    {formatBytes(transferredBytes)} / {formatBytes(totalBytes)}
+                    {formatBytes(isCompleted ? totalBytes : transferredBytes)} / {formatBytes(totalBytes)}
                   </span>
                   {isRunning && bytesPerSecond > 0 && (
                     <span>

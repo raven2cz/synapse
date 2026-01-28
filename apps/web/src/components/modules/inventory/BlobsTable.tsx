@@ -115,6 +115,9 @@ export function BlobsTable({
       canBackup: selected.filter((i) => i.location === 'local_only').length,
       canRestore: selected.filter((i) => i.location === 'backup_only').length,
       canDelete: selected.filter((i) => i.status === 'orphan').length,
+      // Blobs that can have local deleted safely (backup exists)
+      canFreeLocal: selected.filter((i) => i.on_local && i.on_backup).length,
+      canFreeLocalBytes: selected.filter((i) => i.on_local && i.on_backup).reduce((sum, i) => sum + i.size_bytes, 0),
     }
   }, [items, selectedItems])
 
@@ -190,6 +193,20 @@ export function BlobsTable({
                 leftIcon={<Trash2 className="w-4 h-4" />}
               >
                 Delete {selectedSummary.canDelete} Orphans
+              </Button>
+            )}
+
+            {/* Free local space for synced blobs (backup exists, safe to delete local) */}
+            {selectedSummary.canFreeLocal > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onBulkAction([...selectedItems], 'delete_local')}
+                leftIcon={<Trash2 className="w-4 h-4" />}
+                className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+                title={`Free ${formatBytes(selectedSummary.canFreeLocalBytes)} by removing local copies (backup preserved)`}
+              >
+                Free Local ({selectedSummary.canFreeLocal})
               </Button>
             )}
 
@@ -668,7 +685,8 @@ function BlobRow({
                 )}
 
                 {/* Delete actions */}
-                {item.on_local && item.status === 'orphan' && (
+                {/* Delete from Local: allowed for orphans OR if backup exists (safe - copy remains) */}
+                {item.on_local && (item.status === 'orphan' || item.on_backup) && (
                   <button
                     className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
                     onClick={() => handleDelete('local')}

@@ -248,9 +248,13 @@ class BlobStore:
         
         # Add API key for Civitai downloads
         download_url = url
-        if self.api_key and "civitai.com" in url:
-            separator = "&" if "?" in url else "?"
-            download_url = f"{url}{separator}token={self.api_key}"
+        if "civitai.com" in url:
+            if self.api_key:
+                separator = "&" if "?" in url else "?"
+                download_url = f"{url}{separator}token={self.api_key}"
+                logger.debug(f"[BlobStore] Using Civitai API key for download")
+            else:
+                logger.warning(f"[BlobStore] No Civitai API key configured! Some downloads may fail.")
         
         try:
             # Check for resume
@@ -281,7 +285,17 @@ class BlobStore:
                 raise DownloadError(f"Range not satisfiable for {url}")
             
             response.raise_for_status()
-            
+
+            # Check Content-Type - Civitai error pages return text/html
+            content_type = response.headers.get("content-type", "")
+            if "text/html" in content_type.lower():
+                logger.error(f"[BlobStore] Received HTML content-type: {content_type}")
+                raise DownloadError(
+                    f"Download failed: server returned HTML error page instead of file. "
+                    f"This usually means authentication is required. "
+                    f"Please configure your Civitai API key in Settings."
+                )
+
             # Get total size
             content_length = response.headers.get("content-length")
             total_size = int(content_length) + initial_size if content_length else 0

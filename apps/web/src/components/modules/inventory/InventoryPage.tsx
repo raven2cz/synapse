@@ -72,6 +72,21 @@ const api = {
       method: 'DELETE',
     })
     if (!res.ok) {
+      // Handle 409 Conflict (blob is referenced by packs)
+      if (res.status === 409) {
+        try {
+          const data = await res.json()
+          // FastAPI wraps HTTPException detail in "detail" key
+          const impacts = data.detail?.impacts || data.impacts
+          const packs = impacts?.used_by_packs || []
+          if (packs.length > 0) {
+            throw new Error(`Cannot delete: blob is used by ${packs.length} pack(s): ${packs.slice(0, 3).join(', ')}${packs.length > 3 ? '...' : ''}`)
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith('Cannot delete:')) throw e
+        }
+        throw new Error('Cannot delete: blob is referenced by other packs')
+      }
       const errorText = await res.text()
       throw new Error(errorText || 'Failed to delete blob')
     }
@@ -224,6 +239,7 @@ export function InventoryPage() {
       toast.success('Blob deleted successfully')
     },
     onError: (error: Error) => {
+      setDeleteDialogOpen(false)
       toast.error(`Delete failed: ${error.message}`)
     },
   })
