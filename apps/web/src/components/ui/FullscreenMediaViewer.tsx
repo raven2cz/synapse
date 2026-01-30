@@ -742,59 +742,229 @@ export function FullscreenMediaViewer({
         </div>
       )}
 
-      {/* Metadata panel - right side overlay */}
+      {/* Metadata panel - right side overlay with click-outside backdrop */}
       {showMetadata && currentHasMeta && (
-        <div
-          className="absolute top-0 right-0 bottom-0 w-[380px] z-40 bg-slate-900/95 backdrop-blur-xl border-l border-white/10 flex flex-col overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* Panel header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10 shrink-0">
-            <h3 className="text-white font-semibold">Generation Data</h3>
-            <button
-              onClick={() => setShowMetadata(false)}
-              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/60 hover:text-white transition-all"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+        <>
+          {/* Invisible backdrop for click-outside-closes - only covers content area */}
+          <div
+            className="absolute left-0 right-[340px] z-35 transition-opacity duration-300"
+            style={{ top: '64px', bottom: '160px' }}
+            onClick={(e) => { e.stopPropagation(); setShowMetadata(false) }}
+          />
 
-          {/* Panel content - scrollable */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {currentItem.meta && Object.entries(currentItem.meta).map(([key, value]) => {
-              if (value === null || value === undefined || value === '') return null
+          {/* Panel - glassmorphism design with fade animation */}
+          <div
+            className={clsx(
+              "absolute right-0 w-[340px] z-40 flex flex-col overflow-hidden",
+              "bg-black/50 backdrop-blur-2xl border-l border-white/10",
+              "transition-all duration-300 ease-out",
+              "animate-in slide-in-from-right-4 fade-in"
+            )}
+            style={{ top: '64px', bottom: '160px' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0 bg-black/20">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <Info className="w-4 h-4 text-indigo-400" />
+                Generation Data
+              </h3>
+              <button
+                onClick={() => setShowMetadata(false)}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
-              const displayValue = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
-              const isLongText = displayValue.length > 100
+            {/* Panel content - scrollable with smart rendering */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
+              {(() => {
+                const meta = currentItem.meta!
+                const prompt = meta.prompt as string | undefined
+                const negativePrompt = meta.negativePrompt as string | undefined
+                const resources = meta.resources as Array<{ name: string; type: string; weight?: number }> | undefined
+                const hashes = meta.hashes as Record<string, string> | undefined
 
-              return (
-                <div key={key} className="group">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-white/50 uppercase tracking-wide">{displayKey}</span>
-                    <button
-                      onClick={() => copyToClipboard(displayValue, key)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                      title="Copy to clipboard"
-                    >
-                      {copiedField === key ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
-                    </button>
-                  </div>
-                  <div className={clsx(
-                    'text-sm text-white/90 bg-white/5 rounded-lg p-2',
-                    isLongText && 'max-h-32 overflow-y-auto'
-                  )}>
-                    {isLongText ? (
-                      <pre className="whitespace-pre-wrap break-words font-mono text-xs">{displayValue}</pre>
-                    ) : (
-                      <span className="break-words">{displayValue}</span>
+                // Grid metadata fields
+                const gridFields = [
+                  { label: 'Model', value: meta.Model || meta.model_name },
+                  { label: 'Sampler', value: meta.sampler },
+                  { label: 'Steps', value: meta.steps },
+                  { label: 'CFG Scale', value: meta.cfgScale || meta.cfg_scale },
+                  { label: 'Seed', value: meta.seed },
+                  { label: 'Clip Skip', value: meta.clipSkip || meta.clip_skip },
+                  { label: 'Size', value: meta.Size || (meta.width && meta.height ? `${meta.width}×${meta.height}` : undefined) },
+                ].filter(f => f.value !== undefined && f.value !== null && f.value !== '')
+
+                // Fields we've handled specially
+                const handledKeys = new Set(['prompt', 'negativePrompt', 'resources', 'hashes', 'Model', 'model_name', 'sampler', 'steps', 'cfgScale', 'cfg_scale', 'seed', 'clipSkip', 'clip_skip', 'Size', 'width', 'height'])
+
+                // Other fields (fallback)
+                const otherFields = Object.entries(meta).filter(([key, value]) =>
+                  !handledKeys.has(key) && value !== null && value !== undefined && value !== ''
+                )
+
+                return (
+                  <>
+                    {/* Resources Section */}
+                    {resources && resources.length > 0 && (
+                      <section className="space-y-2 group/section">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Resources</h4>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(resources, null, 2), 'resources')}
+                            className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Copy resources"
+                          >
+                            {copiedField === 'resources' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="space-y-1.5">
+                          {resources.map((res, i) => (
+                            <div key={i} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors group">
+                              <span className={clsx(
+                                "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase shrink-0",
+                                res.type === 'model' ? "bg-blue-500/20 text-blue-400" : "bg-indigo-500/20 text-indigo-400"
+                              )}>
+                                {res.type}
+                              </span>
+                              <span className="text-xs text-white/80 truncate flex-1" title={res.name}>{res.name}</span>
+                              {res.weight && (
+                                <span className="text-[10px] font-mono text-white/40">{res.weight}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
                     )}
-                  </div>
-                </div>
-              )
-            })}
+
+                    {/* Prompt Section */}
+                    {prompt && (
+                      <section className="space-y-2 group">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Prompt</h4>
+                          <button
+                            onClick={() => copyToClipboard(prompt, 'prompt')}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Copy prompt"
+                          >
+                            {copiedField === 'prompt' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="bg-white/5 p-2.5 rounded-lg text-xs leading-relaxed text-white/80 font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto custom-scrollbar">
+                          {prompt}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Negative Prompt Section */}
+                    {negativePrompt && (
+                      <section className="space-y-2 group">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-red-400/60 uppercase tracking-widest">Negative Prompt</h4>
+                          <button
+                            onClick={() => copyToClipboard(negativePrompt, 'negativePrompt')}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-all"
+                            title="Copy negative prompt"
+                          >
+                            {copiedField === 'negativePrompt' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="bg-red-500/5 border border-red-500/10 p-2.5 rounded-lg text-xs leading-relaxed text-red-200/70 font-mono whitespace-pre-wrap break-words max-h-32 overflow-y-auto custom-scrollbar">
+                          {negativePrompt}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Grid Params */}
+                    {gridFields.length > 0 && (
+                      <section className="space-y-2 group/section">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Parameters</h4>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(Object.fromEntries(gridFields.map(f => [f.label, f.value])), null, 2), 'parameters')}
+                            className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Copy parameters"
+                          >
+                            {copiedField === 'parameters' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {gridFields.map((field, i) => (
+                            <div key={i} className="bg-white/5 px-2.5 py-1.5 rounded-lg group hover:bg-white/10 transition-colors overflow-hidden">
+                              <span className="text-[9px] text-white/40 uppercase block">{field.label}</span>
+                              <span className="text-xs text-white/90 font-mono break-words line-clamp-3" title={String(field.value)}>{String(field.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Hashes Section */}
+                    {hashes && Object.keys(hashes).length > 0 && (
+                      <section className="space-y-2 group/section">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Hashes</h4>
+                          <button
+                            onClick={() => copyToClipboard(JSON.stringify(hashes, null, 2), 'hashes')}
+                            className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                            title="Copy hashes"
+                          >
+                            {copiedField === 'hashes' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </div>
+                        <div className="space-y-1">
+                          {Object.entries(hashes).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between bg-white/5 px-2.5 py-1.5 rounded-lg group hover:bg-white/10 transition-colors">
+                              <span className="text-[10px] text-white/50">{key}</span>
+                              <span className="text-[10px] font-mono text-white/70 truncate max-w-[140px]" title={value}>{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Other Fields (fallback) */}
+                    {otherFields.length > 0 && (
+                      <section className="space-y-2">
+                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Other</h4>
+                        <div className="space-y-2">
+                          {otherFields.map(([key, value]) => {
+                            const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
+                            const isObject = typeof value === 'object'
+                            const displayValue = isObject ? JSON.stringify(value, null, 2) : String(value)
+
+                            return (
+                              <div key={key} className="group">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[9px] text-white/40 uppercase">{displayKey}</span>
+                                  <button
+                                    onClick={() => copyToClipboard(displayValue, key)}
+                                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                                  >
+                                    {copiedField === key ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                                  </button>
+                                </div>
+                                <div className="bg-white/5 p-2 rounded-lg text-xs text-white/80 break-words">
+                                  {isObject ? (
+                                    <pre className="whitespace-pre-wrap font-mono text-[10px] max-h-24 overflow-y-auto">{displayValue}</pre>
+                                  ) : (
+                                    <span>{displayValue}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )
