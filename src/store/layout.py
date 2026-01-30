@@ -74,13 +74,13 @@ class StoreLayout:
     def __init__(self, root: Optional[Path] = None):
         """
         Initialize store layout.
-        
+
         Args:
             root: Root directory for the store. Defaults to SYNAPSE_ROOT env var
-                  or ~/.synapse
+                  or ~/.synapse/store
         """
         if root is None:
-            root = Path(os.environ.get("SYNAPSE_ROOT", Path.home() / ".synapse"))
+            root = Path(os.environ.get("SYNAPSE_ROOT", Path.home() / ".synapse" / "store"))
         
         self.root = Path(root).expanduser().resolve()
         

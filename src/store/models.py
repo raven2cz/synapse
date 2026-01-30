@@ -1028,6 +1028,16 @@ class CleanupResult(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
 
+class MigrateManifestsResult(BaseModel):
+    """Result of manifest migration operation."""
+    dry_run: bool
+    blobs_scanned: int = 0
+    manifests_existing: int = 0
+    manifests_created: int = 0
+    manifests_skipped: int = 0  # Blobs without pack references
+    errors: List[str] = Field(default_factory=list)
+
+
 class ImpactAnalysis(BaseModel):
     """Analysis of what would break if a blob is deleted."""
     sha256: str

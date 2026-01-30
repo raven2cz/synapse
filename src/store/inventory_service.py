@@ -27,6 +27,7 @@ from .models import (
     AssetKind,
     BackupStats,
     BlobLocation,
+    BlobManifest,
     BlobOrigin,
     BlobStatus,
     CleanupResult,
@@ -34,6 +35,7 @@ from .models import (
     InventoryItem,
     InventoryResponse,
     InventorySummary,
+    MigrateManifestsResult,
     PackReference,
     ProviderName,
 )
@@ -838,3 +840,106 @@ class InventoryService:
             "invalid": invalid,
             "duration_ms": duration_ms,
         }
+
+    def migrate_manifests(self, dry_run: bool = True) -> MigrateManifestsResult:
+        """
+        Create manifests for existing blobs that don't have them.
+
+        Scans all blobs and creates manifests from pack.lock data for any
+        blob that is missing a manifest. This is a safe, idempotent operation
+        that doesn't modify existing manifests (write-once behavior).
+
+        Args:
+            dry_run: If True, don't actually create manifests, just report what would be done
+
+        Returns:
+            MigrateManifestsResult with counts and any errors
+        """
+        logger.info("[Inventory] Starting manifest migration (dry_run=%s)", dry_run)
+
+        result = MigrateManifestsResult(dry_run=dry_run)
+
+        # Get all local blobs
+        try:
+            all_blobs = self.blob_store.list_blobs()
+            result.blobs_scanned = len(all_blobs)
+        except Exception as e:
+            logger.error("[Inventory] Failed to list blobs for migration: %s", e)
+            result.errors.append(f"Failed to list blobs: {e}")
+            return result
+
+        # Build reference map to get pack data for each blob
+        ref_map = self._build_reference_map()
+
+        for sha256 in all_blobs:
+            sha256 = sha256.lower()
+
+            # Check if manifest already exists
+            if self.blob_store.manifest_exists(sha256):
+                result.manifests_existing += 1
+                continue
+
+            # Get references for this blob
+            refs = ref_map.get(sha256, [])
+            if not refs:
+                # No pack references - can't create manifest without metadata
+                result.manifests_skipped += 1
+                logger.debug("[Inventory] Skipping blob %s: no pack references", sha256[:12])
+                continue
+
+            # Use first reference to build manifest
+            ref = refs[0]
+
+            # Determine original filename (priority: expose > origin filename > sha256 prefix)
+            original_filename = (
+                ref.expose_filename
+                or (ref.origin.filename if ref.origin else None)
+                or f"{sha256[:12]}.bin"
+            )
+
+            # Build origin from reference
+            origin = ref.origin
+
+            # Create manifest
+            manifest = BlobManifest(
+                original_filename=original_filename,
+                kind=ref.kind,
+                origin=origin,
+            )
+
+            if dry_run:
+                result.manifests_created += 1
+                logger.debug(
+                    "[Inventory] Would create manifest for %s (%s)",
+                    sha256[:12],
+                    original_filename,
+                )
+            else:
+                try:
+                    created = self.blob_store.write_manifest(sha256, manifest)
+                    if created:
+                        result.manifests_created += 1
+                        logger.debug(
+                            "[Inventory] Created manifest for %s (%s)",
+                            sha256[:12],
+                            original_filename,
+                        )
+                    else:
+                        # This shouldn't happen since we check manifest_exists above,
+                        # but handle it gracefully (race condition with another process)
+                        result.manifests_existing += 1
+                except Exception as e:
+                    error_msg = f"Failed to create manifest for {sha256[:12]}: {e}"
+                    result.errors.append(error_msg)
+                    logger.error("[Inventory] %s", error_msg)
+
+        logger.info(
+            "[Inventory] Manifest migration complete: scanned=%d, existing=%d, created=%d, skipped=%d, errors=%d",
+            result.blobs_scanned,
+            result.manifests_existing,
+            result.manifests_created,
+            result.manifests_skipped,
+            len(result.errors),
+        )
+
+        return result

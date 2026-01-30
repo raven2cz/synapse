@@ -87,7 +87,7 @@ for router in create_store_routers():
 ## Storage Layout
 
 ```
-~/.synapse/
+~/.synapse/store/
 ├── state/                          # Git-versioned
 │   ├── config.json                 # Store configuration
 │   ├── ui_sets.json                # UI set definitions

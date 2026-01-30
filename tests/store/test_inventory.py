@@ -623,3 +623,172 @@ def _create_pack_with_blob(
     # Save
     store.layout.save_pack(pack)
     store.layout.save_pack_lock(lock)
+
+
+# =============================================================================
+# Manifest Migration Tests
+# =============================================================================
+
+class TestManifestMigration:
+    """Test manifest migration for existing blobs."""
+
+    def test_migrate_creates_manifest_for_blob_without_one(self, tmp_path):
+        """Migration creates manifest for blob that has pack reference but no manifest."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create blob without manifest
+        blob_content = b"referenced blob content"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Verify no manifest exists
+        assert not store.blob_store.manifest_exists(sha256)
+
+        # Create pack referencing the blob
+        _create_pack_with_blob(store, "TestPack", sha256, len(blob_content))
+
+        # Run migration (dry run first)
+        result = store.inventory_service.migrate_manifests(dry_run=True)
+
+        assert result.dry_run is True
+        assert result.blobs_scanned == 1
+        assert result.manifests_existing == 0
+        assert result.manifests_created == 1
+        assert result.manifests_skipped == 0
+        assert len(result.errors) == 0
+
+        # Verify manifest NOT created in dry run
+        assert not store.blob_store.manifest_exists(sha256)
+
+        # Run migration (execute)
+        result = store.inventory_service.migrate_manifests(dry_run=False)
+
+        assert result.dry_run is False
+        assert result.manifests_created == 1
+
+        # Verify manifest was created
+        assert store.blob_store.manifest_exists(sha256)
+
+        manifest = store.blob_store.read_manifest(sha256)
+        assert manifest is not None
+        assert manifest.kind == AssetKind.CHECKPOINT
+        assert "TestPack" in manifest.original_filename
+
+    def test_migrate_skips_existing_manifests(self, tmp_path):
+        """Migration does not overwrite existing manifests."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create blob
+        blob_content = b"blob with existing manifest"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Create manifest manually
+        original_manifest = BlobManifest(
+            original_filename="original_name.safetensors",
+            kind=AssetKind.LORA,
+        )
+        store.blob_store.write_manifest(sha256, original_manifest)
+
+        # Create pack referencing the blob with different data
+        _create_pack_with_blob(
+            store, "DifferentPack", sha256, len(blob_content), kind=AssetKind.CHECKPOINT
+        )
+
+        # Run migration
+        result = store.inventory_service.migrate_manifests(dry_run=False)
+
+        assert result.manifests_existing == 1
+        assert result.manifests_created == 0
+
+        # Verify manifest unchanged
+        manifest = store.blob_store.read_manifest(sha256)
+        assert manifest.original_filename == "original_name.safetensors"
+        assert manifest.kind == AssetKind.LORA
+
+    def test_migrate_skips_orphan_blobs(self, tmp_path):
+        """Migration skips blobs without pack references."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create orphan blob (no pack reference)
+        blob_content = b"orphan blob"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Run migration
+        result = store.inventory_service.migrate_manifests(dry_run=False)
+
+        assert result.blobs_scanned == 1
+        assert result.manifests_skipped == 1
+        assert result.manifests_created == 0
+
+        # Verify no manifest created
+        assert not store.blob_store.manifest_exists(sha256)
+
+    def test_migrate_uses_expose_filename_when_available(self, tmp_path):
+        """Migration uses expose filename from pack dependency."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create blob
+        blob_content = b"blob with expose filename"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Create pack with specific expose filename
+        _create_pack_with_blob(store, "TestPack", sha256, len(blob_content))
+
+        # Run migration
+        result = store.inventory_service.migrate_manifests(dry_run=False)
+
+        manifest = store.blob_store.read_manifest(sha256)
+        assert manifest is not None
+        assert manifest.original_filename == "TestPack_model.safetensors"
+
+    def test_migrate_empty_store(self, tmp_path):
+        """Migration on empty store succeeds with zero counts."""
+        store = Store(tmp_path)
+        store.init()
+
+        result = store.inventory_service.migrate_manifests(dry_run=False)
+
+        assert result.blobs_scanned == 0
+        assert result.manifests_existing == 0
+        assert result.manifests_created == 0
+        assert result.manifests_skipped == 0
+        assert len(result.errors) == 0
+
+    def test_migrate_idempotent(self, tmp_path):
+        """Running migration multiple times is safe and idempotent."""
+        store = Store(tmp_path)
+        store.init()
+
+        # Create blob and pack
+        blob_content = b"idempotent test blob"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+        _create_pack_with_blob(store, "TestPack", sha256, len(blob_content))
+
+        # Run migration twice
+        result1 = store.inventory_service.migrate_manifests(dry_run=False)
+        result2 = store.inventory_service.migrate_manifests(dry_run=False)
+
+        # First run creates manifest
+        assert result1.manifests_created == 1
+        assert result1.manifests_existing == 0
+
+        # Second run finds existing manifest
+        assert result2.manifests_created == 0
+        assert result2.manifests_existing == 1
+
+        # Manifest still exists and is unchanged
+        manifest = store.blob_store.read_manifest(sha256)
+        assert manifest is not None

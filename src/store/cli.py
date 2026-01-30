@@ -1376,6 +1376,70 @@ def inventory_verify(
         raise typer.Exit(1)
 
 
+@inventory_app.command("migrate-manifests")
+def inventory_migrate_manifests(
+    dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Preview vs actually create manifests"),
+    json: bool = typer.Option(False, "--json", help="Output as JSON"),
+):
+    """Create manifests for existing blobs that don't have them.
+
+    Scans all blobs and creates .meta manifest files from pack.lock data
+    for any blob missing a manifest. This preserves metadata for orphan
+    blob recovery.
+
+    The operation is safe and idempotent - existing manifests are never
+    overwritten.
+
+    Example:
+        synapse inventory migrate-manifests              # Preview what would be created
+        synapse inventory migrate-manifests --execute    # Actually create manifests
+    """
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    store = get_store()
+    require_initialized(store)
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task = progress.add_task("Scanning blobs...", total=None)
+            result = store.inventory_service.migrate_manifests(dry_run=dry_run)
+            progress.update(task, description="Done")
+
+        if json:
+            output_json(result.model_dump())
+        else:
+            output_header("Manifest Migration", "DRY RUN" if dry_run else "")
+
+            console.print(f"[bold]Blobs scanned:[/bold] {result.blobs_scanned}")
+            console.print(f"[bold]Already have manifest:[/bold] {result.manifests_existing}")
+            console.print(f"[bold]Skipped (no pack refs):[/bold] {result.manifests_skipped}")
+
+            action = "Would create" if dry_run else "Created"
+            if result.manifests_created > 0:
+                console.print(f"[green]{action}:[/green] {result.manifests_created} manifest(s)")
+            else:
+                output_info("No manifests to create")
+
+            if result.errors:
+                console.print(f"\n[yellow]Errors ({len(result.errors)}):[/yellow]")
+                for err in result.errors[:5]:
+                    console.print(f"  • {err}")
+
+            if dry_run and result.manifests_created > 0:
+                console.print(f"\n[dim]Run with --execute to create manifests[/dim]")
+            elif not dry_run and result.manifests_created > 0:
+                output_success(f"Created {result.manifests_created} manifest(s)")
+
+    except Exception as e:
+        output_error(str(e))
+        raise typer.Exit(1)
+
+
 # =============================================================================
 # Backup Commands
 # =============================================================================

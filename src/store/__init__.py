@@ -187,10 +187,10 @@ class Store:
     ):
         """
         Initialize the store.
-        
+
         Args:
             root: Root directory for the store. Defaults to SYNAPSE_ROOT env var
-                  or ~/.synapse
+                  or ~/.synapse/store
             civitai_client: Optional CivitaiClient instance
             huggingface_client: Optional HuggingFaceClient instance
             civitai_api_key: Optional Civitai API key for authenticated downloads

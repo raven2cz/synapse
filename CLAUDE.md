@@ -47,7 +47,7 @@ synapse/
 │   ├── PLAN-Internal-Search-trpc.md # ✅ DOKONČENO - Interní vyhledávání
 │   ├── PLAN-Phase-6-Store-UI.md     # ✅ DOKONČENO - Store UI zmapování
 │   ├── PLAN-Model-Inventory.md      # 🚧 AKTIVNÍ - Model Inventory & Backup
-│   └── PLAN-Blob-Manifest.md        # 🚧 AKTIVNÍ - Blob Manifest (orphan metadata)
+│   └── PLAN-Blob-Manifest.md        # ✅ DOKONČENO - Blob Manifest (orphan metadata)
 ├── tests/            # Python tests (pytest) - viz sekce Testování
 │   ├── conftest.py   # Globální fixtures a markery
 │   ├── unit/         # Rychlé, izolované testy (zrcadlí src/)
@@ -351,8 +351,8 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 | Phase 4 | `plans/PLAN-Phase-4.md` | ✅ DOKONČENO |
 | Phase 5 | `plans/PLAN-Internal-Search-trpc.md` | ✅ DOKONČENO |
 | Phase 6 | `plans/PLAN-Phase-6-Store-UI.md` | ✅ DOKONČENO |
-| **Model Inventory** | `plans/PLAN-Model-Inventory.md` | 🚧 AKTIVNÍ |
-| **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | 🚧 AKTIVNÍ (v2.2.0) |
+| **Model Inventory** | `plans/PLAN-Model-Inventory.md` | ✅ DOKONČENO |
+| **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | ✅ DOKONČENO (v2.2.0) |
 
 ---
 
