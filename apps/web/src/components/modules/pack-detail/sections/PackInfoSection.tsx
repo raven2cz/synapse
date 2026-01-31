@@ -17,7 +17,7 @@
  */
 
 import { useState } from 'react'
-import { Copy, Check, Download, Star, Info, Sparkles, Wand2 } from 'lucide-react'
+import { Copy, Check, Download, Star, Info, Sparkles, Wand2, Edit3 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
 import { toast } from '@/stores/toastStore'
@@ -33,6 +33,12 @@ export interface PackInfoSectionProps {
    * Pack data to display
    */
   pack: PackDetail
+
+  /**
+   * Handler for edit description button (opens DescriptionEditorModal)
+   * If undefined, edit button is not shown
+   */
+  onEditDescription?: () => void
 
   /**
    * Base animation delay for staggered entrance
@@ -199,9 +205,10 @@ function ModelInfoCard({ modelInfo, animationDelay }: ModelInfoCardProps) {
 interface DescriptionCardProps {
   description: string
   animationDelay: number
+  onEdit?: () => void
 }
 
-function DescriptionCard({ description, animationDelay }: DescriptionCardProps) {
+function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCardProps) {
   if (!description) return null
 
   return (
@@ -210,7 +217,23 @@ function DescriptionCard({ description, animationDelay }: DescriptionCardProps) 
       style={{ animationDelay: `${animationDelay}ms`, animationFillMode: 'both' }}
     >
       <Card className="p-4">
-        <h3 className="text-sm font-semibold text-text-primary mb-3">Description</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">Description</h3>
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                'text-xs text-synapse',
+                'bg-synapse/10 hover:bg-synapse/20',
+                'transition-colors duration-200'
+              )}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
+        </div>
         {/*
           ⚠️ KRITICKÉ: HTML rendering pro Civitai importy
           Civitai vrací HTML popis, který musíme renderovat správně.
@@ -236,7 +259,7 @@ function DescriptionCard({ description, animationDelay }: DescriptionCardProps) 
 // Main Component
 // =============================================================================
 
-export function PackInfoSection({ pack, animationDelay = 0 }: PackInfoSectionProps) {
+export function PackInfoSection({ pack, onEditDescription, animationDelay = 0 }: PackInfoSectionProps) {
   const hasTriggerWords = pack.model_info?.trigger_words && pack.model_info.trigger_words.length > 0
   const hasModelInfo = !!pack.model_info
   const hasDescription = !!pack.description
@@ -276,6 +299,7 @@ export function PackInfoSection({ pack, animationDelay = 0 }: PackInfoSectionPro
         <DescriptionCard
           description={pack.description!}
           animationDelay={delays.description}
+          onEdit={onEditDescription}
         />
       )}
     </div>

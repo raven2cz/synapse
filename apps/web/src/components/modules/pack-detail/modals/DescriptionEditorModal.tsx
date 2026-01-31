@@ -157,6 +157,93 @@ function renderMarkdownPreview(markdown: string): string {
   return html
 }
 
+/**
+ * Format/prettify HTML for readability
+ * Adds proper indentation and newlines
+ */
+function prettifyHtml(html: string): string {
+  if (!html) return ''
+
+  // Block-level elements that should start on new line
+  const blockElements = [
+    'div', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'ul', 'ol', 'li', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
+    'blockquote', 'pre', 'hr', 'br', 'section', 'article', 'header', 'footer',
+    'nav', 'aside', 'main', 'figure', 'figcaption'
+  ]
+
+  let result = html
+    // Remove existing whitespace between tags
+    .replace(/>\s+</g, '><')
+    // Trim
+    .trim()
+
+  // Add newlines before and after block elements
+  blockElements.forEach(tag => {
+    // Opening tags (not self-closing)
+    result = result.replace(new RegExp(`<${tag}([^>]*)>`, 'gi'), `\n<${tag}$1>\n`)
+    // Closing tags
+    result = result.replace(new RegExp(`</${tag}>`, 'gi'), `\n</${tag}>\n`)
+  })
+
+  // Handle self-closing tags
+  result = result
+    .replace(/<br\s*\/?>/gi, '<br />\n')
+    .replace(/<hr\s*\/?>/gi, '\n<hr />\n')
+    .replace(/<img([^>]*)\/?\s*>/gi, '\n<img$1 />\n')
+
+  // Clean up multiple newlines
+  result = result
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  // Add indentation
+  const lines = result.split('\n')
+  let indent = 0
+  const indentStr = '  '
+  const formattedLines: string[] = []
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+    if (!trimmedLine) continue
+
+    // Decrease indent for closing tags
+    if (trimmedLine.match(/^<\/[^>]+>$/)) {
+      indent = Math.max(0, indent - 1)
+    }
+
+    formattedLines.push(indentStr.repeat(indent) + trimmedLine)
+
+    // Increase indent for opening tags (not self-closing, not void elements)
+    if (
+      trimmedLine.match(/^<[a-z][^>]*>$/i) &&
+      !trimmedLine.match(/\/>$/) &&
+      !trimmedLine.match(/^<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)/i)
+    ) {
+      indent++
+    }
+
+    // Handle tags that open and close on same line like <p>text</p>
+    if (trimmedLine.match(/^<[a-z][^>]*>.*<\/[a-z]+>$/i)) {
+      // Don't change indent
+    }
+  }
+
+  return formattedLines.join('\n')
+}
+
+/**
+ * Minify HTML (remove unnecessary whitespace)
+ */
+function minifyHtml(html: string): string {
+  return html
+    .replace(/\s+/g, ' ')
+    .replace(/>\s+</g, '><')
+    .replace(/\s+>/g, '>')
+    .replace(/<\s+/g, '<')
+    .trim()
+}
+
 // =============================================================================
 // Markdown Toolbar
 // =============================================================================
@@ -246,6 +333,36 @@ function MarkdownToolbar({ onInsert }: MarkdownToolbarProps) {
         title="Blockquote"
         onClick={() => onInsert('> ', '', 'quote')}
       />
+    </div>
+  )
+}
+
+// =============================================================================
+// HTML Toolbar
+// =============================================================================
+
+interface HtmlToolbarProps {
+  onFormat: () => void
+  onMinify: () => void
+}
+
+function HtmlToolbar({ onFormat, onMinify }: HtmlToolbarProps) {
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      <ToolbarButton
+        icon={<Code className="w-4 h-4" />}
+        title="Format HTML (prettify)"
+        onClick={onFormat}
+      />
+      <ToolbarButton
+        icon={<Minimize2 className="w-4 h-4" />}
+        title="Minify HTML"
+        onClick={onMinify}
+      />
+      <div className="w-px h-6 bg-slate-mid mx-2" />
+      <span className="text-xs text-text-muted">
+        Format: Add indentation | Minify: Remove whitespace
+      </span>
     </div>
   )
 }
@@ -468,10 +585,17 @@ export function DescriptionEditorModal({
           </div>
         </div>
 
-        {/* Toolbar (Markdown only) */}
-        {format === 'markdown' && viewMode !== 'preview' && (
+        {/* Toolbar */}
+        {viewMode !== 'preview' && (
           <div className="px-4 py-2 border-b border-slate-mid/30 bg-slate-dark/50">
-            <MarkdownToolbar onInsert={handleInsert} />
+            {format === 'markdown' ? (
+              <MarkdownToolbar onInsert={handleInsert} />
+            ) : (
+              <HtmlToolbar
+                onFormat={() => setContent(prettifyHtml(content))}
+                onMinify={() => setContent(minifyHtml(content))}
+              />
+            )}
           </div>
         )}
 

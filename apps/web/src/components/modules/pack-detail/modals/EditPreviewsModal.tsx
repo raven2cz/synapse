@@ -232,13 +232,56 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
   const [mode, setMode] = useState<'upload' | 'url'>('upload')
   const [urlInput, setUrlInput] = useState('')
   const [urlError, setUrlError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       onAddFile(file)
       e.target.value = '' // Reset input
+    }
+  }
+
+  // Drag & drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    dragCounterRef.current = 0
+
+    const files = e.dataTransfer.files
+    if (files.length > 0) {
+      // Add all dropped files
+      Array.from(files).forEach(file => {
+        if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+          onAddFile(file)
+        }
+      })
     }
   }
 
@@ -292,17 +335,23 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
       {mode === 'upload' ? (
         <div
           onClick={() => fileInputRef.current?.click()}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
           className={clsx(
             'flex flex-col items-center justify-center gap-2',
             'py-8 rounded-lg cursor-pointer',
-            'bg-slate-dark/50 border border-slate-mid',
-            'hover:bg-slate-dark hover:border-synapse/50',
-            'transition-colors duration-200'
+            'border-2 border-dashed',
+            'transition-all duration-200',
+            isDragging
+              ? 'bg-synapse/20 border-synapse scale-[1.02]'
+              : 'bg-slate-dark/50 border-slate-mid hover:bg-slate-dark hover:border-synapse/50'
           )}
         >
-          <Image className="w-8 h-8 text-text-muted" />
-          <span className="text-sm text-text-secondary">
-            Click to upload image or video
+          <Image className={clsx('w-8 h-8', isDragging ? 'text-synapse' : 'text-text-muted')} />
+          <span className={clsx('text-sm', isDragging ? 'text-synapse font-medium' : 'text-text-secondary')}>
+            {isDragging ? 'Drop files here' : 'Click or drag files here'}
           </span>
           <span className="text-xs text-text-muted">
             JPG, PNG, GIF, WEBP, MP4
@@ -311,6 +360,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
             ref={fileInputRef}
             type="file"
             accept="image/*,video/*"
+            multiple
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -479,6 +529,12 @@ export function EditPreviewsModal({
 
   if (!isOpen) return null
 
+  // Prevent browser from opening files when dropping outside drop zone
+  const preventBrowserDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
   return (
     <div
       className={clsx(
@@ -486,6 +542,8 @@ export function EditPreviewsModal({
         "flex items-center justify-center p-4",
         ANIMATION_PRESETS.fadeIn
       )}
+      onDragOver={preventBrowserDrop}
+      onDrop={preventBrowserDrop}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

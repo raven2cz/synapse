@@ -18,7 +18,7 @@
  */
 
 import { useState } from 'react'
-import { ZoomIn, ZoomOut, Play, Image as ImageIcon } from 'lucide-react'
+import { ZoomIn, ZoomOut, Play, Image as ImageIcon, Edit3 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import type { PreviewInfo, CardSize } from '../types'
@@ -40,6 +40,12 @@ export interface PackGalleryProps {
   onPreviewClick: (index: number) => void
 
   /**
+   * Handler for edit button (opens EditPreviewsModal)
+   * If undefined, edit button is not shown
+   */
+  onEdit?: () => void
+
+  /**
    * Initial card size (default: 'sm')
    */
   initialSize?: CardSize
@@ -57,6 +63,7 @@ export interface PackGalleryProps {
 export function PackGallery({
   previews,
   onPreviewClick,
+  onEdit,
   initialSize = 'sm',
   animationDelay = 0,
 }: PackGalleryProps) {
@@ -112,8 +119,25 @@ export function PackGallery({
           <span className="text-text-muted font-normal">({previews.length})</span>
         </h3>
 
-        {/* Zoom Controls - Premium styling */}
-        <div className={clsx(
+        <div className="flex items-center gap-2">
+          {/* Edit Button */}
+          {onEdit && (
+            <button
+              onClick={onEdit}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                'text-xs text-synapse',
+                'bg-synapse/10 hover:bg-synapse/20',
+                'transition-colors duration-200'
+              )}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              Edit
+            </button>
+          )}
+
+          {/* Zoom Controls - Premium styling */}
+          <div className={clsx(
           'flex items-center gap-1',
           'bg-slate-dark/80 backdrop-blur-sm rounded-xl p-1',
           'border border-slate-mid/50',
@@ -144,6 +168,7 @@ export function PackGallery({
           >
             <ZoomIn className="w-4 h-4" />
           </button>
+          </div>
         </div>
       </div>
 

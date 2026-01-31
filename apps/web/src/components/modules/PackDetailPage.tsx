@@ -20,6 +20,7 @@ import { ArrowLeft } from 'lucide-react'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { BreathingOrb } from '@/components/ui/BreathingOrb'
 import { Button } from '@/components/ui/Button'
+import { toast } from '@/stores/toastStore'
 
 // Modular pack-detail components
 import {
@@ -42,6 +43,8 @@ import {
   EditParametersModal,
   UploadWorkflowModal,
   BaseModelResolverModal,
+  EditPreviewsModal,
+  DescriptionEditorModal,
   // Shared
   ErrorBoundary,
   SectionErrorBoundary,
@@ -303,9 +306,9 @@ function PackDetailPageContent() {
 
       {/* Header Section */}
       {/*
-        Edit mode behavior depends on pack type:
-        - Custom packs: Show Edit button, enable inline editing (canEditMetadata = true)
-        - Civitai packs: Hide Edit button, use modal-based editing via section buttons
+        Edit mode: We use modal-based editing via per-section Edit buttons
+        (Gallery, Description, Parameters, User Tags). The header Edit button
+        is for inline editing which isn't implemented yet, so we don't pass onStartEdit.
       */}
       <PackHeader
         pack={pack}
@@ -314,13 +317,6 @@ function PackDetailPageContent() {
         isUsingPack={packData.isUsingPack}
         isDeleting={packData.isDeleting}
         animationDelay={0}
-        // Edit mode - only show for plugins that support metadata editing
-        isEditing={editState.isEditing}
-        hasUnsavedChanges={editState.hasUnsavedChanges}
-        isSaving={editState.isSaving}
-        onStartEdit={plugin?.features?.canEditMetadata ? () => editState.startEditing() : undefined}
-        onSaveChanges={editState.saveChanges}
-        onDiscardChanges={editState.discardChanges}
         // Plugin header actions are rendered inside PackHeader via pluginActions prop
         pluginActions={pluginContext && plugin?.renderHeaderActions?.(pluginContext)}
       />
@@ -331,6 +327,7 @@ function PackDetailPageContent() {
           <PackGallery
             previews={pack.previews}
             onPreviewClick={(index) => setFullscreenIndex(index)}
+            onEdit={plugin?.features?.canEditPreviews ? () => openModal('editPreviews') : undefined}
             animationDelay={50}
           />
         </SectionErrorBoundary>
@@ -338,7 +335,11 @@ function PackDetailPageContent() {
 
       {/* Info Section */}
       <SectionErrorBoundary sectionName="Information" onRetry={packData.refetch}>
-        <PackInfoSection pack={pack} animationDelay={100} />
+        <PackInfoSection
+          pack={pack}
+          onEditDescription={plugin?.features?.canEditMetadata ? () => openModal('markdownEditor') : undefined}
+          animationDelay={100}
+        />
       </SectionErrorBoundary>
 
       {/* User Tags Section - always editable even for Civitai packs */}
@@ -510,6 +511,35 @@ function PackDetailPageContent() {
         }}
         onClose={() => closeModal('baseModelResolver')}
         isResolving={packData.isResolvingBaseModel}
+      />
+
+      {/* Edit Previews Modal */}
+      <EditPreviewsModal
+        isOpen={modals.editPreviews}
+        previews={pack.previews}
+        coverUrl={pack.previews[0]?.url}
+        onSave={(data) => {
+          // TODO: Implement full preview save API (requires backend PATCH support)
+          console.log('[PackDetailPage] Save previews:', data)
+          toast.info('Preview editing will be available soon')
+          closeModal('editPreviews')
+        }}
+        onClose={() => closeModal('editPreviews')}
+        isSaving={false}
+      />
+
+      {/* Description Editor Modal */}
+      <DescriptionEditorModal
+        isOpen={modals.markdownEditor}
+        content={pack.description || ''}
+        onSave={(content) => {
+          // TODO: Implement description save API (requires backend PATCH support)
+          console.log('[PackDetailPage] Save description:', content)
+          toast.info('Description editing will be available soon')
+          closeModal('markdownEditor')
+        }}
+        onClose={() => closeModal('markdownEditor')}
+        isSaving={false}
       />
 
       {/* Pull Confirm Dialog */}
