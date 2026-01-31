@@ -181,11 +181,21 @@ echo ""
 echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Initializing Synapse...${NC}"
 echo ""
 
-# Create data directory
-mkdir -p ~/.synapse/store
-mkdir -p ~/.synapse/packs
+# Create data directories (all under .synapse/store)
+# The store has two main areas:
+#   - state/  (git-versioned: packs, profiles, config)
+#   - data/   (local runtime: blobs, cache, views)
+mkdir -p ~/.synapse/store/state/packs
+mkdir -p ~/.synapse/store/state/profiles
+mkdir -p ~/.synapse/store/data/blobs/sha256
+mkdir -p ~/.synapse/store/data/cache
+mkdir -p ~/.synapse/store/data/views
+mkdir -p ~/.synapse/store/data/registry
+mkdir -p ~/.synapse/store/data/tmp
 
 echo -e "${GREEN}  ✓ Data directories created${NC}"
+echo -e "${GREEN}    ~/.synapse/store/state/ - packs, profiles, config${NC}"
+echo -e "${GREEN}    ~/.synapse/store/data/  - blobs, cache, views${NC}"
 echo ""
 
 # ============================================================================

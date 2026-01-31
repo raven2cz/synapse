@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
-  Package, Search, Tag,
+  Package, Search, Tag, Plus,
   ZoomIn, ZoomOut, X, AlertTriangle
 } from 'lucide-react'
 import { clsx } from 'clsx'
@@ -10,6 +11,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { usePacksStore } from '@/stores/packsStore'
 import { MediaPreview } from '../ui/MediaPreview'
 import { BreathingOrb } from '../ui/BreathingOrb'
+import { Button } from '../ui/Button'
+import { CreatePackModal, type CreatePackData } from './pack-detail/modals'
 
 interface PackSummary {
   name: string
@@ -21,15 +24,15 @@ interface PackSummary {
   nsfw_previews_count: number
   source_url?: string
   created_at?: string
-  thumbnail?: string  // This is the URL to preview image
-  thumbnail_type?: 'image' | 'video'  // Media type of thumbnail
+  thumbnail?: string
+  thumbnail_type?: 'image' | 'video'
   tags: string[]
   user_tags: string[]
   has_unresolved: boolean
-  model_type?: string  // LORA, Checkpoint, etc.
-  base_model?: string  // SD 1.5, SDXL, etc.
-  is_nsfw?: boolean  // Has nsfw-pack tag (from API)
-  is_nsfw_hidden?: boolean  // Has nsfw-pack-hide tag (from API)
+  model_type?: string
+  base_model?: string
+  is_nsfw?: boolean
+  is_nsfw_hidden?: boolean
 }
 
 // Special tags with distinct colors
@@ -61,39 +64,47 @@ const CARD_WIDTHS = {
 type CardSize = keyof typeof CARD_WIDTHS
 
 export function PacksPage() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { nsfwBlurEnabled } = useSettingsStore()
   const { searchQuery, selectedTag, setSearchQuery, setSelectedTag } = usePacksStore()
   const [cardSize, setCardSize] = useState<CardSize>('md')
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
-  // Fetch packs with debug
+  // Fetch packs
   const { data: packs = [], isLoading, error } = useQuery<PackSummary[]>({
     queryKey: ['packs'],
     queryFn: async () => {
-      console.log('[PacksPage] Fetching packs from /api/packs...')
       const res = await fetch('/api/packs/')
-      console.log('[PacksPage] Response status:', res.status)
-
       if (!res.ok) {
-        const errText = await res.text()
-        console.error('[PacksPage] Error response:', errText)
         throw new Error(`Failed to fetch packs: ${res.status}`)
       }
-
       const data = await res.json()
-      console.log('[PacksPage] Received data:', data)
+      return data.packs || data || []
+    },
+  })
 
-      // v2 API returns { packs: [...] }
-      const packsList = data.packs || data || []
-      console.log('[PacksPage] Packs count:', packsList.length)
-
-      // Debug first pack
-      if (packsList.length > 0) {
-        console.log('[PacksPage] First pack:', JSON.stringify(packsList[0], null, 2))
-        console.log('[PacksPage] First pack thumbnail:', packsList[0].thumbnail)
+  // Create pack mutation
+  const createPackMutation = useMutation({
+    mutationFn: async (data: CreatePackData) => {
+      const res = await fetch('/api/packs/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(err.detail || 'Failed to create pack')
       }
-
-      return packsList
+      return res.json()
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
+      setIsCreateModalOpen(false)
+      // Navigate to the new pack
+      navigate(`/packs/${encodeURIComponent(data.name)}`)
     },
   })
 
@@ -161,37 +172,49 @@ export function PacksPage() {
         </div>
       )}
 
-      {/* Header with zoom */}
+      {/* Header with zoom and create button */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
             <Package className="w-7 h-7 text-synapse" />
-            Asset Packs
+            {t('packs.title')}
           </h1>
           <p className="text-text-muted mt-1">
-            {packs.length} packs installed
+            {t('packs.subtitle', { count: packs.length })}
           </p>
         </div>
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
-          <button
-            onClick={zoomOut}
-            disabled={cardSize === 'sm'}
-            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom out"
+        <div className="flex items-center gap-3">
+          {/* Create Pack Button */}
+          <Button
+            variant="primary"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-synapse/20"
           >
-            <ZoomOut className="w-4 h-4 text-text-secondary" />
-          </button>
-          <div className="w-px h-6 bg-slate-mid" />
-          <button
-            onClick={zoomIn}
-            disabled={cardSize === 'lg'}
-            className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn className="w-4 h-4 text-text-secondary" />
-          </button>
+            <Plus className="w-4 h-4" />
+            {t('packs.create')}
+          </Button>
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1 bg-slate-dark/80 backdrop-blur rounded-xl p-1 border border-slate-mid/50">
+            <button
+              onClick={zoomOut}
+              disabled={cardSize === 'sm'}
+              className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title={t('packs.zoom.out')}
+            >
+              <ZoomOut className="w-4 h-4 text-text-secondary" />
+            </button>
+            <div className="w-px h-6 bg-slate-mid" />
+            <button
+              onClick={zoomIn}
+              disabled={cardSize === 'lg'}
+              className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title={t('packs.zoom.in')}
+            >
+              <ZoomIn className="w-4 h-4 text-text-secondary" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -204,7 +227,7 @@ export function PacksPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search packs..."
+            placeholder={t('packs.search')}
             className="w-full pl-12 pr-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-synapse transition-colors"
           />
         </div>
@@ -216,7 +239,7 @@ export function PacksPage() {
             onChange={(e) => setSelectedTag(e.target.value)}
             className="px-4 py-3 bg-slate-dark border border-slate-mid rounded-xl text-text-primary focus:outline-none focus:border-synapse cursor-pointer"
           >
-            <option value="">All Tags</option>
+            <option value="">{t('packs.filter.allTags')}</option>
             {allUserTags.map(tag => (
               <option key={tag} value={tag}>{tag}</option>
             ))}
@@ -227,7 +250,7 @@ export function PacksPage() {
       {/* Active filters display */}
       {selectedTag && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-text-muted">Active filters:</span>
+          <span className="text-sm text-text-muted">{t('packs.filter.activeFilters')}:</span>
           <button
             onClick={() => setSelectedTag('')}
             className="px-3 py-1 bg-pulse/20 text-pulse rounded-lg text-sm flex items-center gap-1 hover:bg-pulse/30"
@@ -241,21 +264,14 @@ export function PacksPage() {
 
       {/* Loading */}
       {isLoading && (
-        <BreathingOrb size="lg" text="Loading packs..." className="py-16" />
+        <BreathingOrb size="lg" text={t('common.loading')} className="py-16" />
       )}
 
       {/* Error */}
       {error && (
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 text-red-400">
-          <p className="font-medium">Error loading packs</p>
+          <p className="font-medium">{t('errors.loadFailed')}</p>
           <p className="text-sm mt-1">{(error as Error).message}</p>
-        </div>
-      )}
-
-      {/* Debug info */}
-      {!isLoading && packs.length > 0 && (
-        <div className="text-xs text-text-muted bg-slate-dark/50 p-2 rounded">
-          Debug: {filteredPacks.length} packs shown, first thumbnail: {packs[0]?.thumbnail || 'none'}
         </div>
       )}
 
@@ -265,8 +281,6 @@ export function PacksPage() {
           const thumbnailUrl = pack.thumbnail
           // Check NSFW status from API flag OR user_tags
           const isNsfwPack = pack.is_nsfw || pack.user_tags?.includes('nsfw-pack') || pack.nsfw_previews_count > 0
-
-          console.log(`[PacksPage] Rendering pack: ${pack.name}, thumbnail: ${thumbnailUrl}, nsfw: ${isNsfwPack}`)
 
           return (
             <Link
@@ -278,10 +292,8 @@ export function PacksPage() {
               {/* Card - Civitai style with Border + Inner Glow hover effect */}
               <div className={clsx(
                 "relative aspect-[3/4] rounded-2xl overflow-hidden bg-slate-dark",
-                // Transition and base shadow
                 "transition-all duration-300 ease-out",
                 "shadow-md shadow-black/30",
-                // Hover: scale + inner glow + outer border + shadow
                 "group-hover:scale-[1.03]",
                 "group-hover:shadow-[inset_0_0_40px_rgba(102,126,234,0.3),0_0_0_2px_rgba(102,126,234,0.6),0_8px_24px_rgba(102,126,234,0.3)]"
               )}>
@@ -308,7 +320,7 @@ export function PacksPage() {
                 {/* Top badges */}
                 <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap max-w-[80%]">
                   <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold">
-                    {pack.assets_count} assets
+                    {t('packs.card.assets', { count: pack.assets_count })}
                   </span>
                 </div>
 
@@ -317,7 +329,7 @@ export function PacksPage() {
                   <div className="absolute top-3 right-3">
                     <span className="px-2 py-1 bg-amber-500/90 backdrop-blur-sm rounded-lg text-xs text-white font-semibold flex items-center gap-1 animate-breathe">
                       <AlertTriangle className="w-3 h-3" />
-                      Needs Setup
+                      {t('packs.card.needsSetup')}
                     </span>
                   </div>
                 )}
@@ -373,13 +385,31 @@ export function PacksPage() {
       {!isLoading && filteredPacks.length === 0 && (
         <div className="text-center py-12">
           <Package className="w-16 h-16 text-slate-mid mx-auto mb-4" />
-          <p className="text-text-muted">
+          <p className="text-text-muted mb-4">
             {packs.length === 0
-              ? 'No packs installed yet. Import models from Browse Civitai.'
-              : 'No packs match your filters.'}
+              ? t('packs.empty.noPacks')
+              : t('packs.empty.noMatch')}
           </p>
+          {packs.length === 0 && (
+            <Button
+              variant="primary"
+              onClick={() => setIsCreateModalOpen(true)}
+              className="transition-all duration-200 hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              {t('packs.create')}
+            </Button>
+          )}
         </div>
       )}
+
+      {/* Create Pack Modal */}
+      <CreatePackModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onCreate={createPackMutation.mutateAsync}
+        isCreating={createPackMutation.isPending}
+      />
     </div>
   )
 }

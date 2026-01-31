@@ -2611,6 +2611,99 @@ class UpdatePackRequest(BaseModel):
     name: Optional[str] = None  # For rename
 
 
+class CreatePackRequest(BaseModel):
+    """Request to create a custom pack from scratch."""
+    name: str = Field(..., description="Pack name (must be unique)")
+    pack_type: str = Field("lora", description="Asset type: lora, checkpoint, vae, controlnet, etc.")
+    description: Optional[str] = Field(None, description="Pack description (Markdown supported)")
+    base_model: Optional[str] = Field(None, description="Base model (e.g., 'SD 1.5', 'SDXL 1.0')")
+    version: str = Field("1.0.0", description="Pack version")
+    author: Optional[str] = Field(None, description="Pack author")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for categorization")
+    user_tags: Optional[List[str]] = Field(default_factory=list, description="User-defined tags")
+    trigger_words: Optional[List[str]] = Field(default_factory=list, description="Trigger words for generation")
+
+
+@v2_packs_router.post("/create", response_model=Dict[str, Any])
+def create_pack(
+    request: CreatePackRequest,
+    store=Depends(require_initialized),
+):
+    """
+    Create a custom pack from scratch.
+
+    Creates an empty pack with the specified metadata.
+    The pack can then be populated with dependencies, previews, and workflows.
+
+    Returns the created pack details.
+    """
+    from datetime import datetime
+    from .models import Pack, PackSource, PackCategory, AssetKind, ProviderName
+
+    try:
+        # Check if pack already exists
+        try:
+            existing = store.get_pack(request.name)
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Pack with name '{request.name}' already exists"
+                )
+        except PackNotFoundError:
+            pass  # Good - pack doesn't exist
+
+        # Parse pack_type to AssetKind
+        try:
+            pack_type = AssetKind(request.pack_type.lower())
+        except ValueError:
+            pack_type = AssetKind.UNKNOWN
+
+        # Create the pack
+        pack = Pack(
+            name=request.name,
+            pack_type=pack_type,
+            pack_category=PackCategory.CUSTOM,  # Custom packs are fully editable
+            source=PackSource(
+                provider=ProviderName.LOCAL,
+                url=None,
+                model_id=None,
+                version_id=None,
+            ),
+            version=request.version,
+            description=request.description,
+            base_model=request.base_model,
+            author=request.author,
+            tags=request.tags or [],
+            user_tags=request.user_tags or [],
+            trigger_words=request.trigger_words or [],
+            created_at=datetime.now(),
+        )
+
+        # Save the pack
+        store.layout.save_pack(pack)
+
+        # Create pack directories
+        pack_path = store.layout.pack_path(request.name)
+        (pack_path / "resources" / "previews").mkdir(parents=True, exist_ok=True)
+        (pack_path / "resources" / "workflows").mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"[create_pack] Created custom pack: {request.name}")
+
+        return {
+            "success": True,
+            "name": pack.name,
+            "pack_type": pack.pack_type.value,
+            "pack_category": pack.pack_category.value,
+            "created_at": pack.created_at.isoformat() if pack.created_at else None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[create_pack] Error creating pack: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @v2_packs_router.patch("/{pack_name}", response_model=Dict[str, Any])
 def update_pack(
     pack_name: str,

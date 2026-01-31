@@ -46,6 +46,7 @@ from .models import (
     DependencySelector,
     ExposeConfig,
     Pack,
+    PackCategory,
     PackDependency,
     PackLock,
     PackResources,
@@ -515,6 +516,7 @@ class PackService:
         pack = Pack(
             name=name,
             pack_type=asset_kind,
+            pack_category=PackCategory.EXTERNAL,  # Imported from Civitai
             source=PackSource(
                 provider=ProviderName.CIVITAI,
                 model_id=model_id,
@@ -522,6 +524,7 @@ class PackService:
                 url=url,
             ),
             dependencies=dependencies,
+            pack_dependencies=[],  # No pack dependencies by default
             resources=PackResources(
                 previews_keep_in_git=True,
                 workflows_keep_in_git=True,

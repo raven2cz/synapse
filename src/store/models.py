@@ -75,6 +75,19 @@ class ConflictMode(str, Enum):
     STRICT = "strict"
 
 
+class PackCategory(str, Enum):
+    """
+    Category determines pack's origin and editability.
+
+    - EXTERNAL: Imported from Civitai, HuggingFace, etc. (metadata read-only)
+    - CUSTOM: Created locally from scratch (fully editable)
+    - INSTALL: Installation pack for UI environments (script-based management)
+    """
+    EXTERNAL = "external"
+    CUSTOM = "custom"
+    INSTALL = "install"
+
+
 # =============================================================================
 # Validators
 # =============================================================================
@@ -422,6 +435,28 @@ class PackResources(BaseModel):
     workflows_keep_in_git: bool = True
 
 
+class PackDependencyRef(BaseModel):
+    """
+    Reference to another pack this pack depends on.
+
+    This enables pack dependency trees where:
+    - A LoRA pack can depend on a Checkpoint pack (its base model)
+    - A Workflow pack can depend on all required LoRA/VAE packs
+    - An Install pack can depend on another Install pack
+
+    The dependency is resolved at runtime by checking if the referenced
+    pack exists and is installed.
+    """
+    pack_name: str  # Name of the dependent pack
+    required: bool = True  # Is this dependency required?
+    version_constraint: Optional[str] = None  # e.g., ">=1.0.0", "latest"
+
+    @field_validator("pack_name")
+    @classmethod
+    def validate_pack_name(cls, v: str) -> str:
+        return validate_safe_name(v)
+
+
 class GenerationParameters(BaseModel):
     """Default generation parameters extracted from Civitai or user-defined."""
     sampler: Optional[str] = None
@@ -505,8 +540,10 @@ class Pack(BaseModel):
     schema_: str = Field(default="synapse.pack.v2", alias="schema")
     name: str
     pack_type: AssetKind
+    pack_category: PackCategory = PackCategory.EXTERNAL  # Default for backwards compat
     source: PackSource
     dependencies: List[PackDependency] = Field(default_factory=list)
+    pack_dependencies: List[PackDependencyRef] = Field(default_factory=list)  # Dependencies on other packs
     resources: PackResources = Field(default_factory=PackResources)
 
     # Previews with metadata (canonical source of truth)
