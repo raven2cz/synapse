@@ -303,12 +303,9 @@ function PackDetailPageContent() {
 
       {/* Header Section */}
       {/*
-        NOTE: Edit mode is currently modal-based via section Edit buttons.
-        The header Edit button is hidden because:
-        - Civitai packs have read-only metadata (only user_tags, parameters editable via modals)
-        - Custom packs will get inline editing later
-
-        Edit buttons are on: User Tags section, Parameters section, Workflows section
+        Edit mode behavior depends on pack type:
+        - Custom packs: Show Edit button, enable inline editing (canEditMetadata = true)
+        - Civitai packs: Hide Edit button, use modal-based editing via section buttons
       */}
       <PackHeader
         pack={pack}
@@ -317,6 +314,13 @@ function PackDetailPageContent() {
         isUsingPack={packData.isUsingPack}
         isDeleting={packData.isDeleting}
         animationDelay={0}
+        // Edit mode - only show for plugins that support metadata editing
+        isEditing={editState.isEditing}
+        hasUnsavedChanges={editState.hasUnsavedChanges}
+        isSaving={editState.isSaving}
+        onStartEdit={plugin?.features?.canEditMetadata ? () => editState.startEditing() : undefined}
+        onSaveChanges={editState.saveChanges}
+        onDiscardChanges={editState.discardChanges}
         // Plugin header actions are rendered inside PackHeader via pluginActions prop
         pluginActions={pluginContext && plugin?.renderHeaderActions?.(pluginContext)}
       />
