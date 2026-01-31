@@ -36,7 +36,7 @@ import {
   PackWorkflowsSection,
   PackParametersSection,
   PackStorageSection,
-  // PackUserTagsSection,
+  PackUserTagsSection,
   // Modals
   EditPackModal,
   EditParametersModal,
@@ -302,18 +302,20 @@ function PackDetailPageContent() {
       </Button>
 
       {/* Header Section */}
+      {/*
+        NOTE: Edit mode is currently modal-based via section Edit buttons.
+        The header Edit button is hidden because:
+        - Civitai packs have read-only metadata (only user_tags, parameters editable via modals)
+        - Custom packs will get inline editing later
+
+        Edit buttons are on: User Tags section, Parameters section, Workflows section
+      */}
       <PackHeader
         pack={pack}
         onUsePack={packData.usePack}
         onDelete={packData.deletePack}
         isUsingPack={packData.isUsingPack}
         isDeleting={packData.isDeleting}
-        isEditing={editState.isEditing}
-        hasUnsavedChanges={editState.hasUnsavedChanges}
-        isSaving={editState.isSaving}
-        onStartEdit={() => editState.startEditing()}
-        onSaveChanges={editState.saveChanges}
-        onDiscardChanges={editState.discardChanges}
         animationDelay={0}
         // Plugin header actions are rendered inside PackHeader via pluginActions prop
         pluginActions={pluginContext && plugin?.renderHeaderActions?.(pluginContext)}
@@ -333,6 +335,15 @@ function PackDetailPageContent() {
       {/* Info Section */}
       <SectionErrorBoundary sectionName="Information" onRetry={packData.refetch}>
         <PackInfoSection pack={pack} animationDelay={100} />
+      </SectionErrorBoundary>
+
+      {/* User Tags Section - always editable even for Civitai packs */}
+      <SectionErrorBoundary sectionName="User Tags" onRetry={packData.refetch}>
+        <PackUserTagsSection
+          tags={pack.user_tags || []}
+          onEdit={() => openModal('editPack')}
+          animationDelay={125}
+        />
       </SectionErrorBoundary>
 
       {/* Dependencies Section */}
