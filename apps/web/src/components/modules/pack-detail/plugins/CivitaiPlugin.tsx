@@ -295,9 +295,11 @@ export const CivitaiPlugin: PackPlugin = {
   }),
 
   features: {
-    canEditMetadata: false, // Read-only from Civitai
-    canEditPreviews: false, // Read-only from Civitai
-    canEditDependencies: false, // Managed by Civitai
+    // After import, pack is YOUR local copy - you can customize it
+    // Updates only change the blob (model file), not metadata/previews
+    canEditMetadata: true,       // Edit name, description, tags
+    canEditPreviews: true,       // Add/remove preview images/videos
+    canEditDependencies: false,  // Managed by Civitai (version tracking)
     canEditWorkflows: true,
     canEditParameters: true,
     canCheckUpdates: true,
@@ -340,18 +342,12 @@ export const CivitaiPlugin: PackPlugin = {
     console.log('[CivitaiPlugin] Loaded pack:', pack.name)
   },
 
-  validateChanges: (_pack, changes) => {
-    const errors: Record<string, string> = {}
-
-    // Prevent editing read-only fields
-    if (changes.description !== undefined) {
-      // Allow but warn
-      console.warn('[CivitaiPlugin] Description changes may be overwritten on update')
-    }
-
+  validateChanges: (_pack, _changes) => {
+    // All changes are allowed - pack is user's local copy
+    // Updates only change the blob (model file), user changes are preserved
     return {
-      valid: Object.keys(errors).length === 0,
-      errors,
+      valid: true,
+      errors: {},
     }
   },
 }
