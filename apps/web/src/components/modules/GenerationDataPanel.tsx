@@ -1,17 +1,47 @@
-import { Copy, Info, X, Zap, Hash, Sliders, Layers, Box, Cpu, Ruler, Activity } from 'lucide-react'
+import { useMemo } from 'react'
+import { Copy, Info, X, Zap, Hash, Sliders, Layers, Box, Cpu, Ruler, Activity, Download } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
+import { extractApplicableParams, hasExtractableParams } from '@/lib/parameters'
 
 interface GenerationDataPanelProps {
     meta: Record<string, any>
     onClose?: () => void
     className?: string
+    /**
+     * Callback when user clicks "Apply to Pack Parameters"
+     * Receives normalized parameters ready to be saved
+     */
+    onApplyToPackParameters?: (params: Record<string, unknown>) => void
+    /**
+     * Whether to show the "Apply to Pack Parameters" button
+     * Set to true when viewing in context of a pack
+     */
+    showApplyButton?: boolean
 }
 
-export function GenerationDataPanel({ meta, onClose, className }: GenerationDataPanelProps) {
+export function GenerationDataPanel({
+    meta,
+    onClose,
+    className,
+    onApplyToPackParameters,
+    showApplyButton = false,
+}: GenerationDataPanelProps) {
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text)
         // Ideally we would show a toast here
+    }
+
+    // Check if we have parameters that can be applied to pack
+    const canApply = useMemo(() => {
+        return showApplyButton && onApplyToPackParameters && hasExtractableParams(meta)
+    }, [showApplyButton, onApplyToPackParameters, meta])
+
+    // Extract applicable parameters when Apply is clicked
+    const handleApplyToPackParameters = () => {
+        if (!onApplyToPackParameters) return
+        const params = extractApplicableParams(meta)
+        onApplyToPackParameters(params)
     }
 
     // Extract known fields
@@ -142,6 +172,27 @@ export function GenerationDataPanel({ meta, onClose, className }: GenerationData
                                 </div>
                             ))}
                         </div>
+                    </section>
+                )}
+
+                {/* Apply to Pack Parameters Button */}
+                {canApply && (
+                    <section className="pt-2">
+                        <Button
+                            onClick={handleApplyToPackParameters}
+                            className={clsx(
+                                "w-full py-3",
+                                "bg-synapse/20 hover:bg-synapse/30 text-synapse",
+                                "border border-synapse/30 hover:border-synapse/50",
+                                "transition-all duration-200"
+                            )}
+                        >
+                            <Download className="w-4 h-4 mr-2" />
+                            Apply to Pack Parameters
+                        </Button>
+                        <p className="text-[10px] text-text-muted text-center mt-2">
+                            Use these settings as default parameters for this pack
+                        </p>
                     </section>
                 )}
             </div>

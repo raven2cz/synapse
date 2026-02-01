@@ -11,8 +11,10 @@ import {
   X, ChevronLeft, ChevronRight, Download, ExternalLink, Eye, EyeOff,
   ZoomIn, ZoomOut, RotateCcw, Repeat, Play, Pause, Volume2, VolumeX,
   Maximize, SkipBack, SkipForward, Loader2, Info, Copy, Check,
+  ArrowDownToLine,
 } from 'lucide-react'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { extractApplicableParams, hasExtractableParams } from '@/lib/parameters'
 
 // ============================================================================
 // Types & Constants
@@ -56,6 +58,16 @@ export interface FullscreenMediaViewerProps {
   isOpen: boolean
   onClose: () => void
   onIndexChange?: (index: number) => void
+  /**
+   * Callback when user clicks "Apply to Pack Parameters" in metadata panel.
+   * Receives normalized parameters and the image index.
+   */
+  onApplyToPackParameters?: (params: Record<string, unknown>, imageIndex: number) => void
+  /**
+   * Whether to show the "Apply to Pack Parameters" button in metadata panel.
+   * Set to true when viewing in context of a pack.
+   */
+  showApplyButton?: boolean
 }
 
 // ============================================================================
@@ -103,6 +115,7 @@ function isLikelyVideo(url: string): boolean {
 // ============================================================================
 export function FullscreenMediaViewer({
   items, initialIndex = 0, isOpen, onClose, onIndexChange,
+  onApplyToPackParameters, showApplyButton = false,
 }: FullscreenMediaViewerProps) {
   const nsfwBlurEnabled = useSettingsStore((s) => s.nsfwBlurEnabled)
 
@@ -957,6 +970,30 @@ export function FullscreenMediaViewer({
                             )
                           })}
                         </div>
+                      </section>
+                    )}
+
+                    {/* Apply to Pack Parameters Button */}
+                    {showApplyButton && onApplyToPackParameters && hasExtractableParams(meta) && (
+                      <section className="pt-3 border-t border-white/10">
+                        <button
+                          onClick={() => {
+                            const params = extractApplicableParams(meta)
+                            onApplyToPackParameters(params, currentIndex)
+                          }}
+                          className={clsx(
+                            "w-full py-2.5 rounded-lg text-sm font-medium",
+                            "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300",
+                            "border border-indigo-500/30 hover:border-indigo-500/50",
+                            "transition-all duration-200 flex items-center justify-center gap-2"
+                          )}
+                        >
+                          <ArrowDownToLine className="w-4 h-4" />
+                          Apply to Pack Parameters
+                        </button>
+                        <p className="text-[9px] text-white/40 text-center mt-1.5">
+                          Use these settings as default parameters
+                        </p>
                       </section>
                     )}
                   </>

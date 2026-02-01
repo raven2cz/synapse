@@ -451,6 +451,15 @@ function PackDetailPageContent() {
         items={mediaItems}
         initialIndex={fullscreenIndex}
         onClose={() => setFullscreenIndex(-1)}
+        showApplyButton={true}
+        onApplyToPackParameters={(params, _imageIndex) => {
+          // Merge with existing parameters
+          const merged = {
+            ...(pack.parameters || {}),
+            ...params,
+          }
+          packData.updateParameters(merged)
+        }}
       />
 
       {/* Edit Pack Modal (User Tags) */}

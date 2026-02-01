@@ -3290,4 +3290,414 @@ DELETE /api/packs/{name}/pack-dependencies/{dep_pack_name}
 
 ---
 
+## Phase 7: Parameters Extraction from Civitai Images ✅ ITERATION 7.1-7.2 DONE
+
+### Motivace
+
+Civitai preview obrázky obsahují cenná metadata o generation parameters (prompt, seed, sampler, steps, CFG, atd.). Tato data jsou již zobrazována v `GenerationDataPanel` při prohlížení obrázků v FullscreenMediaViewer.
+
+**Cíl:** Umožnit uživateli využít tyto parametry jako výchozí nastavení packu.
+
+### Zdroje parametrů
+
+1. **Pack description** - Civitai popis může obsahovat doporučené parametry
+2. **Preview image metadata** - Každý preview má `meta` objekt s generation daty
+3. **Agregované z více obrázků** - Průměr/modus z více preview metadat
+4. **Manuální zadání** - Uživatel ručně nastaví v EditParametersModal
+
+### Data Model
+
+```typescript
+// Zdroj parametrů
+interface ParameterSource {
+  type: 'description' | 'image' | 'aggregated' | 'manual'
+  image_index?: number      // Pro type='image' - který preview
+  image_url?: string        // URL/thumbnail pro zobrazení
+  confidence?: number       // Pro aggregated - jak moc se hodnoty shodují
+  extracted_at?: string     // ISO timestamp
+}
+
+// Rozšíření PackDetail
+interface PackDetail {
+  // ... existující fieldy
+  parameters?: GenerationParameters
+  parameter_sources?: Record<string, ParameterSource>  // klíč = param name
+}
+
+// Rozšíření GenerationParameters (backend)
+class GenerationParameters(BaseModel):
+    # ... existující fieldy
+    _sources: Optional[Dict[str, ParameterSourceDict]] = None  # Private, not serialized to pack.json
+```
+
+**Důležité:** `parameter_sources` je čistě UI metadata - ukládá se do `pack.json`, ale neovlivňuje samotné `parameters`.
+
+### File Structure (Hybridní přístup)
+
+**Backend** - pro import a description parsing:
+```
+src/utils/
+├── media_detection.py          # Už existuje
+└── parameter_extractor.py      # NOVÉ (~150 řádků)
+    ├── extract_from_description()    # Regex parsing description
+    ├── normalize_param_key()         # clipSkip → clip_skip
+    └── convert_param_value()         # String → proper type
+```
+
+**Frontend** - pro UI operace a image meta:
+```
+apps/web/src/lib/parameters/    # NOVÝ adresář
+├── index.ts                    # Re-exports
+├── extractor.ts                # (~80 řádků)
+│   ├── extractApplicableParams()   # Filter generation params from meta
+│   └── isGenerationParam()         # Check if key is gen param
+├── normalizer.ts               # (~60 řádků)
+│   ├── normalizeParamKeys()        # Transform all keys to snake_case
+│   └── PARAM_KEY_ALIASES           # clipSkip → clip_skip mapping
+└── aggregator.ts               # (~100 řádků)
+    ├── aggregateFromPreviews()     # Calculate average/mode
+    └── calculateConfidence()       # How consistent are values
+```
+
+**Proč hybridní:**
+- Backend: Description parsing při importu (Python regex je robustnější)
+- Frontend: Real-time UI operace (Apply button, source picker)
+- Normalizace duplicitní (Python + TS) - jednoduché mapping funkce
+
+### Iteration 7.1: Extract Parameters from Description (Backend) ✅ DONE
+
+**Implementováno:**
+- `src/utils/parameter_extractor.py` (~350 řádků)
+- Export v `src/utils/__init__.py`
+- 33 unit testů v `tests/unit/utils/test_parameter_extractor.py`
+
+### Original Iteration 7.1: Extract Parameters from Description (Backend)
+
+**Cíl:** Při Civitai importu extrahovat parametry z description
+
+**Implementace:**
+
+```python
+# src/core/parameter_extractor.py
+
+def extract_parameters_from_description(description: str) -> dict:
+    """
+    Extract recommended parameters from Civitai description.
+
+    Hledá vzory jako:
+    - "Recommended: CFG 7, Steps 25"
+    - "Settings: sampler: euler, clip skip: 2"
+    - "Use with: strength 0.8"
+
+    Returns:
+        dict: Nalezené parametry
+    """
+    patterns = {
+        'cfg_scale': r'(?:cfg|cfg\s*scale)[:\s]+(\d+(?:\.\d+)?)',
+        'steps': r'(?:steps)[:\s]+(\d+)',
+        'sampler': r'(?:sampler)[:\s]+([a-zA-Z0-9_]+)',
+        'clip_skip': r'(?:clip\s*skip)[:\s]+(\d+)',
+        'strength': r'(?:strength|lora\s*strength)[:\s]+([\d.]+)',
+        # ... další vzory
+    }
+
+    result = {}
+    for param, pattern in patterns.items():
+        match = re.search(pattern, description, re.IGNORECASE)
+        if match:
+            result[param] = convert_value(param, match.group(1))
+
+    return result
+```
+
+**Integrace do pack_builder.py:**
+
+```python
+async def import_from_civitai(...):
+    # ... existující kód
+
+    # Extract parameters from description
+    if pack.description:
+        extracted = extract_parameters_from_description(pack.description)
+        if extracted:
+            pack.parameters = GenerationParameters(**extracted)
+            # Poznamenat zdroj
+            pack.parameter_sources = {
+                key: {'type': 'description'} for key in extracted
+            }
+```
+
+**Testy:**
+- `tests/unit/core/test_parameter_extractor.py`
+- Test různých formátů description
+- Test edge cases (prázdný popis, žádné parametry)
+
+### Iteration 7.2: "Apply to Pack" Button in GenerationDataPanel ✅ DONE
+
+**Implementováno:**
+- Frontend `apps/web/src/lib/parameters/` modul (3 soubory: normalizer.ts, extractor.ts, aggregator.ts)
+- Tlačítko "Apply to Pack Parameters" v `GenerationDataPanel.tsx`
+- Tlačítko "Apply to Pack Parameters" v `FullscreenMediaViewer.tsx` (inline metadata panel)
+- Integrace v `PackDetailPage.tsx` - merge parametrů při kliknutí
+
+### Original Iteration 7.2: "Apply to Pack" Button in GenerationDataPanel
+
+**Cíl:** Přidat tlačítko pro aplikaci parametrů z obrázku do packu
+
+**Kde:** `apps/web/src/components/shared/GenerationDataPanel.tsx`
+
+**UI Design:**
+
+```
+┌─────────────────────────────────────────┐
+│ Generation Data                   [📋] │  ← Existující copy button
+├─────────────────────────────────────────┤
+│ Prompt: beautiful landscape...          │
+│ Seed: 12345                             │
+│ Steps: 25                               │
+│ CFG: 7                                  │
+│ Sampler: euler                          │
+│ ...                                     │
+├─────────────────────────────────────────┤
+│ [⬇️ Apply to Pack Parameters]           │  ← NOVÉ tlačítko
+└─────────────────────────────────────────┘
+```
+
+**Props rozšíření:**
+
+```typescript
+interface GenerationDataPanelProps {
+  meta: Record<string, any>
+  // Nové props pro Apply funkci
+  onApplyToPackParameters?: (params: Record<string, unknown>) => void
+  canApplyToPackParameters?: boolean  // Zobrazit tlačítko?
+}
+```
+
+**Implementace tlačítka:**
+
+```tsx
+function GenerationDataPanel({ meta, onApplyToPackParameters, canApplyToPackParameters }: Props) {
+  // Filtrovat pouze generation-related parametry (ne prompt, ne negativní prompt)
+  const applicableParams = useMemo(() => {
+    const APPLICABLE_KEYS = [
+      'seed', 'steps', 'cfg', 'cfgScale', 'cfg_scale',
+      'sampler', 'scheduler', 'denoise',
+      'width', 'height', 'clipSkip', 'clip_skip',
+      'hiresUpscale', 'hiresDenoise', // etc.
+    ]
+
+    return Object.fromEntries(
+      Object.entries(meta)
+        .filter(([key]) => APPLICABLE_KEYS.some(k =>
+          key.toLowerCase().includes(k.toLowerCase())
+        ))
+    )
+  }, [meta])
+
+  return (
+    <div>
+      {/* Existující obsah */}
+
+      {canApplyToPackParameters && Object.keys(applicableParams).length > 0 && (
+        <button
+          onClick={() => onApplyToPackParameters?.(applicableParams)}
+          className="..."
+        >
+          <Download className="w-4 h-4" />
+          Apply to Pack Parameters
+        </button>
+      )}
+    </div>
+  )
+}
+```
+
+**Integrace v FullscreenMediaViewer:**
+
+```tsx
+<GenerationDataPanel
+  meta={currentItem.meta}
+  canApplyToPackParameters={!!packName && !!onApplyToPackParameters}
+  onApplyToPackParameters={(params) => {
+    // Call parent handler
+    onApplyToPackParameters?.(params, currentIndex)
+  }}
+/>
+```
+
+**Integrace v PackDetailPage:**
+
+```tsx
+<FullscreenMediaViewer
+  items={galleryItems}
+  onApplyToPackParameters={(params, imageIndex) => {
+    // Merge do existujících parameters
+    packData.updateParameters({
+      ...packData.pack?.parameters,
+      ...normalizeParamKeys(params),
+    })
+    toast.success('Parameters applied from image')
+  }}
+/>
+```
+
+### Iteration 7.3: Source Indicator in PackParametersSection
+
+**Cíl:** Zobrazit odkud parametry pochází
+
+**UI Design:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🎛️ Generation Settings                              [Edit] │
+├─────────────────────────────────────────────────────────────┤
+│ Source: [🖼️ Image #3 ▼]                                    │  ← Nový dropdown
+│                                                             │
+│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐                        │
+│ │Steps │ │ CFG  │ │Sampler│ │Clip  │                        │
+│ │ 25   │ │  7   │ │euler  │ │Skip 2│                        │
+│ └──────┘ └──────┘ └──────┘ └──────┘                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Source Picker Dropdown:**
+
+```tsx
+interface ParameterSourcePickerProps {
+  currentSource?: ParameterSource
+  availableSources: ParameterSource[]  // Dostupné zdroje
+  onSelectSource: (source: ParameterSource) => void
+}
+
+function ParameterSourcePicker({ currentSource, availableSources, onSelectSource }: Props) {
+  return (
+    <div className="flex items-center gap-2 text-xs text-text-muted">
+      <span>Source:</span>
+      <select
+        value={sourceToKey(currentSource)}
+        onChange={(e) => onSelectSource(findSource(e.target.value))}
+        className="..."
+      >
+        <option value="manual">Manual</option>
+        <option value="description">From Description</option>
+        {availableSources
+          .filter(s => s.type === 'image')
+          .map((s, i) => (
+            <option key={i} value={`image:${s.image_index}`}>
+              Image #{s.image_index + 1}
+            </option>
+          ))
+        }
+        <option value="aggregated">Aggregated (average)</option>
+      </select>
+    </div>
+  )
+}
+```
+
+**Logika změny zdroje:**
+
+```tsx
+const handleSourceChange = async (source: ParameterSource) => {
+  if (source.type === 'image') {
+    // Načíst parametry z konkrétního obrázku
+    const imageParams = pack.previews[source.image_index].meta
+    const normalized = normalizeParamKeys(imageParams)
+    await packData.updateParameters(normalized)
+  } else if (source.type === 'aggregated') {
+    // Vypočítat průměr/modus ze všech obrázků s meta
+    const aggregated = aggregateParametersFromPreviews(pack.previews)
+    await packData.updateParameters(aggregated)
+  } else if (source.type === 'description') {
+    // Re-extract from description (if available)
+    // Toto by mělo být cachované nebo na backendu
+  }
+}
+```
+
+### Iteration 7.4: Backend Support for Source Tracking
+
+**Cíl:** Ukládat a poskytovat informace o zdrojích parametrů
+
+**API Rozšíření:**
+
+```python
+# PATCH /api/packs/{name}/parameters
+class UpdateParametersRequest(BaseModel):
+    parameters: Dict[str, Any]
+    source: Optional[ParameterSourceDict] = None  # Volitelné metadata o zdroji
+
+# Response rozšíření
+class PackDetail:
+    parameters: Optional[GenerationParameters]
+    parameter_sources: Optional[Dict[str, ParameterSourceDict]]
+    available_parameter_sources: List[ParameterSourceDict]  # Seznam dostupných zdrojů
+```
+
+**Nový endpoint pro extrakci:**
+
+```python
+@v2_packs_router.post("/{pack_name}/parameters/extract")
+def extract_parameters(
+    pack_name: str,
+    source: ParameterExtractionSource = Body(...),
+) -> Dict[str, Any]:
+    """
+    Extract parameters from specified source.
+
+    Sources:
+    - description: Parse pack description
+    - image:{index}: Get from preview image meta
+    - aggregated: Average/mode from all previews
+    """
+    pack = store.get_pack(pack_name)
+
+    if source.type == 'description':
+        return extract_from_description(pack.description)
+    elif source.type == 'image':
+        return pack.previews[source.image_index].meta
+    elif source.type == 'aggregated':
+        return aggregate_preview_metadata(pack.previews)
+```
+
+### Iteration 7.5: Testing & Polish
+
+**Backend testy:**
+- `tests/unit/core/test_parameter_extractor.py` (description parsing)
+- `tests/unit/store/test_parameter_sources.py` (API endpoints)
+- `tests/integration/test_parameter_flow.py` (celý flow)
+
+**Frontend testy:**
+- `GenerationDataPanel.test.tsx` (Apply button)
+- `PackParametersSection.test.tsx` (Source picker)
+- `parameter-extraction.test.tsx` (integration)
+
+**Edge cases:**
+- Prázdná metadata v obrázku
+- Konfliktní parametry mezi obrázky
+- Migrace existujících packů bez sources
+- Rollback při chybě
+
+### Success Criteria Phase 7
+
+- [ ] Parametry z description jsou extrahovány při Civitai importu
+- [ ] "Apply to Pack Parameters" button funguje v GenerationDataPanel
+- [ ] Source picker zobrazuje dostupné zdroje
+- [ ] Změna zdroje aktualizuje parametry
+- [ ] Existující editovatelnost parameters NEZMĚNĚNA
+- [ ] PackParametersSection UI NEZMĚNĚNA (kromě source pickeru)
+- [ ] 15+ nových testů
+
+### Risk Mitigation
+
+⚠️ **KRITICKÉ:** Nezměnit existující Parameters strukturu a UI
+
+1. **Source picker je VOLITELNÝ** - zobrazí se pouze pokud existují zdroje
+2. **Apply button je ADITIVNÍ** - přidává funkcionalitu, nemění stávající
+3. **Backend změny jsou backward-compatible** - `parameter_sources` je Optional
+4. **Testy verifikují, že stávající funkcionalita funguje**
+
+---
+
 *Last Updated: 2026-02-01*
