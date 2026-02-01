@@ -590,6 +590,12 @@ Pack může mít 8+ dependencies! UI musí zvládat:
   - Custom parameter key-value pairs
   - Remove parameters
 
+**Bug Fix (2026-02-01):**
+- ✅ Fixed: Parameters not saving due to limited `GenerationParameters` Pydantic model
+- Root cause: Backend model only accepted ~14 fields, frontend modal supports 50+ parameters
+- Solution: Added `extra="allow"` to `GenerationParameters` model and updated serializer
+- Updated TypeScript type in `usePackData.ts` to `Record<string, unknown>`
+
 ### PackScriptsSection (Install Pack Only)
 
 **Responsibility:** Script management for Install packs

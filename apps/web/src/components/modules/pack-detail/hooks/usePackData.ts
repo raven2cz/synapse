@@ -48,12 +48,7 @@ export interface UsePackDataReturn {
   updatePack: (data: { user_tags: string[] }) => void
   isUpdatingPack: boolean
 
-  updateParameters: (data: {
-    strength_recommended?: number
-    cfg_scale?: number
-    steps?: number
-    sampler?: string
-  }) => void
+  updateParameters: (data: Record<string, unknown>) => void
   isUpdatingParameters: boolean
 
   resolveBaseModel: (data: {
@@ -274,12 +269,7 @@ export function usePackData({
   // =========================================================================
 
   const updateParametersMutation = useMutation({
-    mutationFn: async (data: {
-      strength_recommended?: number
-      cfg_scale?: number
-      steps?: number
-      sampler?: string
-    }) => {
+    mutationFn: async (data: Record<string, unknown>) => {
       const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/parameters`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

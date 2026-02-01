@@ -206,7 +206,7 @@ function CategoryGroup({
   if (params.length === 0) return null
 
   return (
-    <div className="mb-3">
+    <div>
       {collapsible ? (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -233,7 +233,7 @@ function CategoryGroup({
       )}
 
       {(!collapsible || isExpanded) && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 justify-start">
           {params.map(({ key, value, highlight }) => (
             <ParameterCard
               key={key}
@@ -354,9 +354,9 @@ export function PackParametersSection({
           </button>
         </div>
 
-        {/* Parameters - Categorized */}
+        {/* Parameters - Categorized in flex grid */}
         {hasParameters ? (
-          <div>
+          <div className="flex flex-wrap gap-x-6 gap-y-3 items-start">
             {categoryOrder.map(category => (
               <CategoryGroup
                 key={category}

@@ -11,7 +11,8 @@
  * - Save/Cancel with loading state
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   X, Loader2, ChevronDown, ChevronRight, Sliders, Maximize2, Sparkles,
   Settings2, Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, Plus, Minus, Check,
@@ -21,74 +22,87 @@ import { Button } from '@/components/ui/Button'
 import { ANIMATION_PRESETS } from '../constants'
 
 // =============================================================================
-// Hook: Dropdown Position Detection
+// Portal Dropdown Menu - Renders outside modal DOM to avoid overflow clipping
 // =============================================================================
 
-/**
- * Finds the closest scrollable parent element
- */
-function findScrollParent(element: HTMLElement | null): HTMLElement | null {
-  if (!element) return null
-
-  let parent = element.parentElement
-  while (parent) {
-    const overflow = window.getComputedStyle(parent).overflowY
-    if (overflow === 'auto' || overflow === 'scroll') {
-      return parent
-    }
-    parent = parent.parentElement
-  }
-  return null
+interface PortalDropdownMenuProps {
+  isOpen: boolean
+  triggerRef: React.RefObject<HTMLElement | null>
+  children: React.ReactNode
+  className?: string
+  /** Menu height for position calculation */
+  menuHeight?: number
+  /** Alignment: 'left' | 'right' */
+  align?: 'left' | 'right'
 }
 
-/**
- * Detects whether dropdown should open upward or downward based on available space
- * within the scrollable container (modal), not the window
- */
-function useDropdownPosition(
-  triggerRef: React.RefObject<HTMLElement | null>,
-  isOpen: boolean,
-  dropdownHeight: number = 240
-): 'up' | 'down' {
-  const [direction, setDirection] = useState<'up' | 'down'>('down')
-
-  const calculatePosition = useCallback(() => {
-    if (!triggerRef.current) return
-
-    const trigger = triggerRef.current
-    const rect = trigger.getBoundingClientRect()
-
-    // Find the closest scrollable parent (the modal container)
-    const scrollParent = findScrollParent(trigger)
-
-    if (scrollParent) {
-      const containerRect = scrollParent.getBoundingClientRect()
-      const spaceBelow = containerRect.bottom - rect.bottom
-      const spaceAbove = rect.top - containerRect.top
-
-      // Open upward if not enough space below but enough above
-      if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
-        setDirection('up')
-      } else if (spaceBelow >= dropdownHeight) {
-        setDirection('down')
-      } else {
-        // Not enough space either way - pick the bigger one
-        setDirection(spaceAbove > spaceBelow ? 'up' : 'down')
-      }
-    } else {
-      // No scrollable parent found - likely in fixed section at bottom of modal
-      // Always open upward in this case
-      setDirection('up')
-    }
-  }, [triggerRef, dropdownHeight])
+function PortalDropdownMenu({
+  isOpen,
+  triggerRef,
+  children,
+  className,
+  menuHeight = 240,
+  align = 'left',
+}: PortalDropdownMenuProps) {
+  const [position, setPosition] = useState<{
+    top?: number
+    bottom?: number
+    left?: number
+    right?: number
+  }>({})
+  const [opensUp, setOpensUp] = useState(false)
 
   useEffect(() => {
-    if (isOpen) {
-      calculatePosition()
-    }
-  }, [isOpen, calculatePosition])
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
 
-  return direction
+      const shouldOpenUp = spaceBelow < menuHeight && spaceAbove > spaceBelow
+
+      if (shouldOpenUp) {
+        setOpensUp(true)
+        setPosition({
+          bottom: window.innerHeight - rect.top + 4,
+          ...(align === 'right'
+            ? { right: window.innerWidth - rect.right }
+            : { left: rect.left }),
+        })
+      } else {
+        setOpensUp(false)
+        setPosition({
+          top: rect.bottom + 4,
+          ...(align === 'right'
+            ? { right: window.innerWidth - rect.right }
+            : { left: rect.left }),
+        })
+      }
+    }
+  }, [isOpen, triggerRef, menuHeight, align])
+
+  if (!isOpen) return null
+
+  return createPortal(
+    <div
+      style={{
+        position: 'fixed',
+        ...position,
+        zIndex: 9999,
+      }}
+      className={clsx(
+        "bg-slate-darker/95 backdrop-blur-xl",
+        "border border-slate-mid/60 rounded-xl",
+        "shadow-xl shadow-black/40",
+        opensUp
+          ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
+          : "animate-in fade-in slide-in-from-top-2 duration-150",
+        className
+      )}
+    >
+      {children}
+    </div>,
+    document.body
+  )
 }
 
 // =============================================================================
@@ -104,6 +118,18 @@ export interface EditParametersModalProps {
 }
 
 type ParamType = 'string' | 'number' | 'boolean'
+/**
+ * Available parameter categories.
+ *
+ * HOW TO ADD A NEW CATEGORY:
+ * 1. Add category key to this CategoryKey type
+ * 2. Add entry in PARAM_CATEGORIES with list of parameter keys
+ * 3. Add entry in CATEGORY_META with label, icon, and color
+ * 4. Add entry in CATEGORY_OPTIONS (for dropdown selector)
+ * 5. Add parameter definitions in PARAM_DEFINITIONS
+ *
+ * The system is fully dynamic - parameters are auto-categorized based on these definitions.
+ */
 type CategoryKey = 'generation' | 'resolution' | 'hires' | 'model' | 'controlnet' | 'inpainting' | 'batch' | 'advanced' | 'sdxl' | 'freeu' | 'ipadapter' | 'custom'
 
 interface ParamDefinition {
@@ -452,33 +478,35 @@ interface AddParamDropdownProps {
 
 function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const direction = useDropdownPosition(buttonRef, isOpen, 240)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const availableParams = PARAMS_BY_CATEGORY[category]?.filter(p => !existingKeys.has(p.key)) ?? []
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setIsOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [])
+  }, [isOpen])
 
   if (availableParams.length === 0) return null
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <button
         ref={buttonRef}
         type="button"
@@ -494,20 +522,14 @@ function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownPro
         Add
       </button>
 
-      {isOpen && (
-        <div
-          className={clsx(
-            "absolute right-0 z-[100]",
-            direction === 'up' ? "bottom-full mb-1.5" : "top-full mt-1.5",
-            "bg-slate-darker/95 backdrop-blur-xl",
-            "border border-slate-mid/60 rounded-xl",
-            "shadow-xl shadow-black/40",
-            "min-w-[220px] max-h-[240px] overflow-y-auto py-1.5",
-            direction === 'up'
-              ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
-              : "animate-in fade-in slide-in-from-top-2 duration-150"
-          )}
-        >
+      <PortalDropdownMenu
+        isOpen={isOpen}
+        triggerRef={buttonRef}
+        menuHeight={240}
+        align="right"
+        className="py-1.5 min-w-[220px] max-h-[240px] overflow-y-auto"
+      >
+        <div ref={menuRef}>
           {availableParams.map(p => (
             <button
               key={p.key}
@@ -529,7 +551,7 @@ function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownPro
             </button>
           ))}
         </div>
-      )}
+      </PortalDropdownMenu>
     </div>
   )
 }
@@ -541,6 +563,8 @@ function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownPro
 interface TypeSelectorProps {
   value: ParamType
   onChange: (value: ParamType) => void
+  /** Force dropdown to open upward (useful when at bottom of modal) */
+  forceUp?: boolean
 }
 
 const TYPE_OPTIONS: Array<{ value: ParamType; label: string }> = [
@@ -549,33 +573,35 @@ const TYPE_OPTIONS: Array<{ value: ParamType; label: string }> = [
   { value: 'boolean', label: 'Boolean' },
 ]
 
-function TypeSelector({ value, onChange }: TypeSelectorProps) {
+function TypeSelector({ value, onChange, forceUp: _forceUp = false }: TypeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const direction = useDropdownPosition(buttonRef, isOpen, 150)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setIsOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [])
+  }, [isOpen])
 
   const selectedOption = TYPE_OPTIONS.find(opt => opt.value === value)
 
   return (
-    <div className="relative min-w-[90px]" ref={dropdownRef}>
+    <div className="relative min-w-[90px]">
       <button
         ref={buttonRef}
         type="button"
@@ -593,24 +619,18 @@ function TypeSelector({ value, onChange }: TypeSelectorProps) {
         <span>{selectedOption?.label}</span>
         <ChevronDown className={clsx(
           "w-4 h-4 text-text-muted transition-transform duration-200",
-          isOpen && (direction === 'up' ? "rotate-180" : "")
+          isOpen && "rotate-180"
         )} />
       </button>
 
-      {isOpen && (
-        <div
-          className={clsx(
-            "absolute left-0 right-0 z-[100]",
-            direction === 'up' ? "bottom-full mb-1.5" : "top-full mt-1.5",
-            "bg-slate-darker/95 backdrop-blur-xl",
-            "border border-slate-mid/60 rounded-xl",
-            "shadow-xl shadow-black/40",
-            "py-1.5 overflow-hidden",
-            direction === 'up'
-              ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
-              : "animate-in fade-in slide-in-from-top-2 duration-150"
-          )}
-        >
+      <PortalDropdownMenu
+        isOpen={isOpen}
+        triggerRef={buttonRef}
+        menuHeight={150}
+        align="left"
+        className="py-1.5 min-w-[90px] overflow-hidden"
+      >
+        <div ref={menuRef}>
           {TYPE_OPTIONS.map(option => (
             <button
               key={option.value}
@@ -634,7 +654,7 @@ function TypeSelector({ value, onChange }: TypeSelectorProps) {
             </button>
           ))}
         </div>
-      )}
+      </PortalDropdownMenu>
     </div>
   )
 }
@@ -646,8 +666,18 @@ function TypeSelector({ value, onChange }: TypeSelectorProps) {
 interface CategorySelectorProps {
   value: CategoryKey
   onChange: (value: CategoryKey) => void
+  /** Force dropdown to open upward (useful when at bottom of modal) */
+  forceUp?: boolean
 }
 
+/**
+ * Available parameter categories.
+ * To add a new category:
+ * 1. Add it to CategoryKey type above
+ * 2. Add entry here with value, label, and color
+ * 3. Add corresponding entry in CATEGORY_META
+ * 4. Add parameter definitions in PARAM_DEFINITIONS
+ */
 const CATEGORY_OPTIONS: Array<{ value: CategoryKey; label: string; color: string }> = [
   { value: 'generation', label: 'Generation', color: 'text-synapse' },
   { value: 'resolution', label: 'Resolution', color: 'text-blue-400' },
@@ -663,33 +693,35 @@ const CATEGORY_OPTIONS: Array<{ value: CategoryKey; label: string; color: string
   { value: 'custom', label: 'Custom', color: 'text-purple-400' },
 ]
 
-function CategorySelector({ value, onChange }: CategorySelectorProps) {
+function CategorySelector({ value, onChange, forceUp: _forceUp = false }: CategorySelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const direction = useDropdownPosition(buttonRef, isOpen, 280)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setIsOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [])
+  }, [isOpen])
 
   const selectedOption = CATEGORY_OPTIONS.find(opt => opt.value === value)
 
   return (
-    <div className="relative min-w-[110px]" ref={dropdownRef}>
+    <div className="relative min-w-[110px]">
       <button
         ref={buttonRef}
         type="button"
@@ -707,24 +739,18 @@ function CategorySelector({ value, onChange }: CategorySelectorProps) {
         <span className={selectedOption?.color}>{selectedOption?.label}</span>
         <ChevronDown className={clsx(
           "w-4 h-4 text-text-muted transition-transform duration-200",
-          isOpen && (direction === 'up' ? "rotate-180" : "")
+          isOpen && "rotate-180"
         )} />
       </button>
 
-      {isOpen && (
-        <div
-          className={clsx(
-            "absolute left-0 z-[100]",
-            direction === 'up' ? "bottom-full mb-1.5" : "top-full mt-1.5",
-            "bg-slate-darker/95 backdrop-blur-xl",
-            "border border-slate-mid/60 rounded-xl",
-            "shadow-xl shadow-black/40",
-            "py-1.5 min-w-[150px] max-h-[280px] overflow-y-auto",
-            direction === 'up'
-              ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
-              : "animate-in fade-in slide-in-from-top-2 duration-150"
-          )}
-        >
+      <PortalDropdownMenu
+        isOpen={isOpen}
+        triggerRef={buttonRef}
+        menuHeight={280}
+        align="left"
+        className="py-1.5 min-w-[150px] max-h-[280px] overflow-y-auto"
+      >
+        <div ref={menuRef}>
           {CATEGORY_OPTIONS.map(option => (
             <button
               key={option.value}
@@ -748,7 +774,7 @@ function CategorySelector({ value, onChange }: CategorySelectorProps) {
             </button>
           ))}
         </div>
-      )}
+      </PortalDropdownMenu>
     </div>
   )
 }
@@ -764,34 +790,36 @@ interface AddSectionDropdownProps {
 
 function AddSectionDropdown({ visibleSections, onAdd }: AddSectionDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
-  const direction = useDropdownPosition(buttonRef, isOpen, 320)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   // Available sections = all sections not currently visible
   const availableSections = CATEGORY_OPTIONS.filter(opt => !visibleSections.has(opt.value))
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node) &&
+          buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
         setIsOpen(false)
       }
     }
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setIsOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleEscape)
     }
-  }, [])
+  }, [isOpen])
 
   if (availableSections.length === 0) return null
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <button
         ref={buttonRef}
         type="button"
@@ -808,20 +836,14 @@ function AddSectionDropdown({ visibleSections, onAdd }: AddSectionDropdownProps)
         <span className="text-sm font-medium">Add Section</span>
       </button>
 
-      {isOpen && (
-        <div
-          className={clsx(
-            "absolute left-0 z-[100]",
-            direction === 'up' ? "bottom-full mb-1.5" : "top-full mt-1.5",
-            "bg-slate-darker/95 backdrop-blur-xl",
-            "border border-slate-mid/60 rounded-xl",
-            "shadow-xl shadow-black/40",
-            "py-1.5 min-w-[200px] max-h-[320px] overflow-y-auto",
-            direction === 'up'
-              ? "animate-in fade-in slide-in-from-bottom-2 duration-150"
-              : "animate-in fade-in slide-in-from-top-2 duration-150"
-          )}
-        >
+      <PortalDropdownMenu
+        isOpen={isOpen}
+        triggerRef={buttonRef}
+        menuHeight={320}
+        align="left"
+        className="py-1.5 min-w-[200px] max-h-[320px] overflow-y-auto"
+      >
+        <div ref={menuRef}>
           {availableSections.map(option => {
             const meta = CATEGORY_META[option.value]
             const Icon = meta.icon
@@ -845,7 +867,7 @@ function AddSectionDropdown({ visibleSections, onAdd }: AddSectionDropdownProps)
             )
           })}
         </div>
-      )}
+      </PortalDropdownMenu>
     </div>
   )
 }
@@ -1105,9 +1127,9 @@ export function EditParametersModal({
     >
       <div
         className={clsx(
-          "bg-slate-dark rounded-2xl p-6 max-w-3xl w-full",
+          "bg-slate-dark rounded-2xl p-6 max-w-4xl w-full",
           "border border-slate-mid",
-          "max-h-[90vh] overflow-hidden flex flex-col",
+          "max-h-[90vh] flex flex-col",
           "shadow-2xl",
           ANIMATION_PRESETS.scaleIn
         )}
@@ -1131,7 +1153,7 @@ export function EditParametersModal({
         </div>
 
         {/* Parameters List - Categorized */}
-        <div className="flex-1 overflow-y-auto mb-4 min-h-[200px] pr-2">
+        <div className="flex-1 overflow-y-auto mb-4 min-h-[200px]">
           {!hasAnyParams && visibleSections.size === 0 ? (
             <div className="text-center py-8">
               <Sliders className="w-10 h-10 mx-auto mb-3 text-text-muted/50" />
@@ -1178,7 +1200,7 @@ export function EditParametersModal({
             <Settings2 className="w-3.5 h-3.5 text-purple-400" />
             Add custom parameter (for unlisted parameters):
           </p>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex gap-2">
             <input
               type="text"
               placeholder="Parameter name"
@@ -1213,16 +1235,18 @@ export function EditParametersModal({
             <TypeSelector
               value={newType}
               onChange={setNewType}
+              forceUp
             />
             <CategorySelector
               value={newCategory}
               onChange={setNewCategory}
+              forceUp
             />
             <button
               onClick={handleAddCustomParam}
               disabled={!newKey.trim()}
               className={clsx(
-                "px-4 py-2.5 rounded-lg font-semibold whitespace-nowrap",
+                "px-6 py-2.5 rounded-lg font-semibold whitespace-nowrap",
                 "bg-synapse hover:bg-synapse/80 text-obsidian",
                 "disabled:bg-slate-mid disabled:text-text-muted",
                 "transition-colors duration-200"

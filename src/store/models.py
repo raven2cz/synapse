@@ -463,7 +463,12 @@ class GenerationParameters(BaseModel):
 
     All fields are Optional to avoid "ghost" values in JSON serialization.
     Uses custom serializer to exclude None values automatically.
+
+    IMPORTANT: extra="allow" permits any additional parameters from the frontend
+    (e.g., controlnet, inpainting, batch, SDXL, FreeU, IP-Adapter settings).
     """
+    model_config = ConfigDict(extra="allow")
+
     sampler: Optional[str] = None
     scheduler: Optional[str] = None
     steps: Optional[int] = None
@@ -473,16 +478,28 @@ class GenerationParameters(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     seed: Optional[int] = None
+    # LoRA strength
+    strength: Optional[float] = None
+    eta: Optional[float] = None
     # HiRes parameters - all Optional to avoid ghost values
     hires_fix: Optional[bool] = None
     hires_upscaler: Optional[str] = None
     hires_steps: Optional[int] = None
     hires_denoise: Optional[float] = None
+    hires_scale: Optional[float] = None
+    hires_width: Optional[int] = None
+    hires_height: Optional[int] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler) -> dict:
-        """Custom serializer that excludes None values to avoid ghost parameters."""
+        """Custom serializer that excludes None values to avoid ghost parameters.
+
+        Includes both defined fields and extra fields (from model_config extra="allow").
+        """
         d = handler(self)
+        # Include extra fields that were set dynamically
+        if hasattr(self, '__pydantic_extra__') and self.__pydantic_extra__:
+            d.update(self.__pydantic_extra__)
         return {k: v for k, v in d.items() if v is not None}
 
 
