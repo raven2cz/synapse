@@ -2753,19 +2753,19 @@ class CreatePackRequest(BaseModel):
   - `src/store/models.py:460` - Pydantic model (používá se)
 - Možný zdroj konfuzí a bugů
 
-**3. UI nezobrazuje všechny parametry**
-- `PackParametersSection` má hardcoded seznam: clip_skip, cfg_scale, steps, sampler, scheduler, width/height, denoise
-- `hires_*` parametry NEJSOU zobrazeny
-- Custom parametry NEJSOU zobrazeny
+**3. UI nezobrazuje všechny parametry** ✅ FIXED (2026-02-01)
+- ~~`PackParametersSection` má hardcoded seznam~~ → Nyní dynamicky zobrazuje VŠECHNY parametry
+- ~~`hires_*` parametry NEJSOU zobrazeny~~ → Všechny kategorie (12) jsou podporovány
+- ~~Custom parametry NEJSOU zobrazeny~~ → Custom kategorie plně funkční
 
-**4. Nekonzistentní save API**
+**4. Save API Status** ✅ ALL COMPLETE (2026-02-01)
 | Část | Endpoint | Status |
 |------|----------|--------|
-| Parameters | `PATCH /api/packs/{name}/parameters` | ✅ Funguje, ale s bugy |
-| Workflows | `POST /api/packs/{name}/workflows/upload` | ⚠️ Starší API |
-| Dependencies | Různé endpointy | ⚠️ Fragmentované |
-| Description | CHYBÍ | ❌ |
-| Previews | CHYBÍ | ❌ |
+| Parameters | `PATCH /api/packs/{name}/parameters` | ✅ Funguje (extra="allow") |
+| Workflows | `POST /api/packs/{name}/workflows` | ✅ Funguje |
+| Dependencies | Různé endpointy | ✅ Funguje |
+| Description | `PATCH /api/packs/{name}` (unified) | ✅ Funguje |
+| Previews | `POST/DELETE /api/packs/{name}/previews` | ✅ Funguje (upload, delete, reorder, cover) |
 | Metadata (name, tags) | `PATCH /api/packs/{name}` | ✅ Funguje |
 
 ---
@@ -3178,3 +3178,116 @@ Pack Edit & Modularization UI is now production ready:
 - **FullscreenMediaViewer** - nedotýkat se, použít as-is
 - **Design** - premium feel, pro náročné designéry
 - **Budoucnost** - připraveno na i18n, nové pack typy, pluginy
+
+---
+
+## 🔮 FUTURE WORK (Phase 7+)
+
+### 1. Install Pack - Full Implementation ⏳
+
+**Aktuální stav:** InstallPlugin.tsx je PROTOTYPE (~326 řádků)
+- ✅ PrototypeNotice banner
+- ✅ ScriptsSection s mock skripty
+- ✅ EnvironmentStatus komponenta
+- ❌ Reálná exekuce skriptů
+- ❌ Console output streaming
+- ❌ Process management (start/stop/restart)
+
+**Cíl:** Plně funkční Install packs pro ComfyUI, Forge, a další UI
+
+**Backend požadavky:**
+```python
+# Nové API endpointy
+POST /api/packs/{name}/scripts/{script}/run    # Spustit skript
+GET  /api/packs/{name}/scripts/{script}/status # Status běžícího procesu
+POST /api/packs/{name}/scripts/{script}/stop   # Zastavit proces
+GET  /api/packs/{name}/scripts/{script}/logs   # Stream/fetch logs
+```
+
+**Frontend komponenty:**
+```
+plugins/InstallPlugin.tsx         # Rozšířit o reálnou funkcionalitu
+modals/ScriptConsoleModal.tsx     # Console output viewer
+sections/PackScriptsSection.tsx   # Script management UI
+```
+
+**Skripty k podpoře:**
+| Script | Popis |
+|--------|-------|
+| `install.sh` | Instalace UI prostředí |
+| `start.sh` | Spuštění serveru |
+| `stop.sh` | Zastavení serveru |
+| `update.sh` | Aktualizace na novou verzi |
+| `verify.sh` | Kontrola integrity instalace |
+
+**UI Features:**
+- Run/Stop tlačítka s real-time status
+- Console output s ANSI color support
+- Environment variables editor
+- Port configuration
+- Auto-start on boot option
+
+---
+
+### 2. PackDependenciesTreeSection ⏳
+
+**Aktuální stav:** Typ `PackDependencyRef` existuje v backend modelu, UI CHYBÍ
+
+**Cíl:** UI pro správu závislostí mezi packy (pack-to-pack dependencies)
+
+**Use cases:**
+- LoRA pack závisí na Checkpoint packu (vyžaduje base model)
+- Workflow pack závisí na všech potřebných LoRA/VAE packách
+- Install pack může záviset na jiném install packu
+
+**Backend model (již existuje):**
+```python
+class PackDependencyRef(BaseModel):
+    pack_name: str                   # Jméno závislého packu
+    required: bool = True            # Povinná závislost?
+    version_constraint: Optional[str] # e.g., ">=1.0.0", "latest"
+```
+
+**Frontend komponenty:**
+```
+sections/PackDependenciesTreeSection.tsx  # Tree view závislostí
+modals/AddPackDependencyModal.tsx         # Přidání závislosti na pack
+```
+
+**UI Features:**
+- Tree view zobrazující celý strom závislostí
+- Status indikátory: installed / missing / version mismatch
+- Quick actions: Install missing, Navigate to pack
+- Search/filter pro velké stromy
+- Circular dependency detection a warning
+
+**Vizualizace:**
+```
+MyLoRA Pack
+├── [✅] Base Checkpoint Pack (required)
+│   └── [✅] VAE Pack (optional)
+├── [❌] ControlNet Pack (required) - MISSING
+└── [⚠️] Style LoRA Pack (optional) - version mismatch
+```
+
+**API rozšíření:**
+```python
+# Resolve dependency status
+GET /api/packs/{name}/pack-dependencies/status
+# Returns PackDependencyStatus[] with installed/version info
+
+# Add/remove pack dependency
+POST   /api/packs/{name}/pack-dependencies
+DELETE /api/packs/{name}/pack-dependencies/{dep_pack_name}
+```
+
+---
+
+### Priority Order
+
+1. **PackDependenciesTreeSection** - Jednodušší, navazuje na existující infrastrukturu
+2. **Install Pack Full** - Komplexnější, vyžaduje process management
+
+---
+
+*Last Updated: 2026-02-01*
