@@ -20,7 +20,6 @@ import { ArrowLeft } from 'lucide-react'
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { BreathingOrb } from '@/components/ui/BreathingOrb'
 import { Button } from '@/components/ui/Button'
-import { toast } from '@/stores/toastStore'
 
 // Modular pack-detail components
 import {
@@ -517,15 +516,44 @@ function PackDetailPageContent() {
       <EditPreviewsModal
         isOpen={modals.editPreviews}
         previews={pack.previews}
-        coverUrl={pack.previews[0]?.url}
-        onSave={(data) => {
-          // TODO: Implement full preview save API (requires backend PATCH support)
-          console.log('[PackDetailPage] Save previews:', data)
-          toast.info('Preview editing will be available soon')
-          closeModal('editPreviews')
+        coverUrl={pack.cover_url}
+        onSave={async (data) => {
+          try {
+            // Get deleted filenames from original pack
+            const deletedFilenames = data.removedIndices
+              ?.map(index => pack.previews[index]?.filename)
+              .filter(Boolean) as string[] | undefined
+
+            // Get new order (only existing files, not blob URLs)
+            const order = data.previews
+              .filter(p => !p.url?.startsWith('blob:'))
+              .map(p => p.filename)
+
+            // Get cover filename if changed
+            let coverFilename: string | undefined
+            const packCoverUrl = pack.cover_url
+            if (data.coverUrl && data.coverUrl !== packCoverUrl) {
+              const coverPreview = data.previews.find(p => p.url === data.coverUrl)
+              if (coverPreview?.filename && !coverPreview.url?.startsWith('blob:')) {
+                coverFilename = coverPreview.filename
+              }
+            }
+
+            // Single batch update - atomic, no race conditions
+            await packData.batchUpdatePreviews({
+              files: data.addedFiles,
+              order,
+              coverFilename,
+              deleted: deletedFilenames,
+            })
+
+            closeModal('editPreviews')
+          } catch (error) {
+            console.error('[PackDetailPage] Error saving previews:', error)
+          }
         }}
         onClose={() => closeModal('editPreviews')}
-        isSaving={false}
+        isSaving={packData.isBatchUpdatingPreviews}
       />
 
       {/* Description Editor Modal */}
@@ -533,13 +561,11 @@ function PackDetailPageContent() {
         isOpen={modals.markdownEditor}
         content={pack.description || ''}
         onSave={(content) => {
-          // TODO: Implement description save API (requires backend PATCH support)
-          console.log('[PackDetailPage] Save description:', content)
-          toast.info('Description editing will be available soon')
+          packData.updateDescription(content)
           closeModal('markdownEditor')
         }}
         onClose={() => closeModal('markdownEditor')}
-        isSaving={false}
+        isSaving={packData.isUpdatingDescription}
       />
 
       {/* Pull Confirm Dialog */}

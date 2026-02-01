@@ -205,6 +205,12 @@ export interface PackDetail {
   model_info?: ModelInfoResponse
 
   /**
+   * Cover URL in same format as preview URLs (for frontend comparison)
+   * Transformed by API to use /previews/ format
+   */
+  cover_url?: string
+
+  /**
    * Raw pack data from backend (Pack.model_dump())
    * Contains full source info, pack_type, pack_category, etc.
    */

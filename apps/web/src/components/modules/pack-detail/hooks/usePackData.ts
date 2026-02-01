@@ -92,6 +92,36 @@ export interface UsePackDataReturn {
   pushPack: (cleanup: boolean) => void
   isPushingPack: boolean
 
+  // Preview & Description Mutations (Phase 6)
+  updateDescription: (description: string) => void
+  isUpdatingDescription: boolean
+
+  // Batch update - preferred method for EditPreviewsModal
+  batchUpdatePreviews: (data: {
+    files?: File[]
+    order?: string[]
+    coverFilename?: string
+    deleted?: string[]
+  }) => Promise<unknown>
+  isBatchUpdatingPreviews: boolean
+
+  // Individual mutations (kept for backwards compatibility)
+  uploadPreview: (data: { file: File; position?: number; nsfw?: boolean }) => void
+  uploadPreviewAsync: (data: { file: File; position?: number; nsfw?: boolean }) => Promise<unknown>
+  isUploadingPreview: boolean
+
+  deletePreview: (filename: string) => void
+  deletePreviewAsync: (filename: string) => Promise<unknown>
+  isDeletingPreview: boolean
+
+  reorderPreviews: (order: string[]) => void
+  reorderPreviewsAsync: (order: string[]) => Promise<unknown>
+  isReorderingPreviews: boolean
+
+  setCoverPreview: (filename: string) => void
+  setCoverPreviewAsync: (filename: string) => Promise<unknown>
+  isSettingCover: boolean
+
   // Refetch
   refetch: () => void
   refetchBackupStatus: () => void
@@ -522,6 +552,174 @@ export function usePackData({
   })
 
   // =========================================================================
+  // Preview & Description Mutations (Phase 6)
+  // =========================================================================
+
+  const updateDescriptionMutation = useMutation({
+    mutationFn: async (description: string) => {
+      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to update description: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      toast.success('Description updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update description: ${error.message}`)
+    },
+  })
+
+  const batchUpdatePreviewsMutation = useMutation({
+    mutationFn: async (data: {
+      files?: File[]
+      order?: string[]
+      coverFilename?: string
+      deleted?: string[]
+    }) => {
+      const formData = new FormData()
+
+      // Add files
+      if (data.files?.length) {
+        for (const file of data.files) {
+          formData.append('files', file)
+        }
+      }
+
+      // Add order as JSON
+      if (data.order?.length) {
+        formData.append('order', JSON.stringify(data.order))
+      }
+
+      // Add cover filename
+      if (data.coverFilename) {
+        formData.append('cover_filename', data.coverFilename)
+      }
+
+      // Add deleted as JSON
+      if (data.deleted?.length) {
+        formData.append('deleted', JSON.stringify(data.deleted))
+      }
+
+      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/previews`, {
+        method: 'PATCH',
+        body: formData,
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to update previews: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success('Previews updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update previews: ${error.message}`)
+    },
+  })
+
+  const uploadPreviewMutation = useMutation({
+    mutationFn: async (data: { file: File; position?: number; nsfw?: boolean }) => {
+      const formData = new FormData()
+      formData.append('file', data.file)
+      formData.append('position', String(data.position ?? -1))
+      formData.append('nsfw', String(data.nsfw ?? false))
+
+      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/previews/upload`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to upload preview: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      toast.success('Preview uploaded')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to upload preview: ${error.message}`)
+    },
+  })
+
+  const deletePreviewMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/previews/${encodeURIComponent(filename)}`,
+        { method: 'DELETE' }
+      )
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to delete preview: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      toast.success('Preview deleted')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete preview: ${error.message}`)
+    },
+  })
+
+  const reorderPreviewsMutation = useMutation({
+    mutationFn: async (order: string[]) => {
+      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/previews/order`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order }),
+      })
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to reorder previews: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      toast.success('Preview order updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to reorder previews: ${error.message}`)
+    },
+  })
+
+  const setCoverPreviewMutation = useMutation({
+    mutationFn: async (filename: string) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/previews/${encodeURIComponent(filename)}/cover`,
+        { method: 'PATCH' }
+      )
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to set cover: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success('Cover image updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to set cover: ${error.message}`)
+    },
+  })
+
+  // =========================================================================
   // Return
   // =========================================================================
 
@@ -576,6 +774,29 @@ export function usePackData({
 
     pushPack: (cleanup) => pushPackMutation.mutate(cleanup),
     isPushingPack: pushPackMutation.isPending,
+
+    // Preview & Description (Phase 6)
+    updateDescription: (description) => updateDescriptionMutation.mutate(description),
+    isUpdatingDescription: updateDescriptionMutation.isPending,
+
+    batchUpdatePreviews: (data) => batchUpdatePreviewsMutation.mutateAsync(data),
+    isBatchUpdatingPreviews: batchUpdatePreviewsMutation.isPending,
+
+    uploadPreview: (data) => uploadPreviewMutation.mutate(data),
+    uploadPreviewAsync: (data) => uploadPreviewMutation.mutateAsync(data),
+    isUploadingPreview: uploadPreviewMutation.isPending,
+
+    deletePreview: (filename) => deletePreviewMutation.mutate(filename),
+    deletePreviewAsync: (filename) => deletePreviewMutation.mutateAsync(filename),
+    isDeletingPreview: deletePreviewMutation.isPending,
+
+    reorderPreviews: (order) => reorderPreviewsMutation.mutate(order),
+    reorderPreviewsAsync: (order) => reorderPreviewsMutation.mutateAsync(order),
+    isReorderingPreviews: reorderPreviewsMutation.isPending,
+
+    setCoverPreview: (filename) => setCoverPreviewMutation.mutate(filename),
+    setCoverPreviewAsync: (filename) => setCoverPreviewMutation.mutateAsync(filename),
+    isSettingCover: setCoverPreviewMutation.isPending,
 
     // Refetch
     refetch: () => refetch(),

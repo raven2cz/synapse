@@ -1601,6 +1601,15 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "source_url": pack.source.url,
             }
         
+        # Transform cover_url to match preview URL format (/previews/ instead of /packs/)
+        cover_url = None
+        if pack.cover_url:
+            # Find matching preview and use its URL (which uses /previews/ format)
+            for p in previews:
+                if pack.cover_url and p["filename"] in pack.cover_url:
+                    cover_url = p["url"]
+                    break
+
         return {
             "name": pack.name,
             "version": pack.version or "1.0.0",
@@ -1621,6 +1630,8 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
             "docs": {},
             "parameters": parameters,
             "model_info": model_info,
+            # Cover URL in same format as preview URLs (for frontend comparison)
+            "cover_url": cover_url,
             # Raw data for debugging
             "pack": pack.model_dump(),
             "lock": lock.model_dump() if lock else None,
@@ -2606,9 +2617,20 @@ def repair_pack_urls(
 
 
 class UpdatePackRequest(BaseModel):
-    """Request to update pack metadata."""
+    """Request to update pack metadata.
+
+    All fields are optional - only provided fields are updated.
+    Supports partial updates for description, tags, cover_url, etc.
+    """
     user_tags: Optional[List[str]] = None
     name: Optional[str] = None  # For rename
+    description: Optional[str] = None  # HTML description
+    cover_url: Optional[str] = None  # Cover image URL
+    author: Optional[str] = None
+    version: Optional[str] = None
+    tags: Optional[List[str]] = None
+    trigger_words: Optional[List[str]] = None
+    base_model: Optional[str] = None
 
 
 class CreatePackRequest(BaseModel):
@@ -2710,42 +2732,87 @@ def update_pack(
     request: UpdatePackRequest = Body(...),
     store=Depends(require_initialized),
 ):
-    """Update pack metadata (user tags, rename, etc.)."""
+    """
+    Update pack metadata.
+
+    Supports partial updates - only provided fields are updated.
+    Handles: description, user_tags, tags, cover_url, author, version, etc.
+    Also supports pack renaming via the 'name' field.
+    """
     try:
         pack = store.get_pack(pack_name)
         updated_name = pack_name
-        
+        updated_fields = []
+
+        # Update description (HTML content)
+        if request.description is not None:
+            pack.description = request.description
+            updated_fields.append("description")
+
         # Update user_tags
         if request.user_tags is not None:
             pack.user_tags = request.user_tags
-        
-        # Handle rename
+            updated_fields.append("user_tags")
+
+        # Update tags
+        if request.tags is not None:
+            pack.tags = request.tags
+            updated_fields.append("tags")
+
+        # Update cover_url
+        if request.cover_url is not None:
+            pack.cover_url = request.cover_url
+            updated_fields.append("cover_url")
+
+        # Update author
+        if request.author is not None:
+            pack.author = request.author
+            updated_fields.append("author")
+
+        # Update version
+        if request.version is not None:
+            pack.version = request.version
+            updated_fields.append("version")
+
+        # Update trigger_words
+        if request.trigger_words is not None:
+            pack.trigger_words = request.trigger_words
+            updated_fields.append("trigger_words")
+
+        # Update base_model
+        if request.base_model is not None:
+            pack.base_model = request.base_model
+            updated_fields.append("base_model")
+
+        # Handle rename (must be last to avoid path issues)
         if request.name and request.name != pack_name:
             new_name = request.name
             # Check if new name exists
             try:
                 store.get_pack(new_name)
                 raise HTTPException(status_code=400, detail=f"Pack with name '{new_name}' already exists")
-            except:
-                pass
-            
+            except PackNotFoundError:
+                pass  # Good - doesn't exist
+
             # Rename pack directory
             old_path = store.layout.pack_path(pack_name)
             new_path = old_path.parent / new_name
             if old_path.exists():
                 import shutil
                 shutil.move(str(old_path), str(new_path))
-            
+
             pack.name = new_name
             updated_name = new_name
-        
+            updated_fields.append("name")
+
         store.layout.save_pack(pack)
-        
+
+        logger.info(f"[update_pack] Updated {pack_name}: {updated_fields}")
+
         return {
             "success": True,
-            "updated": updated_name,
-            "user_tags": pack.user_tags,
-            "name": pack.name
+            "name": pack.name,
+            "updated_fields": updated_fields,
         }
     except HTTPException:
         raise
@@ -2838,6 +2905,374 @@ def update_pack_parameters(
         return {"updated": True, "parameters": existing}
     except Exception as e:
         logger.error(f"[update-parameters] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# Preview Endpoints
+# =============================================================================
+
+
+class PreviewOrderRequest(BaseModel):
+    """Request to reorder previews."""
+    order: List[str]  # List of filenames in new order
+
+
+@v2_packs_router.patch("/{pack_name}/previews", response_model=Dict[str, Any])
+def batch_update_previews(
+    pack_name: str,
+    files: List[UploadFile] = File(default=[]),
+    order: Optional[str] = Form(None),  # JSON array of filenames
+    cover_filename: Optional[str] = Form(None),
+    deleted: Optional[str] = Form(None),  # JSON array of filenames to delete
+    store=Depends(require_initialized),
+):
+    """
+    Batch update previews in a single transaction.
+
+    Handles upload, delete, reorder, and cover change atomically.
+    This prevents race conditions from multiple parallel requests.
+
+    Form fields:
+    - files: New files to upload (multipart)
+    - order: JSON array of filenames in desired order
+    - cover_filename: Filename to set as cover
+    - deleted: JSON array of filenames to delete
+    """
+    import json
+    from .models import PreviewInfo
+
+    try:
+        pack = store.get_pack(pack_name)
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        previews_dir.mkdir(parents=True, exist_ok=True)
+
+        results = {
+            "uploaded": [],
+            "deleted": [],
+            "reordered": False,
+            "cover_changed": False,
+        }
+
+        # 1. Delete specified previews
+        if deleted:
+            deleted_list = json.loads(deleted)
+            for filename in deleted_list:
+                # Remove from pack.previews
+                pack.previews = [p for p in pack.previews if p.filename != filename]
+                # Delete file
+                file_path = previews_dir / filename
+                if file_path.exists():
+                    file_path.unlink()
+                results["deleted"].append(filename)
+                logger.info(f"[batch_update_previews] Deleted: {filename}")
+
+        # 2. Upload new files
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm'}
+        for file in files:
+            ext = Path(file.filename).suffix.lower()
+            if ext not in allowed_extensions:
+                logger.warning(f"[batch_update_previews] Skipping unsupported file: {file.filename}")
+                continue
+
+            media_type = 'video' if ext in {'.mp4', '.webm'} else 'image'
+            dest_path = previews_dir / file.filename
+            content = file.file.read()
+            dest_path.write_bytes(content)
+
+            preview = PreviewInfo(
+                filename=file.filename,
+                url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+                media_type=media_type,
+                nsfw=False,
+            )
+            pack.previews.append(preview)
+            results["uploaded"].append(file.filename)
+            logger.info(f"[batch_update_previews] Uploaded: {file.filename}")
+
+        # 3. Reorder previews
+        if order:
+            order_list = json.loads(order)
+            preview_map = {p.filename: p for p in pack.previews}
+            new_previews = []
+
+            # Add in specified order
+            for filename in order_list:
+                if filename in preview_map:
+                    new_previews.append(preview_map.pop(filename))
+
+            # Append any remaining
+            new_previews.extend(preview_map.values())
+            pack.previews = new_previews
+            results["reordered"] = True
+            logger.info(f"[batch_update_previews] Reordered {len(new_previews)} previews")
+
+        # 4. Set cover
+        if cover_filename:
+            for p in pack.previews:
+                if p.filename == cover_filename:
+                    pack.cover_url = p.url
+                    results["cover_changed"] = True
+                    logger.info(f"[batch_update_previews] Set cover: {cover_filename}")
+                    break
+
+        # Single atomic save
+        store.layout.save_pack(pack)
+
+        return {
+            "success": True,
+            "pack_name": pack_name,
+            **results,
+            "total_previews": len(pack.previews),
+        }
+    except Exception as e:
+        logger.error(f"[batch_update_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.post("/{pack_name}/previews/upload", response_model=Dict[str, Any])
+def upload_preview(
+    pack_name: str,
+    file: UploadFile = File(...),
+    position: int = Form(-1),  # -1 = append at end
+    nsfw: bool = Form(False),
+    set_as_cover: bool = Form(False),
+    store=Depends(require_initialized),
+):
+    """
+    Upload a preview image or video to a pack.
+
+    Supports jpg, png, gif, webp, mp4, webm.
+    Position -1 appends at end, 0 inserts at beginning.
+    """
+    from .models import PreviewInfo
+
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Validate file type
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm'}
+        ext = Path(file.filename).suffix.lower()
+        if ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Allowed: {', '.join(allowed_extensions)}"
+            )
+
+        # Determine media type
+        media_type = 'video' if ext in {'.mp4', '.webm'} else 'image'
+
+        # Save file to previews directory
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        previews_dir.mkdir(parents=True, exist_ok=True)
+
+        dest_path = previews_dir / file.filename
+        content = file.file.read()
+        dest_path.write_bytes(content)
+
+        # Create preview info
+        preview = PreviewInfo(
+            filename=file.filename,
+            url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+            media_type=media_type,
+            nsfw=nsfw,
+        )
+
+        # Insert at position
+        if position < 0 or position >= len(pack.previews):
+            pack.previews.append(preview)
+        else:
+            pack.previews.insert(position, preview)
+
+        # Set as cover if requested
+        if set_as_cover:
+            pack.cover_url = preview.url
+
+        store.layout.save_pack(pack)
+
+        logger.info(f"[upload_preview] Added {file.filename} to {pack_name}")
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "media_type": media_type,
+            "position": position if position >= 0 else len(pack.previews) - 1,
+            "is_cover": set_as_cover,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[upload_preview] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.get("/{pack_name}/previews", response_model=List[Dict[str, Any]])
+def list_pack_previews(
+    pack_name: str,
+    store=Depends(require_initialized),
+):
+    """List all previews for a pack with metadata."""
+    try:
+        pack = store.get_pack(pack_name)
+        previews = []
+
+        for i, preview in enumerate(pack.previews):
+            is_cover = (
+                pack.cover_url == preview.url if pack.cover_url
+                else i == 0  # First preview is default cover
+            )
+            previews.append({
+                "filename": preview.filename,
+                "url": preview.url,
+                "media_type": preview.media_type,
+                "width": preview.width,
+                "height": preview.height,
+                "nsfw": preview.nsfw,
+                "is_cover": is_cover,
+                "meta": preview.meta,
+                "duration": preview.duration,
+                "has_audio": preview.has_audio,
+                "thumbnail_url": preview.thumbnail_url,
+            })
+
+        return previews
+    except Exception as e:
+        logger.error(f"[list_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.patch("/{pack_name}/previews/order", response_model=Dict[str, Any])
+def reorder_previews(
+    pack_name: str,
+    request: PreviewOrderRequest,
+    store=Depends(require_initialized),
+):
+    """
+    Reorder previews for a pack.
+
+    The order list should contain filenames in the desired order.
+    Filenames not in the list will be appended at the end.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Create a map of filename -> preview
+        preview_map = {p.filename: p for p in pack.previews}
+
+        # Build new order
+        new_previews = []
+        for filename in request.order:
+            if filename in preview_map:
+                new_previews.append(preview_map.pop(filename))
+
+        # Append any remaining previews not in the order
+        new_previews.extend(preview_map.values())
+
+        pack.previews = new_previews
+        store.layout.save_pack(pack)
+
+        logger.info(f"[reorder_previews] Reordered {len(new_previews)} previews for {pack_name}")
+
+        return {
+            "success": True,
+            "count": len(new_previews),
+            "order": [p.filename for p in new_previews],
+        }
+    except Exception as e:
+        logger.error(f"[reorder_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.patch("/{pack_name}/previews/{filename}/cover", response_model=Dict[str, Any])
+def set_cover_preview(
+    pack_name: str,
+    filename: str,
+    store=Depends(require_initialized),
+):
+    """Set a specific preview as the pack cover image."""
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Find the preview
+        preview = None
+        for p in pack.previews:
+            if p.filename == filename:
+                preview = p
+                break
+
+        if not preview:
+            raise HTTPException(status_code=404, detail=f"Preview not found: {filename}")
+
+        # Set cover_url to the preview's URL
+        pack.cover_url = preview.url
+        store.layout.save_pack(pack)
+
+        logger.info(f"[set_cover] Set cover for {pack_name}: {filename}")
+
+        return {
+            "success": True,
+            "cover_url": pack.cover_url,
+            "filename": filename,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[set_cover] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.delete("/{pack_name}/previews/{filename}", response_model=Dict[str, Any])
+def delete_preview(
+    pack_name: str,
+    filename: str,
+    store=Depends(require_initialized),
+):
+    """
+    Delete a preview from a pack.
+
+    Removes both the file and the entry from pack.json.
+    If this was the cover, cover_url will be cleared.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Find and remove the preview from the list
+        original_count = len(pack.previews)
+        removed_preview = None
+        for p in pack.previews:
+            if p.filename == filename:
+                removed_preview = p
+                break
+
+        if not removed_preview:
+            raise HTTPException(status_code=404, detail=f"Preview not found: {filename}")
+
+        pack.previews = [p for p in pack.previews if p.filename != filename]
+
+        # Clear cover_url if this was the cover
+        if pack.cover_url and removed_preview.url == pack.cover_url:
+            pack.cover_url = None
+
+        # Delete the file if it exists locally
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        preview_file = previews_dir / filename
+        if preview_file.exists():
+            preview_file.unlink()
+            logger.info(f"[delete_preview] Deleted file: {preview_file}")
+
+        store.layout.save_pack(pack)
+
+        logger.info(f"[delete_preview] Removed preview {filename} from {pack_name}")
+
+        return {
+            "success": True,
+            "deleted": filename,
+            "remaining_count": len(pack.previews),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[delete_preview] Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

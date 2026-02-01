@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
+import { CodeEditor } from '@/components/ui/CodeEditor'
 import { ANIMATION_PRESETS } from '../constants'
 
 // =============================================================================
@@ -397,48 +398,13 @@ export function DescriptionEditorModal({
     return renderMarkdownPreview(content)
   }, [content, format])
 
-  // Handle toolbar insert
+  // Handle toolbar insert (appends at end since CodeMirror handles cursor internally)
   const handleInsert = useCallback((before: string, after = '', placeholder = '') => {
-    const textarea = document.querySelector('textarea[data-editor]') as HTMLTextAreaElement
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selectedText = content.substring(start, end) || placeholder
-
-    const newContent =
-      content.substring(0, start) +
-      before +
-      selectedText +
-      after +
-      content.substring(end)
-
-    setContent(newContent)
-
-    // Restore focus and selection
-    setTimeout(() => {
-      textarea.focus()
-      const newStart = start + before.length
-      const newEnd = newStart + selectedText.length
-      textarea.setSelectionRange(newStart, newEnd)
-    }, 0)
-  }, [content])
-
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'b') {
-        e.preventDefault()
-        handleInsert('**', '**', 'bold')
-      } else if (e.key === 'i') {
-        e.preventDefault()
-        handleInsert('*', '*', 'italic')
-      } else if (e.key === 'k') {
-        e.preventDefault()
-        handleInsert('[', '](url)', 'link')
-      }
-    }
-  }
+    // With CodeMirror, we append formatting at the end
+    // User can then position it as needed
+    const insertion = before + placeholder + after
+    setContent(prev => prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + insertion)
+  }, [])
 
   // Handle save
   const handleSave = () => {
@@ -461,7 +427,7 @@ export function DescriptionEditorModal({
   const modalClasses = isFullscreen
     ? 'w-full h-full flex flex-col'
     : clsx(
-        "bg-slate-deep rounded-2xl max-w-5xl w-full max-h-[90vh]",
+        "bg-slate-deep rounded-2xl w-[90vw] max-w-[1600px] h-[85vh]",
         "border border-slate-mid/50",
         "shadow-2xl flex flex-col",
         ANIMATION_PRESETS.scaleIn
@@ -600,27 +566,26 @@ export function DescriptionEditorModal({
         )}
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex min-h-0">
           {/* Editor */}
           {viewMode !== 'preview' && (
             <div className={clsx(
-              'flex-1 flex flex-col',
+              'flex-1 flex flex-col min-h-0',
               viewMode === 'split' && 'border-r border-slate-mid/50'
             )}>
-              <textarea
-                data-editor
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={format === 'markdown' ? 'Write your description in Markdown...' : 'Write or paste HTML...'}
-                className={clsx(
-                  'flex-1 w-full p-4 resize-none',
-                  'bg-transparent text-text-primary',
-                  'placeholder:text-text-muted',
-                  'focus:outline-none',
-                  'font-mono text-sm'
-                )}
-              />
+              <div className="flex-1 p-2 min-h-0">
+                <CodeEditor
+                  value={content}
+                  onChange={setContent}
+                  language={format === 'markdown' ? 'markdown' : 'html'}
+                  placeholder={format === 'markdown' ? 'Write your description in Markdown...' : 'Write or paste HTML...'}
+                  lineWrapping={true}
+                  minHeight="200px"
+                  maxHeight="100%"
+                  autoFocus
+                  className="h-full"
+                />
+              </div>
             </div>
           )}
 

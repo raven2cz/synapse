@@ -381,7 +381,7 @@ class TestCivitaiParametersExtraction:
             width=civitai_meta.get("width"),
             height=civitai_meta.get("height"),
             denoise=civitai_meta.get("denoise"),
-            hires_fix=bool(civitai_meta.get("hiresFix")),
+            hires_fix=civitai_meta.get("hiresFix"),  # Pass directly, no bool() conversion
             hires_upscaler=civitai_meta.get("hiresUpscaler"),
             hires_steps=civitai_meta.get("hiresSteps"),
             hires_denoise=civitai_meta.get("hiresDenoising"),
@@ -489,22 +489,107 @@ class TestCivitaiParametersExtraction:
             "cfgScale": 7,
             "steps": 20
         }
-        
+
         params = GenerationParameters(
             cfg_scale=partial_meta.get("cfgScale"),
             steps=partial_meta.get("steps"),
         )
-        
+
         assert params.cfg_scale == 7
         assert params.steps == 20
         assert params.sampler is None
         assert params.clip_skip is None
-        
+
         # to_dict should only include set values
         d = params.to_dict()
         assert "cfg_scale" in d
         assert "steps" in d
         assert "sampler" not in d or d.get("sampler") is None
+
+
+class TestHiresFixSerialization:
+    """Tests for hires_fix serialization - no ghost values."""
+
+    def test_hires_fix_none_not_serialized(self):
+        """Test that hires_fix=None is NOT included in serialized output."""
+        params = GenerationParameters(
+            steps=20,
+            cfg_scale=7.0,
+            # hires_fix is None by default
+        )
+
+        d = params.to_dict()
+
+        assert "steps" in d
+        assert "cfg_scale" in d
+        assert "hires_fix" not in d, "hires_fix=None should NOT be in serialized output"
+
+    def test_hires_fix_true_serialized(self):
+        """Test that hires_fix=True IS included in serialized output."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=True,
+        )
+
+        d = params.to_dict()
+
+        assert "hires_fix" in d
+        assert d["hires_fix"] is True
+
+    def test_hires_fix_false_serialized(self):
+        """Test that hires_fix=False IS included in serialized output (explicit False)."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=False,
+        )
+
+        d = params.to_dict()
+
+        assert "hires_fix" in d
+        assert d["hires_fix"] is False
+
+    def test_no_ghost_hires_parameters(self):
+        """Test that hires_* parameters don't appear as ghosts when not set."""
+        params = GenerationParameters(
+            sampler="Euler a",
+            steps=20,
+            cfg_scale=7.0,
+        )
+
+        d = params.to_dict()
+
+        # None of the hires params should appear
+        assert "hires_fix" not in d
+        assert "hires_upscaler" not in d
+        assert "hires_steps" not in d
+        assert "hires_denoise" not in d
+
+    def test_all_hires_params_when_set(self):
+        """Test all hires parameters are serialized when explicitly set."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=True,
+            hires_upscaler="4x-UltraSharp",
+            hires_steps=15,
+            hires_denoise=0.45,
+        )
+
+        d = params.to_dict()
+
+        assert d["hires_fix"] is True
+        assert d["hires_upscaler"] == "4x-UltraSharp"
+        assert d["hires_steps"] == 15
+        assert d["hires_denoise"] == 0.45
+
+    def test_from_dict_preserves_none(self):
+        """Test that from_dict with missing hires_fix results in None."""
+        data = {"steps": 20, "cfg_scale": 7.0}
+
+        params = GenerationParameters.from_dict(data)
+
+        assert params.hires_fix is None
+        assert params.steps == 20
+        assert params.cfg_scale == 7.0
 
 
 if __name__ == "__main__":

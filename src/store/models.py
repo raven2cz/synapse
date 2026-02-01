@@ -21,7 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
 
 # =============================================================================
@@ -458,7 +458,12 @@ class PackDependencyRef(BaseModel):
 
 
 class GenerationParameters(BaseModel):
-    """Default generation parameters extracted from Civitai or user-defined."""
+    """
+    Default generation parameters extracted from Civitai or user-defined.
+
+    All fields are Optional to avoid "ghost" values in JSON serialization.
+    Uses custom serializer to exclude None values automatically.
+    """
     sampler: Optional[str] = None
     scheduler: Optional[str] = None
     steps: Optional[int] = None
@@ -468,10 +473,17 @@ class GenerationParameters(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     seed: Optional[int] = None
-    hires_fix: bool = False
+    # HiRes parameters - all Optional to avoid ghost values
+    hires_fix: Optional[bool] = None
     hires_upscaler: Optional[str] = None
     hires_steps: Optional[int] = None
     hires_denoise: Optional[float] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler) -> dict:
+        """Custom serializer that excludes None values to avoid ghost parameters."""
+        d = handler(self)
+        return {k: v for k, v in d.items() if v is not None}
 
 
 class ModelInfo(BaseModel):

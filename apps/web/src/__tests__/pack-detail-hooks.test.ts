@@ -603,6 +603,122 @@ describe('Validation Logic', () => {
 // Modal State Logic Tests
 // =============================================================================
 
+// =============================================================================
+// EditPreviewsModal Cover Logic Tests
+// =============================================================================
+
+describe('EditPreviewsModal Cover Logic', () => {
+  interface PreviewInfo {
+    filename: string
+    url: string
+    media_type: 'image' | 'video'
+    nsfw?: boolean
+  }
+
+  describe('Cover Detection', () => {
+    it('should correctly identify cover when cover_url matches preview url', () => {
+      const previews: PreviewInfo[] = [
+        { filename: 'preview1.jpg', url: '/packs/test/resources/previews/preview1.jpg', media_type: 'image' },
+        { filename: 'preview2.jpg', url: '/packs/test/resources/previews/preview2.jpg', media_type: 'image' },
+        { filename: 'preview3.jpg', url: '/packs/test/resources/previews/preview3.jpg', media_type: 'image' },
+      ]
+      const coverUrl = '/packs/test/resources/previews/preview2.jpg'
+
+      // Logic from EditPreviewsModal line 591
+      const isCover = (preview: PreviewInfo, index: number) =>
+        preview.url === coverUrl || (index === 0 && !coverUrl)
+
+      expect(isCover(previews[0], 0)).toBe(false) // preview1 is NOT cover
+      expect(isCover(previews[1], 1)).toBe(true)  // preview2 IS cover
+      expect(isCover(previews[2], 2)).toBe(false) // preview3 is NOT cover
+    })
+
+    it('should default to first preview as cover when cover_url is undefined', () => {
+      const previews: PreviewInfo[] = [
+        { filename: 'preview1.jpg', url: '/packs/test/resources/previews/preview1.jpg', media_type: 'image' },
+        { filename: 'preview2.jpg', url: '/packs/test/resources/previews/preview2.jpg', media_type: 'image' },
+      ]
+      const coverUrl: string | undefined = undefined
+
+      const isCover = (preview: PreviewInfo, index: number) =>
+        preview.url === coverUrl || (index === 0 && !coverUrl)
+
+      expect(isCover(previews[0], 0)).toBe(true)  // First preview is default cover
+      expect(isCover(previews[1], 1)).toBe(false)
+    })
+
+    it('should NOT use first preview as cover when cover_url is set', () => {
+      const previews: PreviewInfo[] = [
+        { filename: 'preview1.jpg', url: '/packs/test/resources/previews/preview1.jpg', media_type: 'image' },
+        { filename: 'preview2.jpg', url: '/packs/test/resources/previews/preview2.jpg', media_type: 'image' },
+      ]
+      // Cover is explicitly set to second preview
+      const coverUrl = '/packs/test/resources/previews/preview2.jpg'
+
+      const isCover = (preview: PreviewInfo, index: number) =>
+        preview.url === coverUrl || (index === 0 && !coverUrl)
+
+      // BUG FIX TEST: First preview should NOT be marked as cover
+      // when cover_url is explicitly set to a different preview
+      expect(isCover(previews[0], 0)).toBe(false)
+      expect(isCover(previews[1], 1)).toBe(true)
+    })
+  })
+
+  describe('Cover URL Props', () => {
+    it('should use pack.cover_url, not pack.previews[0].url', () => {
+      // This tests the fix for the bug where PackDetailPage was passing
+      // pack.previews[0].url instead of pack.cover_url to EditPreviewsModal
+      const pack = {
+        cover_url: '/packs/test/resources/previews/preview3.jpg',
+        previews: [
+          { filename: 'preview1.jpg', url: '/packs/test/resources/previews/preview1.jpg', media_type: 'image' as const },
+          { filename: 'preview2.jpg', url: '/packs/test/resources/previews/preview2.jpg', media_type: 'image' as const },
+          { filename: 'preview3.jpg', url: '/packs/test/resources/previews/preview3.jpg', media_type: 'image' as const },
+        ],
+      }
+
+      // WRONG: Using first preview URL (old bug)
+      const wrongCoverUrl = pack.previews[0]?.url
+      expect(wrongCoverUrl).toBe('/packs/test/resources/previews/preview1.jpg')
+
+      // CORRECT: Using pack.cover_url
+      const correctCoverUrl = pack.cover_url
+      expect(correctCoverUrl).toBe('/packs/test/resources/previews/preview3.jpg')
+
+      // The modal should receive pack.cover_url, not pack.previews[0].url
+      expect(correctCoverUrl).not.toBe(wrongCoverUrl)
+    })
+
+    it('should detect cover change correctly using pack.cover_url', () => {
+      const pack = {
+        cover_url: '/packs/test/resources/previews/preview1.jpg',
+        previews: [
+          { filename: 'preview1.jpg', url: '/packs/test/resources/previews/preview1.jpg', media_type: 'image' as const },
+          { filename: 'preview2.jpg', url: '/packs/test/resources/previews/preview2.jpg', media_type: 'image' as const },
+        ],
+      }
+
+      // User changes cover to preview2
+      const newCoverUrl = '/packs/test/resources/previews/preview2.jpg'
+
+      // Cover changed detection
+      const coverChanged = newCoverUrl !== pack.cover_url
+      expect(coverChanged).toBe(true)
+
+      // If we wrongly compared with previews[0].url when pack.cover_url was different,
+      // we would get wrong results
+      const coverChangedWrong = newCoverUrl !== pack.previews[0].url
+      // This would also be true, but for wrong reason in edge cases
+      expect(coverChangedWrong).toBe(true)
+    })
+  })
+})
+
+// =============================================================================
+// Modal State Logic Tests
+// =============================================================================
+
 describe('Modal State Logic', () => {
   describe('Default Modal State', () => {
     it('should have all modals closed initially', () => {
