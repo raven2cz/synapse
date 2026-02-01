@@ -580,21 +580,112 @@ Pack může mít 8+ dependencies! UI musí zvládat:
 
 ### PackParametersSection
 
-**Responsibility:** Generation parameters
+**Responsibility:** Generation parameters display and editing
+
+**Files:**
+- `sections/PackParametersSection.tsx` (~380 řádků) - Display component
+- `modals/EditParametersModal.tsx` (~1286 řádků) - Edit modal with categories
+
+#### Display Layout (PackParametersSection)
+
+Parameters are displayed using **flex layout** with category groups:
+
+```tsx
+<div className="flex flex-wrap gap-x-6 gap-y-3 items-start">
+  {categoryOrder.map(category => (
+    <CategoryGroup key={category} ... />
+  ))}
+</div>
+```
 
 **Features:**
-- Grid display of parameters (sampler, steps, CFG, etc.)
-- Recommended strength for LoRAs
-- Edit mode:
-  - Quick-add common parameters
-  - Custom parameter key-value pairs
-  - Remove parameters
+- Flex layout - groups flow left-to-right, wrap as needed
+- 12 parameter categories (Generation, Resolution, HiRes, Model, ControlNet, etc.)
+- Collapsible advanced categories
+- Premium parameter cards with hover effects
+- Edit button opens EditParametersModal
 
-**Bug Fix (2026-02-01):**
-- ✅ Fixed: Parameters not saving due to limited `GenerationParameters` Pydantic model
-- Root cause: Backend model only accepted ~14 fields, frontend modal supports 50+ parameters
-- Solution: Added `extra="allow"` to `GenerationParameters` model and updated serializer
+#### EditParametersModal Architecture
+
+**Key Features:**
+- **Portal-based dropdowns** - Render outside modal DOM to avoid z-index clipping
+- **50+ predefined parameters** with type definitions (string/number/boolean)
+- **Type-aware inputs** - BooleanSwitch, NumberInput with +/- buttons, text input
+- **Category organization** - Parameters grouped by category
+- **Custom parameters** - Add any parameter with name, value, type, and category
+
+**Portal Dropdown Pattern:**
+```tsx
+function PortalDropdownMenu({ isOpen, triggerRef, children, menuHeight, align }) {
+  // Calculate position based on viewport space
+  const shouldOpenUp = spaceBelow < menuHeight && spaceAbove > spaceBelow
+
+  return createPortal(
+    <div style={{ position: 'fixed', ...position, zIndex: 9999 }}>
+      {children}
+    </div>,
+    document.body
+  )
+}
+```
+
+#### How to Add New Parameter Categories
+
+1. **Add to `CategoryKey` type:**
+```typescript
+type CategoryKey = 'generation' | 'resolution' | ... | 'myNewCategory'
+```
+
+2. **Add to `CATEGORY_META`:**
+```typescript
+const CATEGORY_META: Record<CategoryKey, { label: string; icon: React.ElementType; color: string }> = {
+  // ...existing...
+  myNewCategory: { label: 'My Category', icon: MyIcon, color: 'text-emerald-400' },
+}
+```
+
+3. **Add to `CATEGORY_OPTIONS` (for dropdown):**
+```typescript
+const CATEGORY_OPTIONS = [
+  // ...existing...
+  { value: 'myNewCategory', label: 'My Category', color: 'text-emerald-400' },
+]
+```
+
+4. **Add parameters to `PARAM_DEFINITIONS`:**
+```typescript
+const PARAM_DEFINITIONS: ParamDefinition[] = [
+  // ...existing...
+  { key: 'my_param', label: 'My Param', type: 'number', default: '1.0', category: 'myNewCategory', step: 0.1, min: 0, max: 2 },
+]
+```
+
+#### How to Add New Parameters to Existing Category
+
+Add entry to `PARAM_DEFINITIONS`:
+```typescript
+{ key: 'new_param', label: 'New Param', type: 'string', default: 'value', category: 'generation' },
+```
+
+Parameter types:
+- `string` - Text input
+- `number` - Number input with +/- buttons (supports step, min, max)
+- `boolean` - Toggle switch
+
+#### Bug Fixes (2026-02-01)
+
+**1. Parameters not saving:**
+- Root cause: Backend `GenerationParameters` Pydantic model only accepted ~14 fields
+- Solution: Added `extra="allow"` to model and updated serializer in `src/store/models.py`
 - Updated TypeScript type in `usePackData.ts` to `Record<string, unknown>`
+
+**2. Dropdown menus clipped by modal overflow:**
+- Root cause: Modal had `overflow-hidden`, dropdowns rendered inside modal DOM
+- Solution: Portal-based dropdowns using `createPortal(menu, document.body)`
+- Position calculated based on viewport space (opens up or down automatically)
+
+**3. Modal too narrow for all controls:**
+- Solution: Widened modal from `max-w-3xl` (768px) to `max-w-4xl` (896px)
 
 ### PackScriptsSection (Install Pack Only)
 
