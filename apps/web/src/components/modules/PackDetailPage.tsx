@@ -247,6 +247,24 @@ function PackDetailPageContent() {
   // Push dialog state
   const [pushWithCleanup, setPushWithCleanup] = useState(false)
 
+  // Parameter source tracking state
+  const [parameterSource, setParameterSource] = useState<import('./pack-detail/types').ParameterSource | undefined>(undefined)
+
+  // Handler for applying parameters from source
+  const handleApplyFromSource = useCallback((params: Record<string, unknown>, source: import('./pack-detail/types').ParameterSource) => {
+    setParameterSource(source)
+
+    // Only update parameters if source provides actual params (not manual switch)
+    if (source.type !== 'manual' && Object.keys(params).length > 0) {
+      // Merge with existing parameters
+      const merged = {
+        ...(packData.pack?.parameters || {}),
+        ...params,
+      }
+      packData.updateParameters(merged)
+    }
+  }, [packData])
+
   // ==========================================================================
   // Render
   // ==========================================================================
@@ -395,6 +413,9 @@ function PackDetailPageContent() {
           modelInfo={pack.model_info}
           onEdit={() => openModal('editParameters')}
           animationDelay={250}
+          previews={pack.previews}
+          currentSource={parameterSource}
+          onApplyFromSource={handleApplyFromSource}
         />
       </SectionErrorBoundary>
 

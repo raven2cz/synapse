@@ -2901,10 +2901,121 @@ def update_pack_parameters(
         store.layout.save_pack(pack)
         
         logger.info(f"[update-parameters] Pack: {pack_name}, Parameters: {existing}")
-        
+
         return {"updated": True, "parameters": existing}
     except Exception as e:
         logger.error(f"[update-parameters] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class ExtractParametersRequest(BaseModel):
+    """Request for parameter extraction from various sources."""
+    source: str = Field(..., description="Source type: 'image', 'aggregated', or 'description'")
+    image_index: Optional[int] = Field(None, description="Image index for source='image'")
+
+
+class ExtractParametersResponse(BaseModel):
+    """Response with extracted parameters."""
+    parameters: Dict[str, Any]
+    source: str
+    confidence: Optional[float] = None
+    preview_count: Optional[int] = None
+
+
+@v2_packs_router.post("/{pack_name}/parameters/extract", response_model=ExtractParametersResponse)
+def extract_pack_parameters(
+    pack_name: str,
+    request: ExtractParametersRequest,
+    store=Depends(require_initialized),
+):
+    """Extract generation parameters from pack previews or description.
+
+    Sources:
+    - 'image': Extract from specific preview image metadata (requires image_index)
+    - 'aggregated': Aggregate from all preview images with metadata
+    - 'description': Parse pack description for recommended parameters
+
+    Returns extracted parameters with confidence score for aggregated results.
+    """
+    from ..utils.parameter_extractor import (
+        extract_from_image_meta,
+        aggregate_from_previews,
+        extract_from_description,
+    )
+
+    try:
+        pack = store.get_pack(pack_name)
+
+        if request.source == 'image':
+            # Extract from specific preview image
+            if request.image_index is None:
+                raise HTTPException(status_code=400, detail="image_index required for source='image'")
+
+            if request.image_index < 0 or request.image_index >= len(pack.previews):
+                raise HTTPException(status_code=400, detail=f"Invalid image_index: {request.image_index}")
+
+            preview = pack.previews[request.image_index]
+            if not preview.meta:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='image',
+                    confidence=0.0,
+                )
+
+            result = extract_from_image_meta(preview.meta)
+            return ExtractParametersResponse(
+                parameters=result.parameters,
+                source='image',
+                confidence=result.confidence,
+            )
+
+        elif request.source == 'aggregated':
+            # Aggregate from all previews with metadata
+            previews_with_meta = [
+                {'meta': p.meta}
+                for p in pack.previews
+                if p.meta
+            ]
+
+            if not previews_with_meta:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='aggregated',
+                    confidence=0.0,
+                    preview_count=0,
+                )
+
+            result = aggregate_from_previews(previews_with_meta)
+            return ExtractParametersResponse(
+                parameters=result.parameters,
+                source='aggregated',
+                confidence=result.confidence,
+                preview_count=len(previews_with_meta),
+            )
+
+        elif request.source == 'description':
+            # Extract from pack description
+            if not pack.description:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='description',
+                    confidence=0.0,
+                )
+
+            result = extract_from_description(pack.description)
+            return ExtractParametersResponse(
+                parameters=result.parameters,
+                source='description',
+                confidence=result.confidence if result.parameters else 0.0,
+            )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid source: {request.source}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[extract-parameters] Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

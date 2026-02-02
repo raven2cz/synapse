@@ -12,15 +12,16 @@
  * - Premium styling with hover effects
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   Info, Edit3, Sliders, Maximize2, Sparkles, Settings2, ChevronDown, ChevronRight,
-  Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image,
+  Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, ImageIcon, FileText, Calculator, Pencil,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
-import type { ParametersInfo, ModelInfoResponse } from '../types'
+import type { ParametersInfo, ModelInfoResponse, PreviewInfo, ParameterSource, ParameterSourceType } from '../types'
 import { ANIMATION_PRESETS } from '../constants'
+import { extractApplicableParams, hasExtractableParams, aggregateFromPreviews } from '@/lib/parameters'
 
 // =============================================================================
 // Types
@@ -31,6 +32,12 @@ export interface PackParametersSectionProps {
   modelInfo?: ModelInfoResponse
   onEdit: () => void
   animationDelay?: number
+  /** Previews with metadata for source selection */
+  previews?: PreviewInfo[]
+  /** Current parameter source */
+  currentSource?: ParameterSource
+  /** Callback when parameters are applied from a source */
+  onApplyFromSource?: (params: Record<string, unknown>, source: ParameterSource) => void
 }
 
 type CategoryKey = 'generation' | 'resolution' | 'hires' | 'model' | 'controlnet' | 'inpainting' | 'batch' | 'advanced' | 'sdxl' | 'freeu' | 'ipadapter' | 'custom'
@@ -193,6 +200,176 @@ interface CategoryGroupProps {
   defaultExpanded?: boolean
 }
 
+// =============================================================================
+// Source Picker Component
+// =============================================================================
+
+interface SourcePickerProps {
+  currentSource?: ParameterSource
+  previews?: PreviewInfo[]
+  onSelectSource: (source: ParameterSource) => void
+}
+
+function SourcePicker({ currentSource, previews = [], onSelectSource }: SourcePickerProps) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  // Find previews with extractable meta
+  const previewsWithMeta = useMemo(() => {
+    return previews
+      .map((p, i) => ({ preview: p, index: i }))
+      .filter(({ preview }) => preview.meta && hasExtractableParams(preview.meta as Record<string, unknown>))
+  }, [previews])
+
+  // Check if aggregation is possible (2+ previews with meta)
+  const canAggregate = previewsWithMeta.length >= 2
+
+  // Get label for current source
+  const getSourceLabel = (source?: ParameterSource): string => {
+    if (!source) return 'Manual'
+    switch (source.type) {
+      case 'manual': return 'Manual'
+      case 'description': return 'From Description'
+      case 'image': return `Image #${(source.imageIndex ?? 0) + 1}`
+      case 'aggregated': return 'Aggregated'
+      default: return 'Manual'
+    }
+  }
+
+  // Get icon for source type
+  const getSourceIcon = (type: ParameterSourceType) => {
+    switch (type) {
+      case 'manual': return Pencil
+      case 'description': return FileText
+      case 'image': return ImageIcon
+      case 'aggregated': return Calculator
+      default: return Pencil
+    }
+  }
+
+  const CurrentIcon = getSourceIcon(currentSource?.type ?? 'manual')
+
+  // No sources available - don't show picker
+  if (previewsWithMeta.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={clsx(
+          "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs",
+          "bg-slate-dark/50 hover:bg-slate-dark",
+          "text-text-muted hover:text-text-primary",
+          "border border-slate-mid/30 hover:border-slate-mid/50",
+          "transition-all duration-200"
+        )}
+      >
+        <CurrentIcon className="w-3 h-3" />
+        <span>{getSourceLabel(currentSource)}</span>
+        <ChevronDown className={clsx("w-3 h-3 transition-transform", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setIsOpen(false)}
+          />
+
+          {/* Dropdown */}
+          <div className={clsx(
+            "absolute right-0 top-full mt-1 z-50",
+            "min-w-[180px] py-1",
+            "bg-slate-dark border border-slate-mid/50 rounded-lg shadow-xl",
+            "animate-in fade-in slide-in-from-top-1 duration-150"
+          )}>
+            {/* Manual option */}
+            <button
+              onClick={() => {
+                onSelectSource({ type: 'manual' })
+                setIsOpen(false)
+              }}
+              className={clsx(
+                "w-full flex items-center gap-2 px-3 py-2 text-xs text-left",
+                "hover:bg-slate-mid/30 transition-colors",
+                currentSource?.type === 'manual' && "bg-synapse/10 text-synapse"
+              )}
+            >
+              <Pencil className="w-3 h-3" />
+              Manual
+            </button>
+
+            {/* Divider */}
+            {previewsWithMeta.length > 0 && (
+              <div className="h-px bg-slate-mid/30 my-1" />
+            )}
+
+            {/* Image sources */}
+            {previewsWithMeta.map(({ preview, index }) => (
+              <button
+                key={index}
+                onClick={() => {
+                  onSelectSource({
+                    type: 'image',
+                    imageIndex: index,
+                    imageUrl: preview.thumbnail_url || preview.url,
+                  })
+                  setIsOpen(false)
+                }}
+                className={clsx(
+                  "w-full flex items-center gap-2 px-3 py-2 text-xs text-left",
+                  "hover:bg-slate-mid/30 transition-colors",
+                  currentSource?.type === 'image' && currentSource.imageIndex === index && "bg-synapse/10 text-synapse"
+                )}
+              >
+                <ImageIcon className="w-3 h-3" />
+                Image #{index + 1}
+                {preview.thumbnail_url && (
+                  <img
+                    src={preview.thumbnail_url}
+                    alt=""
+                    className="w-6 h-6 rounded object-cover ml-auto"
+                  />
+                )}
+              </button>
+            ))}
+
+            {/* Aggregated option */}
+            {canAggregate && (
+              <>
+                <div className="h-px bg-slate-mid/30 my-1" />
+                <button
+                  onClick={() => {
+                    onSelectSource({ type: 'aggregated' })
+                    setIsOpen(false)
+                  }}
+                  className={clsx(
+                    "w-full flex items-center gap-2 px-3 py-2 text-xs text-left",
+                    "hover:bg-slate-mid/30 transition-colors",
+                    currentSource?.type === 'aggregated' && "bg-synapse/10 text-synapse"
+                  )}
+                >
+                  <Calculator className="w-3 h-3" />
+                  Aggregated
+                  <span className="text-text-muted ml-auto">
+                    ({previewsWithMeta.length} images)
+                  </span>
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Category Group Component
+// =============================================================================
+
 function CategoryGroup({
   category,
   params,
@@ -258,7 +435,34 @@ export function PackParametersSection({
   modelInfo,
   onEdit,
   animationDelay = 0,
+  previews = [],
+  currentSource,
+  onApplyFromSource,
 }: PackParametersSectionProps) {
+  // Handle source selection - extract params and call callback
+  const handleSourceSelect = useCallback((source: ParameterSource) => {
+    if (!onApplyFromSource) return
+
+    if (source.type === 'manual') {
+      // Manual - no automatic application, just track source
+      onApplyFromSource({}, source)
+    } else if (source.type === 'image' && source.imageIndex !== undefined) {
+      // Extract from specific image
+      const preview = previews[source.imageIndex]
+      if (preview?.meta) {
+        const params = extractApplicableParams(preview.meta as Record<string, unknown>)
+        onApplyFromSource(params, source)
+      }
+    } else if (source.type === 'aggregated') {
+      // Aggregate from all previews with meta
+      const previewsForAggregation = previews
+        .filter(p => p.meta && hasExtractableParams(p.meta as Record<string, unknown>))
+        .map(p => ({ meta: p.meta as Record<string, unknown> }))
+
+      const result = aggregateFromPreviews(previewsForAggregation)
+      onApplyFromSource(result.parameters, { ...source, confidence: result.overallConfidence })
+    }
+  }, [previews, onApplyFromSource])
   // Collect and categorize all parameters
   const categorizedParams = useMemo(() => {
     const result: Record<CategoryKey, Array<{ key: string; value: string; highlight: boolean }>> = {
@@ -342,16 +546,26 @@ export function PackParametersSection({
             <Sliders className="w-4 h-4" />
             Generation Settings
           </h3>
-          <button
-            onClick={onEdit}
-            className={clsx(
-              "text-xs text-synapse flex items-center gap-1",
-              "hover:text-synapse/80 transition-colors duration-200"
+          <div className="flex items-center gap-2">
+            {/* Source Picker - only show if we have previews with meta */}
+            {onApplyFromSource && previews.length > 0 && (
+              <SourcePicker
+                currentSource={currentSource}
+                previews={previews}
+                onSelectSource={handleSourceSelect}
+              />
             )}
-          >
-            <Edit3 className="w-3 h-3" />
-            Edit
-          </button>
+            <button
+              onClick={onEdit}
+              className={clsx(
+                "text-xs text-synapse flex items-center gap-1",
+                "hover:text-synapse/80 transition-colors duration-200"
+              )}
+            >
+              <Edit3 className="w-3 h-3" />
+              Edit
+            </button>
+          </div>
         </div>
 
         {/* Parameters - Categorized in flex grid */}

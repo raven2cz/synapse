@@ -161,6 +161,24 @@ export interface ParametersInfo {
 }
 
 /**
+ * Source of parameters - where they were extracted from
+ */
+export type ParameterSourceType = 'manual' | 'description' | 'image' | 'aggregated'
+
+/**
+ * Parameter source info for tracking origin
+ */
+export interface ParameterSource {
+  type: ParameterSourceType
+  /** Index of preview image (for type='image') */
+  imageIndex?: number
+  /** URL/thumbnail of source image */
+  imageUrl?: string
+  /** Confidence score for aggregated (0-1) */
+  confidence?: number
+}
+
+/**
  * Model metadata from Civitai/other sources
  */
 export interface ModelInfoResponse {
