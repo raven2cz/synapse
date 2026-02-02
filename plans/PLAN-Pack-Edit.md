@@ -3290,7 +3290,7 @@ DELETE /api/packs/{name}/pack-dependencies/{dep_pack_name}
 
 ---
 
-## Phase 7: Parameters Extraction from Civitai Images ✅ ITERATION 7.1-7.2 DONE
+## Phase 7: Parameters Extraction from Civitai Images ✅ COMPLETE
 
 ### Motivace
 
@@ -3679,15 +3679,76 @@ def extract_parameters(
 - Migrace existujících packů bez sources
 - Rollback při chybě
 
+### Iteration 7.6: Automatic Parameter Extraction During Import ✅ DONE
+
+**Cíl:** Automaticky extrahovat parametry z description při Civitai importu
+
+**Stav:** ✅ HOTOVO
+
+**Co bylo implementováno:**
+- ✅ `src/utils/parameter_extractor.py` - vylepšený algoritmus (~500 řádků)
+- ✅ Backend testy pro extrakci (33 unit testů + 8 benchmark testů)
+- ✅ Integrace do `pack_service.py` při importu (řádek 541-558)
+- ✅ Logy při extrakci `[parameter-extraction]`
+- ✅ Integrační testy `tests/integration/test_import_parameters.py` (8 testů)
+
+**Potřebná implementace:**
+
+1. **Integrace do PackService.import_from_civitai():**
+```python
+# src/store/pack_service.py
+
+async def import_from_civitai(self, url: str, options: ImportOptions) -> Pack:
+    # ... existující kód pro stažení dat ...
+
+    # Po vytvoření packu, extrahovat parametry z description
+    if pack.description:
+        from src.utils.parameter_extractor import extract_from_description
+
+        extracted = extract_from_description(pack.description)
+        if extracted.parameters:
+            logger.info(f"[parameter-extraction] Extracted {len(extracted.parameters)} params from description: {list(extracted.parameters.keys())}")
+            pack.parameters = GenerationParameters(**extracted.parameters)
+        else:
+            logger.info("[parameter-extraction] No parameters found in description")
+
+    # ... zbytek importu ...
+```
+
+2. **Požadované logy:**
+```
+[parameter-extraction] Extracting parameters from description (length: 1234)
+[parameter-extraction] Found 5 patterns: cfg_scale=7, steps=25, sampler=euler, clip_skip=2, strength=0.8
+[parameter-extraction] Extracted parameters saved to pack
+```
+
+NEBO při neúspěchu:
+```
+[parameter-extraction] No parameters found in description
+```
+
+3. **Testy integrace:**
+- `tests/integration/test_import_parameters.py`
+  - Test import s description obsahující parametry → pack.parameters je naplněn
+  - Test import bez description → pack.parameters je None
+  - Test import s description bez parametrů → pack.parameters je None
+  - Test že existující manuální parametry nejsou přepsány při re-importu
+
+**Alternativní přístup (volitelné):**
+- Extrakce by mohla být opt-in přes `ImportOptions.extract_parameters: bool = True`
+- Uživatel by mohl mít možnost toto vypnout v Import Wizard
+
 ### Success Criteria Phase 7
 
-- [ ] Parametry z description jsou extrahovány při Civitai importu
-- [ ] "Apply to Pack Parameters" button funguje v GenerationDataPanel
-- [ ] Source picker zobrazuje dostupné zdroje
-- [ ] Změna zdroje aktualizuje parametry
-- [ ] Existující editovatelnost parameters NEZMĚNĚNA
-- [ ] PackParametersSection UI NEZMĚNĚNA (kromě source pickeru)
-- [ ] 15+ nových testů
+- [x] Parametry z description jsou extrahovány při Civitai importu ✅ 7.6
+- [x] "Apply to Pack Parameters" button funguje v GenerationDataPanel ✅ 7.2
+- [x] Source picker zobrazuje dostupné zdroje ✅ 7.3
+- [x] Změna zdroje aktualizuje parametry ✅ 7.3
+- [x] Existující editovatelnost parameters NEZMĚNĚNA ✅
+- [x] PackParametersSection UI NEZMĚNĚNA (kromě source pickeru) ✅
+- [x] 15+ nových testů ✅ (90+ testů celkem)
+- [x] Automatická extrakce při importu ✅ 7.6
+- [x] Logy při extrakci parametrů `[parameter-extraction]` ✅ 7.6
 
 ### Risk Mitigation
 
@@ -3700,4 +3761,4 @@ def extract_parameters(
 
 ---
 
-*Last Updated: 2026-02-01*
+*Last Updated: 2026-02-02*

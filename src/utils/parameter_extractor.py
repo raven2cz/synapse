@@ -18,7 +18,7 @@ import re
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -152,23 +152,112 @@ BOOLEAN_PARAMS = {
     'hires_fix',
 }
 
-# Regex patterns for extracting parameters from description text
-DESCRIPTION_PATTERNS: Dict[str, str] = {
-    'cfg_scale': r'(?:cfg|cfg\s*scale|guidance)[:\s=]+(\d+(?:\.\d+)?)',
-    'steps': r'(?:steps|sampling\s*steps)[:\s=]+(\d+)',
-    'sampler': r'(?:sampler|sampling\s*method)[:\s=]+([a-zA-Z0-9_\s]+?)(?:[,\n\.]|$)',
-    'scheduler': r'(?:scheduler|schedule)[:\s=]+([a-zA-Z0-9_]+)',
-    'clip_skip': r'(?:clip\s*skip|clipskip)[:\s=]+(\d+)',
-    'strength': r'(?:(?:lora\s*)?strength|weight)[:\s=]+([\d.]+)',
-    'denoise': r'(?:denoise|denoising)[:\s=]+([\d.]+)',
-    'width': r'(?:width|w)[:\s=]+(\d+)',
-    'height': r'(?:height|h)[:\s=]+(\d+)',
-    'seed': r'(?:seed)[:\s=]+(-?\d+)',
-    'hires_fix': r'(?:hires\s*fix|highres)[:\s=]+(true|false|yes|no|enabled?|disabled?)',
-    'hires_scale': r'(?:hires\s*(?:scale|upscale))[:\s=]+([\d.]+)',
-    'hires_steps': r'(?:hires\s*steps)[:\s=]+(\d+)',
-    'hires_denoise': r'(?:hires\s*denoise)[:\s=]+([\d.]+)',
+# Known sampler names for dictionary matching (most specific first)
+KNOWN_SAMPLERS = [
+    # DPM++ variants (most specific first)
+    'dpm++ 2m sde karras', 'dpm++ 2m karras', 'dpm++ 2m sde', 'dpm++ 2m',
+    'dpm++ 2s a karras', 'dpm++ 2s a', 'dpm++ 2s',
+    'dpm++ sde karras', 'dpm++ sde',
+    'dpm++ 3m sde karras', 'dpm++ 3m sde',
+    # DPM variants
+    'dpm2 a karras', 'dpm2 karras', 'dpm2 a', 'dpm2',
+    'dpm_2_a', 'dpm_2',
+    'dpm fast', 'dpm adaptive',
+    # Euler variants
+    'euler ancestral', 'euler a', 'euler_a', 'euler',
+    # Other samplers
+    'heunpp2', 'heun',
+    'lms karras', 'lms',
+    'ddim', 'ddpm',
+    'plms', 'pndm',
+    'uni_pc', 'unipc',
+    'lcm',
+    'deis',
+    'restart',
+]
+
+# Sampler families/prefixes for "X series" matching
+SAMPLER_FAMILIES = {
+    'dpm++': 'DPM++ 2M Karras',  # Default recommendation for DPM++ family
+    'dpm': 'DPM2 Karras',
+    'euler': 'Euler a',
+    'heun': 'Heun',
+    'lms': 'LMS',
+    'ddim': 'DDIM',
+    'uni_pc': 'UniPC',
+    'unipc': 'UniPC',
 }
+
+# Boolean inference keywords - words that indicate true/false for features
+BOOLEAN_TRUE_KEYWORDS = [
+    'must', 'required', 'recommended', 'suggested', 'always', 'enable',
+    'use', 'important', 'necessary', 'essential', 'definitely',
+]
+BOOLEAN_FALSE_KEYWORDS = [
+    'don\'t', 'dont', 'avoid', 'disable', 'skip', 'optional', 'not',
+]
+
+# Regex patterns for extracting parameters from description text
+# Format: list of (pattern, priority) tuples - higher priority wins
+DESCRIPTION_PATTERNS: Dict[str, str] = {
+    # CFG: support "cfg 7", "cfg: 7", "cfg=7", "cfg scale: 7", "guidance: 7"
+    'cfg_scale': r'(?:cfg|cfg\s*scale|guidance)\s*[:\s=]+\s*(\d+(?:\.\d+)?)',
+    # Steps: support "steps 25", "steps: 25", "20-30 steps"
+    'steps': r'(?:steps|sampling\s*steps)\s*[:\s=]+\s*(\d+)',
+    # Sampler: handled separately via dictionary matching
+    'sampler': r'(?:sampler|sampling\s*method)\s*[:\s=]+\s*([a-zA-Z0-9_+\s]+?)(?:[,\n\.\(]|$)',
+    # Scheduler
+    'scheduler': r'(?:scheduler|schedule)\s*[:\s=]+\s*([a-zA-Z0-9_]+)',
+    # Clip skip: support "clip skip 2", "clip=2", "CLIP=2", "clipskip: 2"
+    'clip_skip': r'(?:clip\s*skip|clipskip|clip)\s*[:\s=]+\s*(\d+)',
+    # Strength
+    'strength': r'(?:(?:lora\s*)?strength|weight)\s*[:\s=]+\s*([\d.]+)',
+    # Denoise
+    'denoise': r'(?:denoise|denoising)\s*[:\s=]+\s*([\d.]+)',
+    # Width/Height - handled separately for resolution parsing
+    'width': r'(?:width|w)\s*[:\s=]+\s*(\d+)',
+    'height': r'(?:height|h)\s*[:\s=]+\s*(\d+)',
+    # Seed
+    'seed': r'(?:seed)\s*[:\s=]+\s*(-?\d+)',
+    # Hires fix - explicit values
+    'hires_fix': r'(?:hires\s*[-_]?\s*fix|highres\s*[-_]?\s*fix)\s*[:\s=]+\s*(true|false|yes|no|enabled?|disabled?)',
+    # Hires scale: support "2x", "1.5x", "hires scale: 2"
+    'hires_scale': r'(?:hires\s*(?:scale|upscale))\s*[:\s=]+\s*([\d.]+)',
+    # Hires steps
+    'hires_steps': r'(?:hires\s*steps)\s*[:\s=]+\s*(\d+)',
+    # Hires denoise
+    'hires_denoise': r'(?:hires\s*denoise)\s*[:\s=]+\s*([\d.]+)',
+}
+
+# Extended patterns for harder-to-match formats
+EXTENDED_PATTERNS: Dict[str, List[Tuple[str, int]]] = {
+    # CFG with range and "best" extraction: "CFG: 5-7 (7 is best)" → 7
+    'cfg_scale': [
+        (r'(?:cfg|cfg\s*scale|guidance)\s*[:\s=]+\s*\d+(?:\.\d+)?\s*[-–]\s*(\d+(?:\.\d+)?)\s*\([^)]*best', 10),  # Range with "best" at end
+        (r'(?:cfg|cfg\s*scale|guidance)\s*[:\s=]+\s*(\d+(?:\.\d+)?)\s*(?:is\s*)?best', 9),  # "7 is best"
+        (r'(\d+(?:\.\d+)?)\s*(?:is\s*)?best[^)]*(?:cfg|cfg\s*scale)', 8),  # "7 is best for CFG"
+    ],
+    # Steps with range
+    'steps': [
+        (r'(?:steps|sampling\s*steps)\s*[:\s=]+\s*\d+\s*[-–]\s*(\d+)', 5),  # Range, take higher
+    ],
+    # Clip with "CLIP=N" format (capital)
+    'clip_skip': [
+        (r'CLIP\s*=\s*(\d+)', 10),  # CLIP=2 format (capital)
+    ],
+    # Hires scale with "Nx" multiplier format
+    'hires_scale': [
+        (r'(?:hires|highres)[-_\s]*(?:fix)?[:\s]*(\d+(?:\.\d+)?)\s*[xX]', 10),  # "hires: 2x" or "Highres-Fix: 2x"
+        (r'(\d+(?:\.\d+)?)\s*[xX]\s*(?:upscale|hires|highres)', 8),  # "2x upscale"
+    ],
+}
+
+# Resolution patterns: "512x768", "512,768", "resolution: 512x768"
+RESOLUTION_PATTERNS = [
+    r'(?:resolution|res|size)\s*[:\s=]+\s*(\d+)\s*[x,×]\s*(\d+)',  # "resolution: 512x768"
+    r'(?:suggest(?:ed)?|recommend(?:ed)?)\s*resolution\s*[:\s=]*\s*(\d+)\s*[,x×]\s*(\d+)',  # "suggested resolution: 512,768"
+    r'(\d{3,4})\s*[x×]\s*(\d{3,4})',  # "512x768" standalone
+]
 
 # Patterns that indicate a "recommended settings" section in description
 RECOMMENDED_SECTION_PATTERNS = [
@@ -301,14 +390,175 @@ def normalize_params(params: Dict[str, Any]) -> Dict[str, Any]:
 # Extraction Functions
 # =============================================================================
 
+def _extract_with_extended_patterns(
+    text: str,
+    param_key: str,
+    parameters: Dict[str, Any],
+    raw_matches: Dict[str, str],
+) -> bool:
+    """
+    Try extended patterns with priority for a parameter.
+
+    Returns True if a match was found (should skip basic pattern).
+    """
+    if param_key not in EXTENDED_PATTERNS:
+        return False
+
+    best_match = None
+    best_priority = -1
+
+    for pattern, priority in EXTENDED_PATTERNS[param_key]:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match and priority > best_priority:
+            best_match = match
+            best_priority = priority
+
+    if best_match:
+        raw_value = best_match.group(1).strip()
+        raw_matches[param_key] = raw_value
+        converted = convert_param_value(param_key, raw_value)
+        if converted is not None:
+            parameters[param_key] = converted
+            logger.debug(f"Extracted {param_key}={converted} via extended pattern (priority={best_priority})")
+            return True
+
+    return False
+
+
+def _extract_sampler_from_dictionary(
+    text: str,
+    parameters: Dict[str, Any],
+    raw_matches: Dict[str, str],
+) -> bool:
+    """
+    Extract sampler using dictionary matching for known sampler names.
+
+    Handles:
+    1. Exact sampler name matching ("DPM++ 2M Karras")
+    2. Family/series matching ("DPM++ series" → DPM++ 2M Karras)
+
+    Returns True if a sampler was found.
+    """
+    text_lower = text.lower()
+
+    # Phase 1: Try exact sampler name matching (longest first)
+    for sampler in KNOWN_SAMPLERS:  # Already sorted by specificity
+        if sampler.lower() in text_lower:
+            # Verify it's in a sampler context (near "sampler" word or after separator)
+            sampler_pattern = rf'(?:sampler|sampling)[:\s=]*[^.]*?{re.escape(sampler)}'
+            context_match = re.search(sampler_pattern, text, re.IGNORECASE)
+            if context_match:
+                parameters['sampler'] = sampler
+                raw_matches['sampler'] = sampler
+                logger.debug(f"Extracted sampler={sampler} via exact dictionary matching")
+                return True
+
+    # Phase 2: Try family/series matching ("DPM++ series" → default for that family)
+    for family_prefix, default_sampler in SAMPLER_FAMILIES.items():
+        # Look for patterns like "DPM++ series", "DPM++ family", "use DPM++"
+        family_patterns = [
+            rf'{re.escape(family_prefix)}\s*(?:series|family|samplers?)',  # "DPM++ series"
+            rf'(?:sampler|sampling)[:\s=]*[^.]*?{re.escape(family_prefix)}(?:\s|,|$)',  # "sampler: DPM++"
+            rf'(?:use|try|recommend)\s+{re.escape(family_prefix)}',  # "use DPM++"
+        ]
+
+        for pattern in family_patterns:
+            if re.search(pattern, text, re.IGNORECASE):
+                parameters['sampler'] = default_sampler
+                raw_matches['sampler'] = f"{family_prefix} (family → {default_sampler})"
+                logger.debug(f"Extracted sampler={default_sampler} via family matching ({family_prefix})")
+                return True
+
+    return False
+
+
+def _extract_resolution(
+    text: str,
+    parameters: Dict[str, Any],
+    raw_matches: Dict[str, str],
+) -> bool:
+    """
+    Extract width and height from resolution patterns.
+
+    Returns True if resolution was found.
+    """
+    for pattern in RESOLUTION_PATTERNS:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                width = int(match.group(1))
+                height = int(match.group(2))
+                # Sanity check - reasonable SD resolutions
+                if 256 <= width <= 4096 and 256 <= height <= 4096:
+                    parameters['width'] = width
+                    parameters['height'] = height
+                    raw_matches['resolution'] = f"{width}x{height}"
+                    logger.debug(f"Extracted resolution={width}x{height}")
+                    return True
+            except (ValueError, IndexError):
+                continue
+
+    return False
+
+
+def _infer_boolean_from_context(
+    text: str,
+    param_key: str,
+    search_terms: List[str],
+) -> Optional[bool]:
+    """
+    Infer boolean value from context keywords.
+
+    Looks for patterns like "hires fix is A Must" → True
+    or "don't use hires" → False
+    """
+    text_lower = text.lower()
+
+    # Build search pattern - look for the param term near boolean keywords
+    for term in search_terms:
+        term_lower = term.lower()
+        if term_lower not in text_lower:
+            continue
+
+        # Find position of term
+        pos = text_lower.find(term_lower)
+        # Get surrounding context (50 chars before and after)
+        start = max(0, pos - 50)
+        end = min(len(text_lower), pos + len(term_lower) + 50)
+        context = text_lower[start:end]
+
+        # Check for positive keywords in context
+        for keyword in BOOLEAN_TRUE_KEYWORDS:
+            if keyword in context:
+                logger.debug(f"Inferred {param_key}=True from context keyword '{keyword}'")
+                return True
+
+        # Check for negative keywords
+        for keyword in BOOLEAN_FALSE_KEYWORDS:
+            if keyword in context:
+                logger.debug(f"Inferred {param_key}=False from context keyword '{keyword}'")
+                return False
+
+    return None
+
+
 def extract_from_description(description: str) -> ExtractionResult:
     """
     Extract generation parameters from Civitai model description.
+
+    Uses multiple extraction strategies:
+    1. Extended patterns with priority (for ranges, "best" values)
+    2. Basic regex patterns
+    3. Dictionary matching for samplers
+    4. Resolution parsing (WxH formats)
+    5. Boolean inference from context keywords
 
     Parses description text looking for common parameter patterns like:
     - "Recommended: CFG 7, Steps 25"
     - "Settings: sampler: euler, clip skip: 2"
     - "Use with: strength 0.8"
+    - "CFG: 5-7 (7 is best)" → extracts 7
+    - "Highres-Fix is A Must!" → hires_fix=True
 
     Args:
         description: Model description text (may contain HTML)
@@ -328,11 +578,18 @@ def extract_from_description(description: str) -> ExtractionResult:
     clean_text = re.sub(r'<[^>]+>', ' ', description)
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
 
-    parameters = {}
-    raw_matches = {}
+    parameters: Dict[str, Any] = {}
+    raw_matches: Dict[str, str] = {}
 
-    # Look for parameters in the text
+    # Phase 1: Try extended patterns with priority (handles ranges, "best" values)
+    for param_key in EXTENDED_PATTERNS.keys():
+        _extract_with_extended_patterns(clean_text, param_key, parameters, raw_matches)
+
+    # Phase 2: Basic pattern matching for params not yet extracted
     for param_key, pattern in DESCRIPTION_PATTERNS.items():
+        if param_key in parameters:
+            continue  # Already extracted via extended patterns
+
         match = re.search(pattern, clean_text, re.IGNORECASE)
         if match:
             raw_value = match.group(1).strip()
@@ -341,7 +598,26 @@ def extract_from_description(description: str) -> ExtractionResult:
             converted = convert_param_value(param_key, raw_value)
             if converted is not None:
                 parameters[param_key] = converted
-                logger.debug(f"Extracted {param_key}={converted} from description")
+                logger.debug(f"Extracted {param_key}={converted} from basic pattern")
+
+    # Phase 3: Sampler dictionary matching (if not found via regex)
+    if 'sampler' not in parameters:
+        _extract_sampler_from_dictionary(clean_text, parameters, raw_matches)
+
+    # Phase 4: Resolution parsing (if width/height not found)
+    if 'width' not in parameters and 'height' not in parameters:
+        _extract_resolution(clean_text, parameters, raw_matches)
+
+    # Phase 5: Boolean inference from context (for hires_fix etc.)
+    if 'hires_fix' not in parameters:
+        inferred = _infer_boolean_from_context(
+            clean_text,
+            'hires_fix',
+            ['hires', 'highres', 'hires fix', 'hires-fix', 'highres fix'],
+        )
+        if inferred is not None:
+            parameters['hires_fix'] = inferred
+            raw_matches['hires_fix'] = 'inferred:' + str(inferred)
 
     return ExtractionResult(
         parameters=parameters,
