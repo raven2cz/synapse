@@ -903,25 +903,25 @@ function CategorySection({
   return (
     <div className="mb-4">
       {collapsible ? (
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={clsx(
-            "flex items-center gap-2 w-full text-left mb-2 p-2 rounded-lg",
-            "hover:bg-slate-mid/50 transition-colors duration-200"
-          )}
-        >
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-text-muted" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-text-muted" />
-          )}
-          <Icon className={clsx("w-4 h-4", meta.color)} />
-          <span className="text-sm font-semibold text-text-primary">{meta.label}</span>
-          <span className="text-xs text-text-muted ml-1">({parameters.length})</span>
-          <div className="ml-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 w-full mb-2 p-2 rounded-lg hover:bg-slate-mid/50 transition-colors duration-200">
+          <button
+            type="button"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="flex items-center gap-2 flex-1 text-left"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4 text-text-muted" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-text-muted" />
+            )}
+            <Icon className={clsx("w-4 h-4", meta.color)} />
+            <span className="text-sm font-semibold text-text-primary">{meta.label}</span>
+            <span className="text-xs text-text-muted ml-1">({parameters.length})</span>
+          </button>
+          <div className="ml-auto">
             <AddParamDropdown category={category} existingKeys={existingKeys} onAdd={onAdd} />
           </div>
-        </button>
+        </div>
       ) : (
         <div className="flex items-center gap-2 mb-2 px-2">
           <Icon className={clsx("w-4 h-4", meta.color)} />
