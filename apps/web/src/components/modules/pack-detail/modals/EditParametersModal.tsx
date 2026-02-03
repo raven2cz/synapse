@@ -975,10 +975,21 @@ export function EditParametersModal({
   const [newCategory, setNewCategory] = useState<CategoryKey>('custom')
 
   // Reset when modal opens
+  // IMPORTANT: Filter out AI-extracted fields - they are read-only in AI Insights section
   useEffect(() => {
     if (isOpen) {
       const stringified: Record<string, string> = {}
+      // Check if parameters were AI-extracted
+      const isAiExtracted = Boolean(initialParameters._extracted_by)
+
       for (const [key, value] of Object.entries(initialParameters)) {
+        // Skip internal fields (start with _)
+        if (key.startsWith('_')) continue
+
+        // Skip AI-extracted unknown fields - they belong to AI Insights, not editable params
+        // Only include fields that have a known param definition
+        if (isAiExtracted && !getParamDef(key)) continue
+
         stringified[key] = String(value ?? '')
       }
       setParameters(stringified)

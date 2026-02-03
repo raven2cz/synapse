@@ -138,8 +138,12 @@ const CATEGORY_META: Record<CategoryKey, { label: string; icon: React.ElementTyp
 
 const HIGHLIGHT_PARAMS = new Set(['clip_skip', 'strength', 'strength_recommended'])
 
-// AI Notes - extracted metadata that should be displayed as text, not parameter cards
-// These are excluded from regular parameter display and shown in AI Insights section
+// AI Notes - these are KNOWN AI insight fields with explicit labels.
+// IMPORTANT: Unknown fields from AI extraction go to AI Insights AUTOMATICALLY
+// via the isAiExtracted && category === 'custom' logic - NO WHITELIST NEEDED!
+// This set is only for:
+// 1. Fields that need special labels (AI_NOTES_LABELS)
+// 2. Fields that would otherwise match PARAM_CATEGORIES but should be AI Notes
 const AI_NOTES_KEYS = new Set([
   // Internal
   '_extracted_by',
@@ -157,7 +161,7 @@ const AI_NOTES_KEYS = new Set([
   'recommendation',
   'recommendations',
   'resolution_notes',
-  // List-based recommendations (should be formatted nicely, not as cards)
+  // List-based recommendations
   'recommended_models',
   'related_models',
   'recommended_prompts',
@@ -165,7 +169,7 @@ const AI_NOTES_KEYS = new Set([
   'recommended_resolutions',
   'hires_fix_options',
   'highres_fix_recommendation',
-  // Embeddings (various AI naming conventions)
+  // Embeddings
   'embeddings',
   'recommended_embeddings',
   'negative_embeddings',
@@ -173,7 +177,7 @@ const AI_NOTES_KEYS = new Set([
   'textual_inversions',
   'avoid_resources',
   'avoid_embeddings',
-  // VAE recommendations
+  // VAE recommendations (override - vae could be in 'model' category but should be AI note)
   'vae',
   'vae_recommendation',
   'recommended_vae',
@@ -187,7 +191,7 @@ const AI_NOTES_KEYS = new Set([
   'recommended_negative',
 ])
 
-// Labels for AI notes keys
+// Labels for AI notes keys (optional - unknown fields get auto-formatted labels)
 const AI_NOTES_LABELS: Record<string, string> = {
   compatibility: 'Compatibility',
   compatibility_notes: 'Compatibility Notes',
@@ -617,6 +621,8 @@ export function PackParametersSection({
     if (parameters) {
       // Special handling for resolution - combine width & height
       const hasResolution = parameters.width != null && parameters.height != null
+      // Get list of fields that came from AI extraction
+      const aiFields = (parameters._ai_fields as string[] | undefined) ?? []
 
       for (const [key, value] of Object.entries(parameters)) {
         if (value === null || value === undefined) continue
@@ -624,13 +630,20 @@ export function PackParametersSection({
         // Skip AI notes - they're displayed in a separate section
         if (AI_NOTES_KEYS.has(key)) continue
 
-        // Skip _raw_* fields - these are unnormalized data shown in AI notes
+        // Skip _raw_* fields and internal fields
         if (key.startsWith('_raw_') || key.startsWith('_')) continue
 
         // Skip width/height individually if we're showing combined resolution
         if (hasResolution && (key === 'width' || key === 'height')) continue
 
         const category = getParamCategory(key)
+        const isFromAi = aiFields.includes(key)
+
+        // Skip unknown fields from AI extraction - they belong to AI Insights, NOT Custom Parameters!
+        // Custom category is ONLY for user-defined parameters, not AI-extracted unknown fields.
+        // User-added custom fields (not in _ai_fields) go to Custom.
+        if (isFromAi && category === 'custom') continue
+
         const formatted = formatParamValue(key, value)
 
         if (formatted) {
@@ -697,11 +710,12 @@ export function PackParametersSection({
     if (!parameters) return []
 
     const notes: Array<{ key: string; label: string; value: string; isWarning?: boolean; isRaw?: boolean; isList?: boolean; isUnknown?: boolean }> = []
-    const isAiExtracted = Boolean(parameters._extracted_by)
+    // Get list of fields that came from AI extraction (to distinguish from user custom fields)
+    const aiFields = (parameters._ai_fields as string[] | undefined) ?? []
 
     for (const [key, value] of Object.entries(parameters)) {
       if (value === null || value === undefined) continue
-      if (key === '_extracted_by') continue
+      if (key === '_extracted_by' || key === '_ai_fields') continue
 
       // Check field type
       const isAiNote = AI_NOTES_KEYS.has(key)
@@ -709,7 +723,9 @@ export function PackParametersSection({
       const isInternalField = key.startsWith('_')
       const category = getParamCategory(key)
       // Unknown fields from AI extraction go to AI Insights (not Custom Parameters)
-      const isUnknownFromAi = isAiExtracted && category === 'custom' && !isInternalField
+      // Only include if field is in _ai_fields list (came from AI, not user-added)
+      const isFromAi = aiFields.includes(key)
+      const isUnknownFromAi = isFromAi && category === 'custom' && !isInternalField
 
       // Include: explicit AI notes, raw fields, or unknown fields from AI
       if (!isAiNote && !isRawField && !isUnknownFromAi) continue

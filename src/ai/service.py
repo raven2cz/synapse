@@ -78,6 +78,8 @@ class AIService:
                 # Add _extracted_by to output if configured (per spec 4.5)
                 if self.settings.show_provider_in_results and isinstance(parsed, dict):
                     parsed["_extracted_by"] = cached.provider_id
+                    # Track which fields came from AI (for distinguishing from user custom fields)
+                    parsed["_ai_fields"] = [k for k in parsed.keys() if not k.startswith("_")]
 
                 return TaskResult(
                     success=True,
@@ -216,6 +218,8 @@ class AIService:
                     # Add _extracted_by to output if configured (per spec 4.5)
                     if self.settings.show_provider_in_results and isinstance(parsed, dict):
                         parsed["_extracted_by"] = result.provider_id
+                        # Track which fields came from AI (for distinguishing from user custom fields)
+                        parsed["_ai_fields"] = [k for k in parsed.keys() if not k.startswith("_")]
 
                     return TaskResult(
                         success=True,
@@ -264,6 +268,8 @@ class AIService:
             # Add _extracted_by to output if configured (per spec 4.5)
             if self.settings.show_provider_in_results and isinstance(parsed, dict):
                 parsed["_extracted_by"] = "rule_based"
+                # Track which fields came from AI (for distinguishing from user custom fields)
+                parsed["_ai_fields"] = [k for k in parsed.keys() if not k.startswith("_")]
 
             return TaskResult(
                 success=True,
