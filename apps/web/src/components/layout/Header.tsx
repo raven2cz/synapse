@@ -1,22 +1,12 @@
 import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { Eye, EyeOff } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { ProfileDropdown } from './ProfileDropdown'
 import { Logo } from '../ui/Logo'
+import { APP_VERSION } from '../../config'
 
 export function Header() {
   const { nsfwBlurEnabled, toggleNsfwBlur } = useSettingsStore()
-
-  const { data: status } = useQuery({
-    queryKey: ['system-status'],
-    queryFn: async () => {
-      const res = await fetch('/api/system/status')
-      if (!res.ok) throw new Error('Failed to fetch status')
-      return res.json()
-    },
-    refetchInterval: 5000,
-  })
 
   return (
     <header className="h-14 px-6 flex items-center justify-between border-b border-slate-700/50 bg-slate-900/95 backdrop-blur-2xl backdrop-saturate-150 sticky top-0 z-50">
@@ -38,7 +28,7 @@ export function Header() {
               Synapse
             </h1>
             <span className="text-[10px] font-mono px-1.5 py-0.5 bg-violet-500/20 text-violet-300 rounded border border-violet-500/30">
-              v{status?.version || '2.1.8'}
+              v{APP_VERSION}
             </span>
           </div>
           <span className="text-xs font-semibold text-slate-200">The Pack-First Model Manager</span>
@@ -79,13 +69,6 @@ export function Header() {
           </div>
         </button>
 
-        {/* Packs count */}
-        {status?.packs_count !== undefined && (
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <span className="text-indigo-400 font-medium">{status.packs_count}</span>
-            <span>packs</span>
-          </div>
-        )}
       </div>
     </header>
   )

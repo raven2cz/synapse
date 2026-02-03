@@ -1,9 +1,9 @@
 # PLAN: Pack Edit & Modularization
 
-**Version:** v2.3.0
-**Status:** ✅ PHASE 6 COMPLETE (2026-02-01)
+**Version:** v2.4.0
+**Status:** ✅ COMPLETE (2026-02-03) - Future work přesunuto do nových PLAN souborů
 **Created:** 2026-01-30
-**Updated:** 2026-02-01
+**Updated:** 2026-02-03
 **Branch:** `pack-edit`
 
 ---
@@ -1566,7 +1566,7 @@ const editableClasses = {
 - [x] Frontend testy prochází
 - [x] TypeScript kompilace OK
 - [x] Frontend build OK
-- [ ] Manuální UI test (vyžaduje uživatele)
+- [x] Manuální UI test (vyžaduje uživatele) ✅ DONE (2026-02-03)
 
 **F) Aktualizace testů** ✅
 - [x] `tests/store/test_inventory_stabilization.py` - přidána helper funkce `get_pack_detail_module_content()` pro kontrolu modulárních souborů
@@ -3181,17 +3181,24 @@ Pack Edit & Modularization UI is now production ready:
 
 ---
 
-## 🔮 FUTURE WORK (Phase 7+)
+## 🔮 FUTURE WORK (Phase 7+) → PŘESUNUTO DO NOVÝCH PLÁNŮ
 
-### 1. Install Pack - Full Implementation ⏳
+> **2026-02-03:** Všechny FUTURE WORK položky byly přesunuty do samostatných PLAN souborů:
+> - **Install Pack** → `PLAN-Install-Packs.md`
+> - **Dependencies** → `PLAN-Dependencies.md`
+> - **Workflow Creation** → `PLAN-Workflow-Wizard.md`
 
-**Aktuální stav:** InstallPlugin.tsx je PROTOTYPE (~326 řádků)
+### ~~1. Install Pack - Full Implementation~~ → PLAN-Install-Packs.md
+
+**Přesunuto do:** `plans/PLAN-Install-Packs.md`
+
+~~**Aktuální stav:** InstallPlugin.tsx je PROTOTYPE (~326 řádků)~~
 - ✅ PrototypeNotice banner
 - ✅ ScriptsSection s mock skripty
 - ✅ EnvironmentStatus komponenta
-- ❌ Reálná exekuce skriptů
-- ❌ Console output streaming
-- ❌ Process management (start/stop/restart)
+- ~~❌ Reálná exekuce skriptů~~ → viz nový PLAN
+- ~~❌ Console output streaming~~ → viz nový PLAN
+- ~~❌ Process management (start/stop/restart)~~ → viz nový PLAN
 
 **Cíl:** Plně funkční Install packs pro ComfyUI, Forge, a další UI
 
@@ -3229,11 +3236,13 @@ sections/PackScriptsSection.tsx   # Script management UI
 
 ---
 
-### 2. PackDependenciesTreeSection ⏳
+### ~~2. PackDependenciesTreeSection~~ → PLAN-Dependencies.md
 
-**Aktuální stav:** Typ `PackDependencyRef` existuje v backend modelu, UI CHYBÍ
+**Přesunuto do:** `plans/PLAN-Dependencies.md`
 
-**Cíl:** UI pro správu závislostí mezi packy (pack-to-pack dependencies)
+~~**Aktuální stav:** Typ `PackDependencyRef` existuje v backend modelu, UI CHYBÍ~~
+
+~~**Cíl:** UI pro správu závislostí mezi packy (pack-to-pack dependencies)~~
 
 **Use cases:**
 - LoRA pack závisí na Checkpoint packu (vyžaduje base model)
@@ -3283,10 +3292,14 @@ DELETE /api/packs/{name}/pack-dependencies/{dep_pack_name}
 
 ---
 
-### Priority Order
+### ~~Priority Order~~ → Viz nové PLAN soubory
 
-1. **PackDependenciesTreeSection** - Jednodušší, navazuje na existující infrastrukturu
-2. **Install Pack Full** - Komplexnější, vyžaduje process management
+~~1. **PackDependenciesTreeSection** - Jednodušší, navazuje na existující infrastrukturu~~
+~~2. **Install Pack Full** - Komplexnější, vyžaduje process management~~
+
+Viz:
+- `PLAN-Dependencies.md`
+- `PLAN-Install-Packs.md`
 
 ---
 
