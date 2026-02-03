@@ -979,16 +979,18 @@ export function EditParametersModal({
   useEffect(() => {
     if (isOpen) {
       const stringified: Record<string, string> = {}
-      // Check if parameters were AI-extracted
-      const isAiExtracted = Boolean(initialParameters._extracted_by)
+      // Get list of AI-extracted field names (not user-added custom fields)
+      const aiFields = (initialParameters._ai_fields as unknown as string[] | undefined) ?? []
 
       for (const [key, value] of Object.entries(initialParameters)) {
         // Skip internal fields (start with _)
         if (key.startsWith('_')) continue
 
         // Skip AI-extracted unknown fields - they belong to AI Insights, not editable params
-        // Only include fields that have a known param definition
-        if (isAiExtracted && !getParamDef(key)) continue
+        // BUT keep user-added custom fields (they're NOT in _ai_fields array)
+        const isAiField = aiFields.includes(key)
+        const isKnownParam = Boolean(getParamDef(key))
+        if (isAiField && !isKnownParam) continue
 
         stringified[key] = String(value ?? '')
       }
