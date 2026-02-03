@@ -1058,54 +1058,241 @@ atexit.register(_cleanup_server)
 
 ---
 
-#### 8.1.8 AI Notes Display ❌ PENDING (Phase 1.5)
+#### 8.1.8 AI Insights vs Custom Parameters - ARCHITECTURE FIX ✅ COMPLETE (2026-02-03)
 
-**Popis:** AI extrahuje nejen parametry, ale i doplňující informace:
-- `compatibility` - kompatibilita s checkpointy
-- `usage_tips` - tipy pro použití
-- `warnings` - varování
-- `recommended_models` - doporučené modely
-- `highres_fix_recommendation` - doporučení pro hires fix
-- A další...
+**Status:** ✅ OPRAVENO - AI Insights a Custom Parameters jsou nyní oddělené
 
-Tyto informace jsou nyní **ZACHOVÁNY** v `GenerationParameters` (díky `extra="allow"`),
-ale **NEZOBRAZENY** v UI.
+**Commits:**
+- `c4b606c` - fix: Properly separate AI Insights from Custom Parameters
+- `8285740` - fix: Resolve button nesting DOM warning in EditParametersModal
+- `90c506e` - fix: Keep user custom params visible in EditParametersModal
+
+---
+
+##### PROBLEM ANALYSIS
+
+**Hlavní problém:** AI Insights jsou NESPRÁVNĚ kategorizovány jako 'custom' a nelze rozlišit od user custom params.
+
+**Root cause:** Používali jsme pouze `_extracted_by` boolean pro rozlišení, ale to označuje celý pack, ne jednotlivá pole.
+
+**Důsledky:**
+1. AI Insights (usage_tips, compatibility, recommended_embeddings...) → `category = 'custom'`
+2. User-defined custom params → `category = 'custom'`
+3. Nelze je rozlišit!
+4. V EditParametersModal se AI notes mísí s user custom params
+5. Při uložení dochází ke ztrátě nebo přepisování dat
+
+---
+
+##### IMPLEMENTED SOLUTION ✅
+
+**Klíčový princip:** Trackovat jednotlivá AI-extrahovaná pole pomocí `_ai_fields` array, ne pouze pack-level `_extracted_by`.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  DATA FLOW - Parameter Types (IMPLEMENTED)                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Backend (src/ai/service.py):                                   │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  AI extraction output:                                   │   │
+│  │  {                                                       │   │
+│  │    "cfg_scale": 7,           ← AI-extracted, KNOWN       │   │
+│  │    "usage_tips": "...",      ← AI-extracted, UNKNOWN     │   │
+│  │    "_extracted_by": "gemini", ← Provider ID              │   │
+│  │    "_ai_fields": ["cfg_scale", "usage_tips", ...]        │   │
+│  │  }                            ↑ NEW! Tracks AI fields    │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  Frontend decision logic:                                       │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  For each field:                                         │   │
+│  │                                                          │   │
+│  │  isAiField = _ai_fields.includes(key)                    │   │
+│  │  isKnownParam = PARAM_CATEGORIES contains key            │   │
+│  │                                                          │   │
+│  │  if (isAiField && isKnownParam)     → Show in category   │   │
+│  │  if (isAiField && !isKnownParam)    → AI Insights only   │   │
+│  │  if (!isAiField && !isKnownParam)   → Custom Parameters  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Klíčové principy implementace:**
+
+1. **`_ai_fields`** = array of field names that came from AI extraction
+2. **AI Insights** = fields in `_ai_fields` that are NOT in `PARAM_CATEGORIES`
+3. **Custom Parameters** = fields NOT in `_ai_fields` and NOT in `PARAM_CATEGORIES`
+4. **Known params** = fields in `PARAM_CATEGORIES` (regardless of source)
+
+---
+
+##### ACTUAL IMPLEMENTATION ✅
+
+**1. Backend: `src/ai/service.py` - Add `_ai_fields` tracking**
+
+```python
+# src/ai/service.py:216 (in execute_task method)
+# Add _extracted_by to output if configured (per spec 4.5)
+if self.settings.show_provider_in_results and isinstance(parsed, dict):
+    parsed["_extracted_by"] = result.provider_id
+    # Track which fields came from AI (for distinguishing from user custom fields)
+    parsed["_ai_fields"] = [k for k in parsed.keys() if not k.startswith("_")]
+```
+
+**Proč:** `_ai_fields` je array názvů polí, která přišla z AI extrakce. To umožňuje frontend rozlišit:
+- AI-extracted unknown field → AI Insights (read-only)
+- User-added unknown field → Custom Parameters (editable)
+
+**2. Frontend: `PackParametersSection.tsx` - Use `_ai_fields` for filtering**
+
+```typescript
+// PackParametersSection.tsx - categorizedParams useMemo
+const aiFields = (parameters._ai_fields as unknown as string[] | undefined) ?? []
+
+for (const [key, value] of Object.entries(parameters)) {
+  // ...
+  const isFromAi = aiFields.includes(key)
+
+  // Skip unknown fields from AI extraction - they belong to AI Insights!
+  if (isFromAi && category === 'custom') continue
+
+  // User custom fields (NOT in aiFields) go to Custom category
+  result[category].push([key, value, paramDef])
+}
+
+// PackParametersSection.tsx - aiNotes useMemo
+const aiFields = (parameters._ai_fields as unknown as string[] | undefined) ?? []
+
+for (const [key, value] of Object.entries(parameters)) {
+  const category = getParamCategory(key)
+  const isFromAi = aiFields.includes(key)
+
+  // Include in AI Insights if:
+  // - It's a known AI note key (whitelist), OR
+  // - It's an unknown field that came from AI extraction
+  const isUnknownFromAi = isFromAi && category === 'custom' && !isInternalField
+
+  if (AI_NOTES_KEYS.has(key) || isUnknownFromAi) {
+    notes.push({ key, value, label })
+  }
+}
+```
+
+**3. Frontend: `EditParametersModal.tsx` - Filter AI fields from edit**
+
+```typescript
+// EditParametersModal.tsx - useEffect for modal open
+useEffect(() => {
+  if (isOpen) {
+    const stringified: Record<string, string> = {}
+    // Get list of AI-extracted field names (not user-added custom fields)
+    const aiFields = (initialParameters._ai_fields as unknown as string[] | undefined) ?? []
+
+    for (const [key, value] of Object.entries(initialParameters)) {
+      if (key.startsWith('_')) continue
+
+      // Skip AI-extracted unknown fields - they belong to AI Insights
+      // BUT keep user-added custom fields (they're NOT in _ai_fields array)
+      const isAiField = aiFields.includes(key)
+      const isKnownParam = Boolean(getParamDef(key))
+      if (isAiField && !isKnownParam) continue
+
+      stringified[key] = String(value ?? '')
+    }
+    setParameters(stringified)
+  }
+}, [isOpen, initialParameters])
+```
+
+**Proč toto funguje:**
+- `_ai_fields` obsahuje pouze pole extrahovaná AI
+- User custom param "test" NENÍ v `_ai_fields` → zobrazí se v editoru
+- AI insight "usage_tips" JE v `_ai_fields` a není known param → NEzobrazí se v editoru
+
+---
+
+##### TASK CHECKLIST
 
 | Úkol | Stav | Popis |
 |------|------|-------|
-| Přidat AI Notes sekci do UI | ❌ | Pod parameters zobrazit extra info |
-| Rozlišit known vs custom params | ❌ | Known params = normální zobrazení, ostatní = AI Notes |
-| Styling pro AI Notes | ❌ | Collapsible sekce s ikonou 💡 |
-| Phase 2: Překlad AI Notes | ❌ | Pokud je nastaven jazyk, přeložit notes |
+| Backend: Add `_ai_fields` tracking | ✅ | `src/ai/service.py:216` - tracks AI-extracted field names |
+| Frontend: Fix `categorizedParams` | ✅ | Uses `_ai_fields` to skip AI unknown fields from Custom |
+| Frontend: Fix `aiNotes` useMemo | ✅ | Uses `_ai_fields` to include AI unknown fields in AI Insights |
+| Frontend: Fix EditParametersModal load | ✅ | Uses `_ai_fields` to filter AI insights but keep user custom |
+| Frontend: Fix EditParametersModal save | ✅ | Preserves `_ai_fields`, `_extracted_by` on save |
+| Frontend: Fix button nesting DOM warning | ✅ | `CategorySection` restructured - button and dropdown are siblings |
+| Styling AI Insights sekce | ✅ | Lightbulb icon, read-only display |
+| Tests | ✅ | verify.sh passes, TypeScript OK |
 
-**Příklad AI response s extra info:**
+---
+
+##### PŘÍKLAD - JAK MÁ VYPADAT VÝSLEDEK
+
+**Input (AI response):**
 ```json
 {
   "cfg_scale": 7,
   "steps": 25,
   "sampler": "DPM++ 2M Karras",
-  "compatibility": "Works well with most checkpoints",
-  "highres_fix_recommendation": "Highres-Fix is A Must!",
-  "usage_tips": "Best results with portrait orientation",
+  "usage_tips": "Best results with portrait",
+  "compatibility": "Works with SD 1.5",
+  "recommended_embeddings": ["EasyNegative", "BadHands"],
   "_extracted_by": "gemini"
 }
 ```
 
-**Očekávané UI:**
+**Display - PackParametersSection:**
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Generation Settings                            [🤖 gemini]       │
+│ Generation Settings                            [🤖 gemini] [Edit]│
 ├─────────────────────────────────────────────────────────────────┤
-│  CFG Scale: 7                                                    │
-│  Steps: 25                                                       │
-│  Sampler: DPM++ 2M Karras                                        │
+│ ⚙️ Generation                                                    │
+│   [CFG Scale: 7] [Steps: 25] [Sampler: DPM++ 2M Karras]         │
 ├─────────────────────────────────────────────────────────────────┤
-│ 💡 AI Notes                                          [▼ Expand]  │
-│  • Compatibility: Works well with most checkpoints              │
-│  • Hires Fix: Highres-Fix is A Must!                            │
-│  • Usage Tips: Best results with portrait orientation           │
+│ 💡 AI Insights (read-only)                                       │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │ Usage Tips: Best results with portrait                  │   │
+│   │ Compatibility: Works with SD 1.5                        │   │
+│   │ Recommended Embeddings: EasyNegative • BadHands         │   │
+│   └─────────────────────────────────────────────────────────┘   │
+├─────────────────────────────────────────────────────────────────┤
+│ 🔧 Custom Parameters (prázdné - uživatel nic nepřidal)           │
+│   No custom parameters.                                         │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**EditParametersModal - Co se zobrazí:**
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Edit Generation Parameters                                  [×] │
+├─────────────────────────────────────────────────────────────────┤
+│ ⚙️ Generation                                                    │
+│   CFG Scale: [7      ] [-][+]                                   │
+│   Steps:     [25     ] [-][+]                                   │
+│   Sampler:   [DPM++ 2M Karras    ]                              │
+├─────────────────────────────────────────────────────────────────┤
+│ 🔧 Custom (Add your own parameters)                              │
+│   [Parameter name] [Value] [Type ▼] [Category ▼] [+ Add]        │
+├─────────────────────────────────────────────────────────────────┤
+│ ℹ️ AI Insights are preserved but not editable here.              │
+├─────────────────────────────────────────────────────────────────┤
+│                              [Cancel] [Save]                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Klíčové:** AI Insights (usage_tips, compatibility, recommended_embeddings) se NEZOBRAZUJÍ v edit modal, ale jsou ZACHOVÁNY při uložení!
+
+---
+
+##### RELATED FILES (ACTUAL CHANGES)
+
+| Soubor | Změna |
+|--------|-------|
+| `src/ai/service.py` | Added `_ai_fields` array to track AI-extracted field names |
+| `PackParametersSection.tsx` | Uses `_ai_fields` in categorizedParams and aiNotes useMemo |
+| `EditParametersModal.tsx` | Uses `_ai_fields` to filter AI unknown fields, fixed button nesting |
 
 ---
 
@@ -1414,7 +1601,7 @@ gemini --tool imagen "generate preview thumbnail"
 
 ---
 
-*Last Updated: 2026-02-03*
+*Last Updated: 2026-02-03 (AI Insights fix complete)*
 
 ---
 
