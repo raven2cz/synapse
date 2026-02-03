@@ -1573,6 +1573,93 @@ gemini --tool imagen "generate preview thumbnail"
 > ⚠️ **Poznámka:** Image generation je resource-intensive a má rate limity.
 > Vhodné spíše pro on-demand funkce než automatické zpracování.
 
+### 12.6 Agent Tool Calling 🔧
+
+**Problém:** S rostoucím počtem AI funkcí (extrakce parametrů, dependency resolver, workflow suggestions, auto-tagging...) by vznikla "kupa AI tlačítek" rozházených po UI.
+
+**Řešení:** Agent s tool calling - jednotný vstupní bod, který zná dostupné funkce a umí je volat.
+
+#### Architektura
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Agent Tool Calling                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  User Input (text/voice)                                        │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  AI Agent (gemini/claude)                                 │  │
+│  │  ┌────────────────────────────────────────────────────┐  │  │
+│  │  │  System prompt:                                     │  │  │
+│  │  │  "You are Synapse assistant. You have these tools:" │  │  │
+│  │  │  - extract_parameters(pack_name)                    │  │  │
+│  │  │  - resolve_dependencies(pack_name)                  │  │  │
+│  │  │  - suggest_workflow(pack_name, style)               │  │  │
+│  │  │  - translate_description(pack_name, target_lang)    │  │  │
+│  │  │  - auto_tag(pack_name)                              │  │  │
+│  │  │  - analyze_compatibility(lora, checkpoint)          │  │  │
+│  │  └────────────────────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│       │                                                         │
+│       ▼                                                         │
+│  Tool Call: extract_parameters("GhostMix")                      │
+│       │                                                         │
+│       ▼                                                         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Backend API                                              │  │
+│  │  POST /api/ai/extract { pack_name: "GhostMix" }          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│       │                                                         │
+│       ▼                                                         │
+│  Agent Response: "Extrahoval jsem 12 parametrů pro GhostMix..." │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Dostupné Tools (plánované)
+
+| Tool | Popis | API Endpoint |
+|------|-------|--------------|
+| `extract_parameters` | Re-extrakce parametrů pro starší packy | `POST /api/ai/extract` |
+| `resolve_dependencies` | Najít a navrhnout chybějící závislosti | `POST /api/ai/resolve-deps` |
+| `suggest_workflow` | Navrhnout ComfyUI workflow | `POST /api/ai/suggest-workflow` |
+| `translate_description` | Přeložit popis do jiného jazyka | `POST /api/ai/translate` |
+| `auto_tag` | Automatické tagování packu | `POST /api/ai/auto-tag` |
+| `analyze_compatibility` | Analýza kompatibility LoRA + Checkpoint | `POST /api/ai/compatibility` |
+
+#### Příklady interakcí
+
+```
+User: "Extrahuj parametry pro GhostMix, má starší verzi bez AI dat"
+Agent: [calls extract_parameters("GhostMix")]
+Agent: "Hotovo! Extrahoval jsem 12 parametrů: CFG 7, Steps 25, Sampler DPM++..."
+
+User: "Tento LoRA mi hlásí chybějící závislosti, pomoz mi"
+Agent: [calls resolve_dependencies("MyLoRA")]
+Agent: "Našel jsem 2 chybějící závislosti: anime_base.safetensors a EasyNegative..."
+
+User: "Jak by vypadal workflow pro portrait fotky s tímto LoRA?"
+Agent: [calls suggest_workflow("MyLoRA", "portrait")]
+Agent: "Navrhuji tento workflow: KSampler → VAE Decode → ..."
+```
+
+#### Výhody oproti jednotlivým tlačítkům
+
+1. **Jednotný vstupní bod** - uživatel se nemusí učit kde jsou která tlačítka
+2. **Kontext-aware** - agent ví na jakém packu uživatel pracuje
+3. **Kombinovatelné** - agent může volat více tools najednou
+4. **Natural language** - uživatel popisuje co chce, ne jak to udělat
+5. **Rozšiřitelné** - přidání nového tool = jen registrace v systému
+
+#### Implementation Notes
+
+- Agent bude využívat existující AI infrastrukturu (providers, fallback chain)
+- Tools budou implementovány jako API endpointy
+- Frontend: chat bubble komponenta v pravém dolním rohu
+- Backend: tool registry s JSON schema pro každý tool
+
 ---
 
 > ⚠️ **Poznámka:** Toto je dlouhodobá vize. Implementace závisí na:
@@ -1601,7 +1688,7 @@ gemini --tool imagen "generate preview thumbnail"
 
 ---
 
-*Last Updated: 2026-02-03 (AI Insights fix complete)*
+*Last Updated: 2026-02-03 (Agent Tool Calling vision added)*
 
 ---
 
