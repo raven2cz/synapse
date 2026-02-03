@@ -3292,6 +3292,20 @@ DELETE /api/packs/{name}/pack-dependencies/{dep_pack_name}
 
 ## Phase 7: Parameters Extraction from Civitai Images ✅ COMPLETE
 
+> ⚠️ **PARTIAL OBSOLETE (2026-02-03):**
+> - ✅ Iteration 7.1 (Backend AI extraction) - **ZACHOVÁNO**
+> - ✅ Iteration 7.6 (Auto-extract on import) - **ZACHOVÁNO**
+> - ~~Iteration 7.2 (Apply to Pack button)~~ - **ODSTRANĚNO** - přepisovalo AI-extracted parametry
+> - ~~Iteration 7.3 (Source Picker)~~ - **ODSTRANĚNO** - dropdown s čísly obrázků byl nepoužitelný
+>
+> **Důvod:** "Apply to Pack Parameters" a Source Picker přepisovaly cenné AI-extracted parametry a AI Insights.
+> Místo toho je navržen **Workflow Creation Wizard** - viz `PLAN-Workflow-Wizard.md`.
+>
+> Wizard umožní:
+> - Vizuální výběr obrázku (ne dropdown s indexy)
+> - Generování workflow souborů pro různá UI (ComfyUI, Forge, A1111, ...)
+> - Ukládání workflows do pack složky (ne přepisování pack.parameters)
+
 ### Motivace
 
 Civitai preview obrázky obsahují cenná metadata o generation parameters (prompt, seed, sampler, steps, CFG, atd.). Tato data jsou již zobrazována v `GenerationDataPanel` při prohlížení obrázků v FullscreenMediaViewer.
@@ -3432,13 +3446,16 @@ async def import_from_civitai(...):
 - Test různých formátů description
 - Test edge cases (prázdný popis, žádné parametry)
 
-### Iteration 7.2: "Apply to Pack" Button in GenerationDataPanel ✅ DONE
+### ~~Iteration 7.2: "Apply to Pack" Button in GenerationDataPanel~~ ❌ ODSTRANĚNO
 
-**Implementováno:**
-- Frontend `apps/web/src/lib/parameters/` modul (3 soubory: normalizer.ts, extractor.ts, aggregator.ts)
-- Tlačítko "Apply to Pack Parameters" v `GenerationDataPanel.tsx`
-- Tlačítko "Apply to Pack Parameters" v `FullscreenMediaViewer.tsx` (inline metadata panel)
-- Integrace v `PackDetailPage.tsx` - merge parametrů při kliknutí
+> **ODSTRANĚNO (2026-02-03):** Tlačítka a související kód odstraněny, protože přepisovaly
+> cenné AI-extracted parametry a AI Insights. Viz `PLAN-Workflow-Wizard.md` pro správný přístup.
+
+**Bylo implementováno (nyní odstraněno):**
+- ~~Frontend `apps/web/src/lib/parameters/` modul (3 soubory: normalizer.ts, extractor.ts, aggregator.ts)~~
+- ~~Tlačítko "Apply to Pack Parameters" v `GenerationDataPanel.tsx`~~
+- ~~Tlačítko "Apply to Pack Parameters" v `FullscreenMediaViewer.tsx` (inline metadata panel)~~
+- ~~Integrace v `PackDetailPage.tsx` - merge parametrů při kliknutí~~
 
 ### Original Iteration 7.2: "Apply to Pack" Button in GenerationDataPanel
 
@@ -3542,9 +3559,13 @@ function GenerationDataPanel({ meta, onApplyToPackParameters, canApplyToPackPara
 />
 ```
 
-### Iteration 7.3: Source Indicator in PackParametersSection
+### ~~Iteration 7.3: Source Indicator in PackParametersSection~~ ❌ ODSTRANĚNO
 
-**Cíl:** Zobrazit odkud parametry pochází
+> **ODSTRANĚNO (2026-02-03):** Source Picker odstraněn - dropdown s "Image #1, #2, ..." indexy
+> byl nepoužitelný pro packy s desítkami/stovkami obrázků. Vizuální výběr obrázků bude
+> součástí Workflow Creation Wizard - viz `PLAN-Workflow-Wizard.md`.
+
+**Původní cíl:** Zobrazit odkud parametry pochází
 
 **UI Design:**
 
@@ -3741,23 +3762,21 @@ NEBO při neúspěchu:
 ### Success Criteria Phase 7
 
 - [x] Parametry z description jsou extrahovány při Civitai importu ✅ 7.6
-- [x] "Apply to Pack Parameters" button funguje v GenerationDataPanel ✅ 7.2
-- [x] Source picker zobrazuje dostupné zdroje ✅ 7.3
-- [x] Změna zdroje aktualizuje parametry ✅ 7.3
+- ~~[x] "Apply to Pack Parameters" button funguje v GenerationDataPanel ✅ 7.2~~ **ODSTRANĚNO**
+- ~~[x] Source picker zobrazuje dostupné zdroje ✅ 7.3~~ **ODSTRANĚNO**
+- ~~[x] Změna zdroje aktualizuje parametry ✅ 7.3~~ **ODSTRANĚNO**
 - [x] Existující editovatelnost parameters NEZMĚNĚNA ✅
-- [x] PackParametersSection UI NEZMĚNĚNA (kromě source pickeru) ✅
+- [x] PackParametersSection UI NEZMĚNĚNA ✅
 - [x] 15+ nových testů ✅ (90+ testů celkem)
 - [x] Automatická extrakce při importu ✅ 7.6
 - [x] Logy při extrakci parametrů `[parameter-extraction]` ✅ 7.6
 
 ### Risk Mitigation
 
-⚠️ **KRITICKÉ:** Nezměnit existující Parameters strukturu a UI
-
-1. **Source picker je VOLITELNÝ** - zobrazí se pouze pokud existují zdroje
-2. **Apply button je ADITIVNÍ** - přidává funkcionalitu, nemění stávající
-3. **Backend změny jsou backward-compatible** - `parameter_sources` je Optional
-4. **Testy verifikují, že stávající funkcionalita funguje**
+⚠️ **Poučení z Phase 7.2-7.3:**
+- "Apply to Pack Parameters" přepisovalo AI-extracted parametry a AI Insights
+- Source picker s dropdown indexy (Image #1, #2...) byl nepoužitelný pro 100+ obrázků
+- **Správný přístup:** Workflow Wizard s vizuálním výběrem obrázků → viz `PLAN-Workflow-Wizard.md`
 
 ---
 
