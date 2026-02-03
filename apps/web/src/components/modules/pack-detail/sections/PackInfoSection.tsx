@@ -17,7 +17,7 @@
  */
 
 import { useState } from 'react'
-import { Copy, Check, Download, Star, Info, Sparkles, Wand2, Edit3 } from 'lucide-react'
+import { Copy, Check, Download, Star, Info, Sparkles, Wand2, Edit3, Minimize2, Maximize2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
 import { toast } from '@/stores/toastStore'
@@ -209,6 +209,8 @@ interface DescriptionCardProps {
 }
 
 function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCardProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
   if (!description) return null
 
   return (
@@ -219,20 +221,45 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-text-primary">Description</h3>
-          {onEdit && (
+          <div className="flex items-center gap-2">
+            {/* Collapse/Expand button */}
             <button
-              onClick={onEdit}
+              onClick={() => setIsCollapsed(!isCollapsed)}
               className={clsx(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
-                'text-xs text-synapse',
-                'bg-synapse/10 hover:bg-synapse/20',
+                'text-xs text-text-muted',
+                'bg-slate-mid/30 hover:bg-slate-mid/50',
                 'transition-colors duration-200'
               )}
+              title={isCollapsed ? 'Expand description' : 'Collapse description'}
             >
-              <Edit3 className="w-3.5 h-3.5" />
-              Edit
+              {isCollapsed ? (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  Expand
+                </>
+              ) : (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  Collapse
+                </>
+              )}
             </button>
-          )}
+            {onEdit && (
+              <button
+                onClick={onEdit}
+                className={clsx(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                  'text-xs text-synapse',
+                  'bg-synapse/10 hover:bg-synapse/20',
+                  'transition-colors duration-200'
+                )}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+          </div>
         </div>
         {/*
           ⚠️ KRITICKÉ: HTML rendering pro Civitai importy
@@ -246,9 +273,23 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
             'prose-p:leading-relaxed',
             'prose-a:text-synapse prose-a:no-underline hover:prose-a:underline',
             'prose-strong:text-text-primary',
-            'prose-headings:text-text-primary'
+            'prose-headings:text-text-primary',
+            // Animated collapse/expand
+            'transition-[max-height] duration-300 ease-in-out',
+            isCollapsed
+              ? 'max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
+              : 'max-h-[2000px]' // Large enough for any description
           )}
           dangerouslySetInnerHTML={{ __html: description }}
+        />
+        {/* Fade overlay when collapsed to indicate more content */}
+        <div
+          className={clsx(
+            "relative h-6 -mt-6 pointer-events-none",
+            "bg-gradient-to-t from-slate-dark to-transparent",
+            "transition-opacity duration-300",
+            isCollapsed ? "opacity-100" : "opacity-0"
+          )}
         />
       </Card>
     </div>

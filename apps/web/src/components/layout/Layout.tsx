@@ -11,9 +11,9 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-obsidian flex flex-col">
       <Header />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         <Sidebar />
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 p-6">
           {children}
         </main>
       </div>

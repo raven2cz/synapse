@@ -18,7 +18,7 @@
  */
 
 import { useState } from 'react'
-import { ZoomIn, ZoomOut, Play, Image as ImageIcon, Edit3 } from 'lucide-react'
+import { ZoomIn, ZoomOut, Play, Image as ImageIcon, Edit3, Minimize2, Maximize2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { MediaPreview } from '@/components/ui/MediaPreview'
 import type { PreviewInfo, CardSize } from '../types'
@@ -68,6 +68,7 @@ export function PackGallery({
   animationDelay = 0,
 }: PackGalleryProps) {
   const [cardSize, setCardSize] = useState<CardSize>(initialSize)
+  const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Zoom functions
   const zoomIn = () => {
@@ -120,6 +121,30 @@ export function PackGallery({
         </h3>
 
         <div className="flex items-center gap-2">
+          {/* Collapse/Expand button */}
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className={clsx(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+              'text-xs text-text-muted',
+              'bg-slate-mid/30 hover:bg-slate-mid/50',
+              'transition-colors duration-200'
+            )}
+            title={isCollapsed ? 'Expand previews' : 'Collapse previews'}
+          >
+            {isCollapsed ? (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                Expand
+              </>
+            ) : (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                Collapse
+              </>
+            )}
+          </button>
+
           {/* Edit Button */}
           {onEdit && (
             <button
@@ -172,9 +197,18 @@ export function PackGallery({
         </div>
       </div>
 
-      {/* Grid - uses constants for responsive sizing */}
-      <div className={clsx('grid', GRID_CLASSES[cardSize])}>
-        {previews.map((preview, idx) => (
+      {/* Grid wrapper - animated collapse/expand */}
+      <div
+        className={clsx(
+          'transition-[max-height] duration-300 ease-in-out overflow-hidden',
+          isCollapsed
+            ? 'max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
+            : 'max-h-[5000px]'
+        )}
+      >
+        {/* Grid - uses constants for responsive sizing */}
+        <div className={clsx('grid', GRID_CLASSES[cardSize])}>
+          {previews.map((preview, idx) => (
           <div
             key={idx}
             className={clsx(
@@ -237,7 +271,17 @@ export function PackGallery({
             )} />
           </div>
         ))}
+        </div>
       </div>
+      {/* Fade overlay when collapsed to indicate more content */}
+      <div
+        className={clsx(
+          "relative h-8 -mt-8 pointer-events-none",
+          "bg-gradient-to-t from-obsidian to-transparent",
+          "transition-opacity duration-300",
+          isCollapsed ? "opacity-100" : "opacity-0"
+        )}
+      />
     </div>
   )
 }

@@ -14,7 +14,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import {
-  Info, Edit3, Sliders, Maximize2, Sparkles, Settings2, ChevronDown, ChevronRight,
+  Info, Edit3, Sliders, Maximize2, Minimize2, Sparkles, Settings2, ChevronDown, ChevronRight,
   Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, Bot,
   Lightbulb, AlertTriangle, CheckCircle2, FileText,
 } from 'lucide-react'
@@ -391,6 +391,8 @@ export function PackParametersSection({
   onEdit,
   animationDelay = 0,
 }: PackParametersSectionProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
   // Collect and categorize all parameters
   const categorizedParams = useMemo(() => {
     const result: Record<CategoryKey, Array<{ key: string; value: string; highlight: boolean }>> = {
@@ -592,19 +594,53 @@ export function PackParametersSection({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Collapse/Expand button */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                'text-xs text-text-muted',
+                'bg-slate-mid/30 hover:bg-slate-mid/50',
+                'transition-colors duration-200'
+              )}
+              title={isCollapsed ? 'Expand settings' : 'Collapse settings'}
+            >
+              {isCollapsed ? (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  Expand
+                </>
+              ) : (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  Collapse
+                </>
+              )}
+            </button>
             <button
               onClick={onEdit}
               className={clsx(
-                "text-xs text-synapse flex items-center gap-1",
-                "hover:text-synapse/80 transition-colors duration-200"
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                'text-xs text-synapse',
+                'bg-synapse/10 hover:bg-synapse/20',
+                'transition-colors duration-200'
               )}
             >
-              <Edit3 className="w-3 h-3" />
+              <Edit3 className="w-3.5 h-3.5" />
               Edit
             </button>
           </div>
         </div>
 
+        {/* Collapsible content wrapper */}
+        <div
+          className={clsx(
+            'transition-[max-height] duration-300 ease-in-out overflow-hidden',
+            isCollapsed
+              ? 'max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
+              : 'max-h-[3000px]'
+          )}
+        >
         {/* Parameters - Categorized in flex grid */}
         {hasParameters ? (
           <div className="flex flex-wrap gap-x-6 gap-y-3 items-start">
@@ -735,6 +771,16 @@ export function PackParametersSection({
             </div>
           </div>
         )}
+        </div>
+        {/* Fade overlay when collapsed */}
+        <div
+          className={clsx(
+            "relative h-6 -mt-6 pointer-events-none",
+            "bg-gradient-to-t from-slate-dark to-transparent",
+            "transition-opacity duration-300",
+            isCollapsed ? "opacity-100" : "opacity-0"
+          )}
+        />
       </Card>
     </div>
   )

@@ -5,8 +5,8 @@
  *
  * FUNKCE ZACHOVÁNY:
  * - Use Pack button (aktivace work profile)
- * - Source link (external)
  * - Delete button
+ * - Source link handled by plugin (CivitaiPlugin adds "Civitai" button)
  * - Model type badge
  * - Base model badge
  * - Version display
@@ -22,7 +22,9 @@
  * - Unsaved changes indicator
  */
 
-import { Loader2, ExternalLink, Trash2, Zap, Sparkles, Pencil, Save, X, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Loader2, Trash2, Zap, Sparkles, Pencil, Save, X, AlertCircle, AlertTriangle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
 import type { PackDetail } from '../types'
@@ -156,6 +158,22 @@ export function PackHeader({
   // Plugin props
   pluginActions,
 }: PackHeaderProps) {
+  // State for delete confirmation dialog
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirm(true)
+  }
+
+  const handleConfirmDelete = () => {
+    setShowDeleteConfirm(false)
+    onDelete()
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false)
+  }
+
   return (
     <div
       className={clsx(
@@ -298,22 +316,10 @@ export function PackHeader({
               Use
             </Button>
 
-            {/* Source Link */}
-            {pack.source_url && (
-              <Button
-                variant="secondary"
-                onClick={() => window.open(pack.source_url, '_blank')}
-                className="transition-all duration-200 hover:scale-105"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Source
-              </Button>
-            )}
-
             {/* Delete Button */}
             <Button
               variant="secondary"
-              onClick={onDelete}
+              onClick={handleDeleteClick}
               disabled={isDeleting}
               className={clsx(
                 'text-red-400 transition-all duration-200',
@@ -329,6 +335,77 @@ export function PackHeader({
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          onClick={handleCancelDelete}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+
+          {/* Dialog */}
+          <div
+            className={clsx(
+              "relative z-10 w-full max-w-md mx-4",
+              "bg-slate-dark border border-red-500/30 rounded-xl shadow-2xl",
+              "animate-in fade-in zoom-in-95 duration-200"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-3 p-4 border-b border-slate-mid/50">
+              <div className="p-2 rounded-lg bg-red-500/20">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-text-primary">Delete Pack</h3>
+                <p className="text-sm text-text-muted">This action cannot be undone</p>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              <p className="text-text-secondary">
+                Are you sure you want to delete <span className="font-semibold text-text-primary">{pack.name}</span>?
+              </p>
+              <p className="mt-2 text-sm text-text-muted">
+                All pack data, parameters, workflows, and settings will be permanently removed.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-slate-mid/50">
+              <Button
+                variant="secondary"
+                onClick={handleCancelDelete}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleConfirmDelete}
+                disabled={isDeleting}
+                className="bg-red-600 hover:bg-red-500 border-red-500"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Delete Pack
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
