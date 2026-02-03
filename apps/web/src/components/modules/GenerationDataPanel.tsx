@@ -8,7 +8,11 @@ interface GenerationDataPanelProps {
     className?: string
 }
 
-export function GenerationDataPanel({ meta, onClose, className }: GenerationDataPanelProps) {
+export function GenerationDataPanel({
+    meta,
+    onClose,
+    className,
+}: GenerationDataPanelProps) {
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text)
         // Ideally we would show a toast here
@@ -144,6 +148,7 @@ export function GenerationDataPanel({ meta, onClose, className }: GenerationData
                         </div>
                     </section>
                 )}
+
             </div>
         </div>
     )

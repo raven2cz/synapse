@@ -350,7 +350,12 @@ class WorkflowInfo:
 
 @dataclass
 class GenerationParameters:
-    """Default generation parameters extracted from Civitai or user-defined."""
+    """
+    Default generation parameters extracted from Civitai or user-defined.
+
+    All fields are Optional to avoid "ghost" values in JSON serialization.
+    Use to_dict() which excludes None values.
+    """
     sampler: Optional[str] = None
     scheduler: Optional[str] = None
     steps: Optional[int] = None
@@ -360,12 +365,14 @@ class GenerationParameters:
     width: Optional[int] = None
     height: Optional[int] = None
     seed: Optional[int] = None
-    hires_fix: bool = False
+    # HiRes parameters - all Optional to avoid ghost values
+    hires_fix: Optional[bool] = None
     hires_upscaler: Optional[str] = None
     hires_steps: Optional[int] = None
     hires_denoise: Optional[float] = None
-    
+
     def to_dict(self) -> Dict[str, Any]:
+        """Convert to dict, excluding None values."""
         result = {}
         if self.sampler is not None:
             result["sampler"] = self.sampler
@@ -385,7 +392,7 @@ class GenerationParameters:
             result["height"] = self.height
         if self.seed is not None:
             result["seed"] = self.seed
-        if self.hires_fix:
+        if self.hires_fix is not None:
             result["hires_fix"] = self.hires_fix
         if self.hires_upscaler is not None:
             result["hires_upscaler"] = self.hires_upscaler
@@ -394,7 +401,7 @@ class GenerationParameters:
         if self.hires_denoise is not None:
             result["hires_denoise"] = self.hires_denoise
         return result
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'GenerationParameters':
         return cls(
@@ -407,7 +414,7 @@ class GenerationParameters:
             width=data.get("width"),
             height=data.get("height"),
             seed=data.get("seed"),
-            hires_fix=data.get("hires_fix", False),
+            hires_fix=data.get("hires_fix"),  # None if not present
             hires_upscaler=data.get("hires_upscaler"),
             hires_steps=data.get("hires_steps"),
             hires_denoise=data.get("hires_denoise"),

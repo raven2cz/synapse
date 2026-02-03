@@ -1,0 +1,250 @@
+{
+  "pack": {
+    "header": {
+      "title": "{{name}}",
+      "version": "Verze {{version}}",
+      "by": "od {{author}}",
+      "category": {
+        "external": "Externí",
+        "custom": "Vlastní",
+        "install": "Instalační"
+      }
+    },
+    "actions": {
+      "edit": "Upravit",
+      "delete": "Smazat",
+      "use": "Použít Pack",
+      "download": "Stáhnout",
+      "downloadAll": "Stáhnout vše",
+      "cancel": "Zrušit",
+      "save": "Uložit",
+      "close": "Zavřít",
+      "refresh": "Obnovit",
+      "copy": "Kopírovat",
+      "copied": "Zkopírováno!"
+    },
+    "gallery": {
+      "title": "Galerie",
+      "empty": "Zatím žádné náhledy",
+      "addPreview": "Přidat náhled",
+      "removePreview": "Odebrat náhled",
+      "setAsCover": "Nastavit jako obálku",
+      "zoomIn": "Přiblížit",
+      "zoomOut": "Oddálit"
+    },
+    "dependencies": {
+      "title": "Závislosti",
+      "empty": "Žádné závislosti",
+      "count": "{{count}} závislostí",
+      "count_one": "{{count}} závislost",
+      "count_few": "{{count}} závislosti",
+      "count_other": "{{count}} závislostí",
+      "add": "Přidat závislost",
+      "remove": "Odebrat",
+      "restore": "Obnovit ze zálohy",
+      "redownload": "Stáhnout znovu",
+      "status": {
+        "installed": "Nainstalováno",
+        "pending": "Čeká",
+        "downloading": "Stahuje se",
+        "backupOnly": "Pouze záloha",
+        "unresolved": "Nevyřešeno",
+        "missing": "Chybí"
+      },
+      "resolveBaseModel": "Vyřešit základní model"
+    },
+    "packDependencies": {
+      "title": "Závislosti na packách",
+      "empty": "Žádné závislosti na packách",
+      "count": "{{count}} závislostí na packách",
+      "add": "Přidat závislost na pack",
+      "status": {
+        "installed": "Nainstalováno",
+        "missing": "Chybí"
+      }
+    },
+    "info": {
+      "title": "Informace",
+      "description": "Popis",
+      "triggerWords": "Spouštěcí slova",
+      "baseModel": "Základní model",
+      "modelInfo": "Informace o modelu",
+      "source": "Zdroj",
+      "createdAt": "Vytvořeno",
+      "downloads": "Stažení",
+      "rating": "Hodnocení"
+    },
+    "parameters": {
+      "title": "Parametry",
+      "empty": "Žádné parametry",
+      "edit": "Upravit parametry",
+      "add": "Přidat parametr",
+      "remove": "Odebrat",
+      "common": {
+        "sampler": "Sampler",
+        "steps": "Kroky",
+        "cfgScale": "CFG Scale",
+        "clipSkip": "Clip Skip",
+        "denoise": "Denoise",
+        "width": "Šířka",
+        "height": "Výška"
+      }
+    },
+    "workflows": {
+      "title": "Workflow",
+      "empty": "Žádné workflow",
+      "add": "Přidat workflow",
+      "upload": "Nahrát workflow",
+      "generate": "Vygenerovat výchozí",
+      "download": "Stáhnout JSON",
+      "delete": "Smazat",
+      "link": "Propojit s ComfyUI",
+      "unlink": "Odpojit",
+      "status": {
+        "linked": "V ComfyUI",
+        "broken": "Nefunkční odkaz",
+        "notLinked": "Nepropojeno"
+      }
+    },
+    "storage": {
+      "title": "Úložiště",
+      "backup": "Záloha",
+      "restore": "Obnovit",
+      "push": "Odeslat do zálohy",
+      "pull": "Stáhnout ze zálohy",
+      "pushAndFree": "Odeslat a uvolnit místo",
+      "localSize": "Lokální velikost",
+      "backupSize": "Velikost zálohy"
+    },
+    "userTags": {
+      "title": "Štítky",
+      "empty": "Žádné štítky",
+      "edit": "Upravit štítky",
+      "addCustom": "Přidat vlastní štítek",
+      "suggested": "Navrhované štítky"
+    },
+    "modals": {
+      "edit": {
+        "title": "Upravit pack",
+        "tagsTitle": "Upravit štítky"
+      },
+      "parameters": {
+        "title": "Upravit parametry",
+        "quickAdd": "Rychle přidat"
+      },
+      "workflow": {
+        "title": "Nahrát workflow",
+        "selectFile": "Vybrat soubor",
+        "workflowName": "Název workflow",
+        "description": "Popis"
+      },
+      "baseModel": {
+        "title": "Vyřešit základní model",
+        "hint": "Detekovaný základní model",
+        "tabs": {
+          "local": "Lokální modely",
+          "civitai": "Civitai",
+          "huggingface": "HuggingFace"
+        },
+        "search": "Hledat modely...",
+        "select": "Vybrat",
+        "noResults": "Žádné modely nenalezeny"
+      },
+      "delete": {
+        "title": "Smazat pack",
+        "confirm": "Opravdu chcete smazat tento pack?",
+        "warning": "Tuto akci nelze vrátit zpět."
+      },
+      "create": {
+        "title": "Vytvořit pack",
+        "subtitle": "Vytvořte nový vlastní pack od nuly",
+        "name": "Název packu",
+        "namePlaceholder": "Můj skvělý pack",
+        "nameHint": "Unikátní název pro váš pack",
+        "type": "Typ packu",
+        "typeHint": "Typ assetu, který tento pack spravuje",
+        "description": "Popis",
+        "descriptionPlaceholder": "Popište svůj pack...",
+        "descriptionHint": "Volitelné. Podporuje formátování Markdown",
+        "baseModel": "Základní model",
+        "baseModelPlaceholder": "např. SD 1.5, SDXL 1.0, Flux.1",
+        "baseModelHint": "Volitelné. Základní model, pro který je pack určen",
+        "version": "Verze",
+        "versionPlaceholder": "1.0.0",
+        "author": "Autor",
+        "authorPlaceholder": "Vaše jméno",
+        "tags": "Štítky",
+        "tagsPlaceholder": "Přidejte štítky...",
+        "tagsHint": "Stiskněte Enter pro přidání štítku",
+        "triggerWords": "Spouštěcí slova",
+        "triggerWordsPlaceholder": "Přidejte spouštěcí slova...",
+        "triggerWordsHint": "Klíčová slova pro aktivaci modelu",
+        "creating": "Vytváření packu...",
+        "success": "Pack byl úspěšně vytvořen!",
+        "error": "Nepodařilo se vytvořit pack"
+      }
+    }
+  },
+  "packs": {
+    "title": "Asset Packy",
+    "subtitle": "{{count}} packů nainstalováno",
+    "subtitle_zero": "Žádné packy nainstalovány",
+    "subtitle_one": "{{count}} pack nainstalován",
+    "subtitle_few": "{{count}} packy nainstalovány",
+    "subtitle_other": "{{count}} packů nainstalováno",
+    "search": "Hledat packy...",
+    "filter": {
+      "allTags": "Všechny štítky",
+      "activeFilters": "Aktivní filtry"
+    },
+    "create": "Vytvořit pack",
+    "empty": {
+      "noPacks": "Zatím žádné packy. Importujte modely z Civitai.",
+      "noMatch": "Žádné packy neodpovídají filtrům."
+    },
+    "card": {
+      "assets": "{{count}} assetů",
+      "needsSetup": "Vyžaduje nastavení"
+    },
+    "zoom": {
+      "in": "Přiblížit",
+      "out": "Oddálit"
+    }
+  },
+  "common": {
+    "loading": "Načítání...",
+    "error": "Došlo k chybě",
+    "success": "Úspěch",
+    "confirm": "Potvrdit",
+    "cancel": "Zrušit",
+    "save": "Uložit",
+    "delete": "Smazat",
+    "edit": "Upravit",
+    "add": "Přidat",
+    "remove": "Odebrat",
+    "search": "Hledat",
+    "noResults": "Žádné výsledky",
+    "back": "Zpět",
+    "next": "Další",
+    "previous": "Předchozí",
+    "close": "Zavřít",
+    "yes": "Ano",
+    "no": "Ne",
+    "optional": "volitelné",
+    "required": "povinné"
+  },
+  "nav": {
+    "browse": "Procházet",
+    "packs": "Packy",
+    "inventory": "Inventář modelů",
+    "profiles": "Profily",
+    "settings": "Nastavení"
+  },
+  "errors": {
+    "loadFailed": "Nepodařilo se načíst",
+    "saveFailed": "Nepodařilo se uložit",
+    "deleteFailed": "Nepodařilo se smazat",
+    "networkError": "Chyba sítě",
+    "notFound": "Nenalezeno"
+  }
+}

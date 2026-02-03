@@ -11,6 +11,7 @@ import pytest
 import tempfile
 import json
 from pathlib import Path
+from tests.store.test_inventory_stabilization import get_pack_detail_module_content
 
 
 # =============================================================================
@@ -622,18 +623,14 @@ class TestV2APIFlow:
     
     def test_frontend_uses_v1_endpoints_correctly(self):
         """Verify frontend correctly uses v1 endpoints for base model resolution."""
-        import sys
-        from pathlib import Path
-        
-        project_root = Path(__file__).parent.parent.parent
-        
-        # Check PackDetailPage for required endpoints
-        pack_detail = project_root / "apps" / "web" / "src" / "components" / "modules" / "PackDetailPage.tsx"
-        if pack_detail.exists():
-            content = pack_detail.read_text()
-            
-            # Should have these v1 endpoints for base model resolution
-            assert "/resolve-base-model" in content, "Frontend must use /resolve-base-model for base model resolution"
+        # With modular architecture, check all pack-detail module files
+        content = get_pack_detail_module_content()
+
+        if not content:
+            pytest.skip("Frontend source not available in test environment")
+
+        # Should have these v1 endpoints for base model resolution
+        assert "/resolve-base-model" in content, "Frontend must use /resolve-base-model for base model resolution"
     
     def test_browse_page_uses_v1_import(self):
         """Verify BrowsePage uses /api/packs/import/url (V1 API)."""

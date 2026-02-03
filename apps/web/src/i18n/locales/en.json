@@ -1,0 +1,247 @@
+{
+  "pack": {
+    "header": {
+      "title": "{{name}}",
+      "version": "Version {{version}}",
+      "by": "by {{author}}",
+      "category": {
+        "external": "External",
+        "custom": "Custom",
+        "install": "Install"
+      }
+    },
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "use": "Use Pack",
+      "download": "Download",
+      "downloadAll": "Download All",
+      "cancel": "Cancel",
+      "save": "Save",
+      "close": "Close",
+      "refresh": "Refresh",
+      "copy": "Copy",
+      "copied": "Copied!"
+    },
+    "gallery": {
+      "title": "Gallery",
+      "empty": "No previews yet",
+      "addPreview": "Add Preview",
+      "removePreview": "Remove Preview",
+      "setAsCover": "Set as Cover",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out"
+    },
+    "dependencies": {
+      "title": "Dependencies",
+      "empty": "No dependencies",
+      "count": "{{count}} dependencies",
+      "count_one": "{{count}} dependency",
+      "count_other": "{{count}} dependencies",
+      "add": "Add Dependency",
+      "remove": "Remove",
+      "restore": "Restore from Backup",
+      "redownload": "Re-download",
+      "status": {
+        "installed": "Installed",
+        "pending": "Pending",
+        "downloading": "Downloading",
+        "backupOnly": "Backup Only",
+        "unresolved": "Unresolved",
+        "missing": "Missing"
+      },
+      "resolveBaseModel": "Resolve Base Model"
+    },
+    "packDependencies": {
+      "title": "Pack Dependencies",
+      "empty": "No pack dependencies",
+      "count": "{{count}} pack dependencies",
+      "add": "Add Pack Dependency",
+      "status": {
+        "installed": "Installed",
+        "missing": "Missing"
+      }
+    },
+    "info": {
+      "title": "Information",
+      "description": "Description",
+      "triggerWords": "Trigger Words",
+      "baseModel": "Base Model",
+      "modelInfo": "Model Information",
+      "source": "Source",
+      "createdAt": "Created",
+      "downloads": "Downloads",
+      "rating": "Rating"
+    },
+    "parameters": {
+      "title": "Parameters",
+      "empty": "No parameters defined",
+      "edit": "Edit Parameters",
+      "add": "Add Parameter",
+      "remove": "Remove",
+      "common": {
+        "sampler": "Sampler",
+        "steps": "Steps",
+        "cfgScale": "CFG Scale",
+        "clipSkip": "Clip Skip",
+        "denoise": "Denoise",
+        "width": "Width",
+        "height": "Height"
+      }
+    },
+    "workflows": {
+      "title": "Workflows",
+      "empty": "No workflows",
+      "add": "Add Workflow",
+      "upload": "Upload Workflow",
+      "generate": "Generate Default",
+      "download": "Download JSON",
+      "delete": "Delete",
+      "link": "Link to ComfyUI",
+      "unlink": "Unlink",
+      "status": {
+        "linked": "In ComfyUI",
+        "broken": "Broken Link",
+        "notLinked": "Not Linked"
+      }
+    },
+    "storage": {
+      "title": "Storage",
+      "backup": "Backup",
+      "restore": "Restore",
+      "push": "Push to Backup",
+      "pull": "Pull from Backup",
+      "pushAndFree": "Push & Free Space",
+      "localSize": "Local Size",
+      "backupSize": "Backup Size"
+    },
+    "userTags": {
+      "title": "Tags",
+      "empty": "No tags",
+      "edit": "Edit Tags",
+      "addCustom": "Add custom tag",
+      "suggested": "Suggested tags"
+    },
+    "modals": {
+      "edit": {
+        "title": "Edit Pack",
+        "tagsTitle": "Edit Tags"
+      },
+      "parameters": {
+        "title": "Edit Parameters",
+        "quickAdd": "Quick Add"
+      },
+      "workflow": {
+        "title": "Upload Workflow",
+        "selectFile": "Select File",
+        "workflowName": "Workflow Name",
+        "description": "Description"
+      },
+      "baseModel": {
+        "title": "Resolve Base Model",
+        "hint": "Detected base model hint",
+        "tabs": {
+          "local": "Local Models",
+          "civitai": "Civitai",
+          "huggingface": "HuggingFace"
+        },
+        "search": "Search models...",
+        "select": "Select",
+        "noResults": "No models found"
+      },
+      "delete": {
+        "title": "Delete Pack",
+        "confirm": "Are you sure you want to delete this pack?",
+        "warning": "This action cannot be undone."
+      },
+      "create": {
+        "title": "Create Pack",
+        "subtitle": "Create a new custom pack from scratch",
+        "name": "Pack Name",
+        "namePlaceholder": "My Awesome Pack",
+        "nameHint": "A unique name for your pack",
+        "type": "Pack Type",
+        "typeHint": "Type of asset this pack manages",
+        "description": "Description",
+        "descriptionPlaceholder": "Describe your pack...",
+        "descriptionHint": "Optional. Supports Markdown formatting",
+        "baseModel": "Base Model",
+        "baseModelPlaceholder": "e.g., SD 1.5, SDXL 1.0, Flux.1",
+        "baseModelHint": "Optional. The base model this pack is designed for",
+        "version": "Version",
+        "versionPlaceholder": "1.0.0",
+        "author": "Author",
+        "authorPlaceholder": "Your name",
+        "tags": "Tags",
+        "tagsPlaceholder": "Add tags...",
+        "tagsHint": "Press Enter to add a tag",
+        "triggerWords": "Trigger Words",
+        "triggerWordsPlaceholder": "Add trigger words...",
+        "triggerWordsHint": "Keywords to activate the model",
+        "creating": "Creating pack...",
+        "success": "Pack created successfully!",
+        "error": "Failed to create pack"
+      }
+    }
+  },
+  "packs": {
+    "title": "Asset Packs",
+    "subtitle": "{{count}} packs installed",
+    "subtitle_zero": "No packs installed",
+    "subtitle_one": "{{count}} pack installed",
+    "search": "Search packs...",
+    "filter": {
+      "allTags": "All Tags",
+      "activeFilters": "Active filters"
+    },
+    "create": "Create Pack",
+    "empty": {
+      "noPacks": "No packs installed yet. Import models from Browse Civitai.",
+      "noMatch": "No packs match your filters."
+    },
+    "card": {
+      "assets": "{{count}} assets",
+      "needsSetup": "Needs Setup"
+    },
+    "zoom": {
+      "in": "Zoom in",
+      "out": "Zoom out"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "success": "Success",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "remove": "Remove",
+    "search": "Search",
+    "noResults": "No results",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "optional": "optional",
+    "required": "required"
+  },
+  "nav": {
+    "browse": "Browse",
+    "packs": "Packs",
+    "inventory": "Model Inventory",
+    "profiles": "Profiles",
+    "settings": "Settings"
+  },
+  "errors": {
+    "loadFailed": "Failed to load",
+    "saveFailed": "Failed to save",
+    "deleteFailed": "Failed to delete",
+    "networkError": "Network error",
+    "notFound": "Not found"
+  }
+}

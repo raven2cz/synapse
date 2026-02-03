@@ -1601,6 +1601,15 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "source_url": pack.source.url,
             }
         
+        # Transform cover_url to match preview URL format (/previews/ instead of /packs/)
+        cover_url = None
+        if pack.cover_url:
+            # Find matching preview and use its URL (which uses /previews/ format)
+            for p in previews:
+                if pack.cover_url and p["filename"] in pack.cover_url:
+                    cover_url = p["url"]
+                    break
+
         return {
             "name": pack.name,
             "version": pack.version or "1.0.0",
@@ -1621,6 +1630,8 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
             "docs": {},
             "parameters": parameters,
             "model_info": model_info,
+            # Cover URL in same format as preview URLs (for frontend comparison)
+            "cover_url": cover_url,
             # Raw data for debugging
             "pack": pack.model_dump(),
             "lock": lock.model_dump() if lock else None,
@@ -2606,9 +2617,113 @@ def repair_pack_urls(
 
 
 class UpdatePackRequest(BaseModel):
-    """Request to update pack metadata."""
+    """Request to update pack metadata.
+
+    All fields are optional - only provided fields are updated.
+    Supports partial updates for description, tags, cover_url, etc.
+    """
     user_tags: Optional[List[str]] = None
     name: Optional[str] = None  # For rename
+    description: Optional[str] = None  # HTML description
+    cover_url: Optional[str] = None  # Cover image URL
+    author: Optional[str] = None
+    version: Optional[str] = None
+    tags: Optional[List[str]] = None
+    trigger_words: Optional[List[str]] = None
+    base_model: Optional[str] = None
+
+
+class CreatePackRequest(BaseModel):
+    """Request to create a custom pack from scratch."""
+    name: str = Field(..., description="Pack name (must be unique)")
+    pack_type: str = Field("lora", description="Asset type: lora, checkpoint, vae, controlnet, etc.")
+    description: Optional[str] = Field(None, description="Pack description (Markdown supported)")
+    base_model: Optional[str] = Field(None, description="Base model (e.g., 'SD 1.5', 'SDXL 1.0')")
+    version: str = Field("1.0.0", description="Pack version")
+    author: Optional[str] = Field(None, description="Pack author")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for categorization")
+    user_tags: Optional[List[str]] = Field(default_factory=list, description="User-defined tags")
+    trigger_words: Optional[List[str]] = Field(default_factory=list, description="Trigger words for generation")
+
+
+@v2_packs_router.post("/create", response_model=Dict[str, Any])
+def create_pack(
+    request: CreatePackRequest,
+    store=Depends(require_initialized),
+):
+    """
+    Create a custom pack from scratch.
+
+    Creates an empty pack with the specified metadata.
+    The pack can then be populated with dependencies, previews, and workflows.
+
+    Returns the created pack details.
+    """
+    from datetime import datetime
+    from .models import Pack, PackSource, PackCategory, AssetKind, ProviderName
+
+    try:
+        # Check if pack already exists
+        try:
+            existing = store.get_pack(request.name)
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Pack with name '{request.name}' already exists"
+                )
+        except PackNotFoundError:
+            pass  # Good - pack doesn't exist
+
+        # Parse pack_type to AssetKind
+        try:
+            pack_type = AssetKind(request.pack_type.lower())
+        except ValueError:
+            pack_type = AssetKind.UNKNOWN
+
+        # Create the pack
+        pack = Pack(
+            name=request.name,
+            pack_type=pack_type,
+            pack_category=PackCategory.CUSTOM,  # Custom packs are fully editable
+            source=PackSource(
+                provider=ProviderName.LOCAL,
+                url=None,
+                model_id=None,
+                version_id=None,
+            ),
+            version=request.version,
+            description=request.description,
+            base_model=request.base_model,
+            author=request.author,
+            tags=request.tags or [],
+            user_tags=request.user_tags or [],
+            trigger_words=request.trigger_words or [],
+            created_at=datetime.now(),
+        )
+
+        # Save the pack
+        store.layout.save_pack(pack)
+
+        # Create pack directories
+        pack_path = store.layout.pack_path(request.name)
+        (pack_path / "resources" / "previews").mkdir(parents=True, exist_ok=True)
+        (pack_path / "resources" / "workflows").mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"[create_pack] Created custom pack: {request.name}")
+
+        return {
+            "success": True,
+            "name": pack.name,
+            "pack_type": pack.pack_type.value,
+            "pack_category": pack.pack_category.value,
+            "created_at": pack.created_at.isoformat() if pack.created_at else None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[create_pack] Error creating pack: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @v2_packs_router.patch("/{pack_name}", response_model=Dict[str, Any])
@@ -2617,42 +2732,87 @@ def update_pack(
     request: UpdatePackRequest = Body(...),
     store=Depends(require_initialized),
 ):
-    """Update pack metadata (user tags, rename, etc.)."""
+    """
+    Update pack metadata.
+
+    Supports partial updates - only provided fields are updated.
+    Handles: description, user_tags, tags, cover_url, author, version, etc.
+    Also supports pack renaming via the 'name' field.
+    """
     try:
         pack = store.get_pack(pack_name)
         updated_name = pack_name
-        
+        updated_fields = []
+
+        # Update description (HTML content)
+        if request.description is not None:
+            pack.description = request.description
+            updated_fields.append("description")
+
         # Update user_tags
         if request.user_tags is not None:
             pack.user_tags = request.user_tags
-        
-        # Handle rename
+            updated_fields.append("user_tags")
+
+        # Update tags
+        if request.tags is not None:
+            pack.tags = request.tags
+            updated_fields.append("tags")
+
+        # Update cover_url
+        if request.cover_url is not None:
+            pack.cover_url = request.cover_url
+            updated_fields.append("cover_url")
+
+        # Update author
+        if request.author is not None:
+            pack.author = request.author
+            updated_fields.append("author")
+
+        # Update version
+        if request.version is not None:
+            pack.version = request.version
+            updated_fields.append("version")
+
+        # Update trigger_words
+        if request.trigger_words is not None:
+            pack.trigger_words = request.trigger_words
+            updated_fields.append("trigger_words")
+
+        # Update base_model
+        if request.base_model is not None:
+            pack.base_model = request.base_model
+            updated_fields.append("base_model")
+
+        # Handle rename (must be last to avoid path issues)
         if request.name and request.name != pack_name:
             new_name = request.name
             # Check if new name exists
             try:
                 store.get_pack(new_name)
                 raise HTTPException(status_code=400, detail=f"Pack with name '{new_name}' already exists")
-            except:
-                pass
-            
+            except PackNotFoundError:
+                pass  # Good - doesn't exist
+
             # Rename pack directory
             old_path = store.layout.pack_path(pack_name)
             new_path = old_path.parent / new_name
             if old_path.exists():
                 import shutil
                 shutil.move(str(old_path), str(new_path))
-            
+
             pack.name = new_name
             updated_name = new_name
-        
+            updated_fields.append("name")
+
         store.layout.save_pack(pack)
-        
+
+        logger.info(f"[update_pack] Updated {pack_name}: {updated_fields}")
+
         return {
             "success": True,
-            "updated": updated_name,
-            "user_tags": pack.user_tags,
-            "name": pack.name
+            "name": pack.name,
+            "updated_fields": updated_fields,
         }
     except HTTPException:
         raise
@@ -2741,10 +2901,513 @@ def update_pack_parameters(
         store.layout.save_pack(pack)
         
         logger.info(f"[update-parameters] Pack: {pack_name}, Parameters: {existing}")
-        
+
         return {"updated": True, "parameters": existing}
     except Exception as e:
         logger.error(f"[update-parameters] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class ExtractParametersRequest(BaseModel):
+    """Request for parameter extraction from various sources."""
+    source: str = Field(..., description="Source type: 'image', 'aggregated', or 'description'")
+    image_index: Optional[int] = Field(None, description="Image index for source='image'")
+
+
+class ExtractParametersResponse(BaseModel):
+    """Response with extracted parameters."""
+    parameters: Dict[str, Any]
+    source: str
+    confidence: Optional[float] = None
+    preview_count: Optional[int] = None
+
+
+@v2_packs_router.post("/{pack_name}/parameters/extract", response_model=ExtractParametersResponse)
+def extract_pack_parameters(
+    pack_name: str,
+    request: ExtractParametersRequest,
+    store=Depends(require_initialized),
+):
+    """Extract generation parameters from pack previews or description.
+
+    Sources:
+    - 'image': Extract from specific preview image metadata (requires image_index)
+    - 'aggregated': Aggregate from all preview images with metadata
+    - 'description': Parse pack description for recommended parameters
+
+    Returns extracted parameters with confidence score for aggregated results.
+    """
+    from ..utils.parameter_extractor import (
+        extract_from_image_meta,
+        aggregate_from_previews,
+        extract_from_description,
+    )
+
+    try:
+        pack = store.get_pack(pack_name)
+
+        if request.source == 'image':
+            # Extract from specific preview image
+            if request.image_index is None:
+                raise HTTPException(status_code=400, detail="image_index required for source='image'")
+
+            if request.image_index < 0 or request.image_index >= len(pack.previews):
+                raise HTTPException(status_code=400, detail=f"Invalid image_index: {request.image_index}")
+
+            preview = pack.previews[request.image_index]
+            if not preview.meta:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='image',
+                    confidence=0.0,
+                )
+
+            result = extract_from_image_meta(preview.meta)
+            return ExtractParametersResponse(
+                parameters=result.parameters,
+                source='image',
+                confidence=result.confidence,
+            )
+
+        elif request.source == 'aggregated':
+            # Aggregate from all previews with metadata
+            previews_with_meta = [
+                {'meta': p.meta}
+                for p in pack.previews
+                if p.meta
+            ]
+
+            if not previews_with_meta:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='aggregated',
+                    confidence=0.0,
+                    preview_count=0,
+                )
+
+            result = aggregate_from_previews(previews_with_meta)
+            return ExtractParametersResponse(
+                parameters=result.parameters,
+                source='aggregated',
+                confidence=result.confidence,
+                preview_count=len(previews_with_meta),
+            )
+
+        elif request.source == 'description':
+            # Extract from pack description using AI service
+            if not pack.description:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='description',
+                    confidence=0.0,
+                )
+
+            from src.ai import AIService
+
+            ai_service = AIService()
+            ai_result = ai_service.extract_parameters(pack.description)
+
+            if ai_result.success and ai_result.output:
+                # Normalize AI output using GenerationParameters validator
+                # This converts AI formats like {recommended: 7} to plain values
+                try:
+                    normalized = GenerationParameters(**ai_result.output)
+                    # Get normalized dict, excluding None values and _extracted_by
+                    params = {
+                        k: v for k, v in normalized.model_dump(exclude_none=True).items()
+                        if k != "_extracted_by"
+                    }
+                except Exception as e:
+                    logger.warning(f"[extract-parameters] Normalization failed: {e}, using raw output")
+                    params = {k: v for k, v in ai_result.output.items() if k != "_extracted_by"}
+
+                return ExtractParametersResponse(
+                    parameters=params,
+                    source=f'description:{ai_result.provider_id}',  # Include provider info
+                    confidence=1.0 if ai_result.provider_id != "rule_based" else 0.8,
+                )
+            else:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='description',
+                    confidence=0.0,
+                )
+
+        else:
+            raise HTTPException(status_code=400, detail=f"Invalid source: {request.source}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[extract-parameters] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# Preview Endpoints
+# =============================================================================
+
+
+class PreviewOrderRequest(BaseModel):
+    """Request to reorder previews."""
+    order: List[str]  # List of filenames in new order
+
+
+@v2_packs_router.patch("/{pack_name}/previews", response_model=Dict[str, Any])
+def batch_update_previews(
+    pack_name: str,
+    files: List[UploadFile] = File(default=[]),
+    order: Optional[str] = Form(None),  # JSON array of filenames
+    cover_filename: Optional[str] = Form(None),
+    deleted: Optional[str] = Form(None),  # JSON array of filenames to delete
+    store=Depends(require_initialized),
+):
+    """
+    Batch update previews in a single transaction.
+
+    Handles upload, delete, reorder, and cover change atomically.
+    This prevents race conditions from multiple parallel requests.
+
+    Form fields:
+    - files: New files to upload (multipart)
+    - order: JSON array of filenames in desired order
+    - cover_filename: Filename to set as cover
+    - deleted: JSON array of filenames to delete
+    """
+    import json
+    from .models import PreviewInfo
+
+    try:
+        pack = store.get_pack(pack_name)
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        previews_dir.mkdir(parents=True, exist_ok=True)
+
+        results = {
+            "uploaded": [],
+            "deleted": [],
+            "reordered": False,
+            "cover_changed": False,
+        }
+
+        # 1. Delete specified previews
+        if deleted:
+            deleted_list = json.loads(deleted)
+            for filename in deleted_list:
+                # Remove from pack.previews
+                pack.previews = [p for p in pack.previews if p.filename != filename]
+                # Delete file
+                file_path = previews_dir / filename
+                if file_path.exists():
+                    file_path.unlink()
+                results["deleted"].append(filename)
+                logger.info(f"[batch_update_previews] Deleted: {filename}")
+
+        # 2. Upload new files
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm'}
+        for file in files:
+            ext = Path(file.filename).suffix.lower()
+            if ext not in allowed_extensions:
+                logger.warning(f"[batch_update_previews] Skipping unsupported file: {file.filename}")
+                continue
+
+            media_type = 'video' if ext in {'.mp4', '.webm'} else 'image'
+            dest_path = previews_dir / file.filename
+            content = file.file.read()
+            dest_path.write_bytes(content)
+
+            preview = PreviewInfo(
+                filename=file.filename,
+                url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+                media_type=media_type,
+                nsfw=False,
+            )
+            pack.previews.append(preview)
+            results["uploaded"].append(file.filename)
+            logger.info(f"[batch_update_previews] Uploaded: {file.filename}")
+
+        # 3. Reorder previews
+        if order:
+            order_list = json.loads(order)
+            preview_map = {p.filename: p for p in pack.previews}
+            new_previews = []
+
+            # Add in specified order
+            for filename in order_list:
+                if filename in preview_map:
+                    new_previews.append(preview_map.pop(filename))
+
+            # Append any remaining
+            new_previews.extend(preview_map.values())
+            pack.previews = new_previews
+            results["reordered"] = True
+            logger.info(f"[batch_update_previews] Reordered {len(new_previews)} previews")
+
+        # 4. Set cover
+        if cover_filename:
+            for p in pack.previews:
+                if p.filename == cover_filename:
+                    pack.cover_url = p.url
+                    results["cover_changed"] = True
+                    logger.info(f"[batch_update_previews] Set cover: {cover_filename}")
+                    break
+
+        # Single atomic save
+        store.layout.save_pack(pack)
+
+        return {
+            "success": True,
+            "pack_name": pack_name,
+            **results,
+            "total_previews": len(pack.previews),
+        }
+    except Exception as e:
+        logger.error(f"[batch_update_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.post("/{pack_name}/previews/upload", response_model=Dict[str, Any])
+def upload_preview(
+    pack_name: str,
+    file: UploadFile = File(...),
+    position: int = Form(-1),  # -1 = append at end
+    nsfw: bool = Form(False),
+    set_as_cover: bool = Form(False),
+    store=Depends(require_initialized),
+):
+    """
+    Upload a preview image or video to a pack.
+
+    Supports jpg, png, gif, webp, mp4, webm.
+    Position -1 appends at end, 0 inserts at beginning.
+    """
+    from .models import PreviewInfo
+
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Validate file type
+        allowed_extensions = {'.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.webm'}
+        ext = Path(file.filename).suffix.lower()
+        if ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file type: {ext}. Allowed: {', '.join(allowed_extensions)}"
+            )
+
+        # Determine media type
+        media_type = 'video' if ext in {'.mp4', '.webm'} else 'image'
+
+        # Save file to previews directory
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        previews_dir.mkdir(parents=True, exist_ok=True)
+
+        dest_path = previews_dir / file.filename
+        content = file.file.read()
+        dest_path.write_bytes(content)
+
+        # Create preview info
+        preview = PreviewInfo(
+            filename=file.filename,
+            url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+            media_type=media_type,
+            nsfw=nsfw,
+        )
+
+        # Insert at position
+        if position < 0 or position >= len(pack.previews):
+            pack.previews.append(preview)
+        else:
+            pack.previews.insert(position, preview)
+
+        # Set as cover if requested
+        if set_as_cover:
+            pack.cover_url = preview.url
+
+        store.layout.save_pack(pack)
+
+        logger.info(f"[upload_preview] Added {file.filename} to {pack_name}")
+
+        return {
+            "success": True,
+            "filename": file.filename,
+            "media_type": media_type,
+            "position": position if position >= 0 else len(pack.previews) - 1,
+            "is_cover": set_as_cover,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[upload_preview] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.get("/{pack_name}/previews", response_model=List[Dict[str, Any]])
+def list_pack_previews(
+    pack_name: str,
+    store=Depends(require_initialized),
+):
+    """List all previews for a pack with metadata."""
+    try:
+        pack = store.get_pack(pack_name)
+        previews = []
+
+        for i, preview in enumerate(pack.previews):
+            is_cover = (
+                pack.cover_url == preview.url if pack.cover_url
+                else i == 0  # First preview is default cover
+            )
+            previews.append({
+                "filename": preview.filename,
+                "url": preview.url,
+                "media_type": preview.media_type,
+                "width": preview.width,
+                "height": preview.height,
+                "nsfw": preview.nsfw,
+                "is_cover": is_cover,
+                "meta": preview.meta,
+                "duration": preview.duration,
+                "has_audio": preview.has_audio,
+                "thumbnail_url": preview.thumbnail_url,
+            })
+
+        return previews
+    except Exception as e:
+        logger.error(f"[list_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.patch("/{pack_name}/previews/order", response_model=Dict[str, Any])
+def reorder_previews(
+    pack_name: str,
+    request: PreviewOrderRequest,
+    store=Depends(require_initialized),
+):
+    """
+    Reorder previews for a pack.
+
+    The order list should contain filenames in the desired order.
+    Filenames not in the list will be appended at the end.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Create a map of filename -> preview
+        preview_map = {p.filename: p for p in pack.previews}
+
+        # Build new order
+        new_previews = []
+        for filename in request.order:
+            if filename in preview_map:
+                new_previews.append(preview_map.pop(filename))
+
+        # Append any remaining previews not in the order
+        new_previews.extend(preview_map.values())
+
+        pack.previews = new_previews
+        store.layout.save_pack(pack)
+
+        logger.info(f"[reorder_previews] Reordered {len(new_previews)} previews for {pack_name}")
+
+        return {
+            "success": True,
+            "count": len(new_previews),
+            "order": [p.filename for p in new_previews],
+        }
+    except Exception as e:
+        logger.error(f"[reorder_previews] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.patch("/{pack_name}/previews/{filename}/cover", response_model=Dict[str, Any])
+def set_cover_preview(
+    pack_name: str,
+    filename: str,
+    store=Depends(require_initialized),
+):
+    """Set a specific preview as the pack cover image."""
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Find the preview
+        preview = None
+        for p in pack.previews:
+            if p.filename == filename:
+                preview = p
+                break
+
+        if not preview:
+            raise HTTPException(status_code=404, detail=f"Preview not found: {filename}")
+
+        # Set cover_url to the preview's URL
+        pack.cover_url = preview.url
+        store.layout.save_pack(pack)
+
+        logger.info(f"[set_cover] Set cover for {pack_name}: {filename}")
+
+        return {
+            "success": True,
+            "cover_url": pack.cover_url,
+            "filename": filename,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[set_cover] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.delete("/{pack_name}/previews/{filename}", response_model=Dict[str, Any])
+def delete_preview(
+    pack_name: str,
+    filename: str,
+    store=Depends(require_initialized),
+):
+    """
+    Delete a preview from a pack.
+
+    Removes both the file and the entry from pack.json.
+    If this was the cover, cover_url will be cleared.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Find and remove the preview from the list
+        original_count = len(pack.previews)
+        removed_preview = None
+        for p in pack.previews:
+            if p.filename == filename:
+                removed_preview = p
+                break
+
+        if not removed_preview:
+            raise HTTPException(status_code=404, detail=f"Preview not found: {filename}")
+
+        pack.previews = [p for p in pack.previews if p.filename != filename]
+
+        # Clear cover_url if this was the cover
+        if pack.cover_url and removed_preview.url == pack.cover_url:
+            pack.cover_url = None
+
+        # Delete the file if it exists locally
+        previews_dir = store.layout.pack_previews_path(pack_name)
+        preview_file = previews_dir / filename
+        if preview_file.exists():
+            preview_file.unlink()
+            logger.info(f"[delete_preview] Deleted file: {preview_file}")
+
+        store.layout.save_pack(pack)
+
+        logger.info(f"[delete_preview] Removed preview {filename} from {pack_name}")
+
+        return {
+            "success": True,
+            "deleted": filename,
+            "remaining_count": len(pack.previews),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[delete_preview] Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -3996,13 +4659,292 @@ def search_packs(
 
 
 # =============================================================================
+# AI Services Router
+# =============================================================================
+
+ai_router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+class AIProviderStatusResponse(BaseModel):
+    """Status of an AI provider."""
+    provider_id: str
+    available: bool
+    running: bool
+    version: Optional[str] = None
+    models: List[str] = []
+    error: Optional[str] = None
+
+
+class AIDetectionResponse(BaseModel):
+    """Response for provider detection."""
+    providers: Dict[str, AIProviderStatusResponse]
+    available_count: int
+    running_count: int
+
+
+class AIExtractionRequest(BaseModel):
+    """Request for parameter extraction."""
+    description: str
+    use_cache: bool = True
+
+
+class AIExtractionResponse(BaseModel):
+    """Response for parameter extraction."""
+    success: bool
+    parameters: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    provider_id: Optional[str] = None
+    model: Optional[str] = None
+    cached: bool = False
+    execution_time_ms: int = 0
+
+
+class AICacheStatsResponse(BaseModel):
+    """Response for cache stats."""
+    cache_dir: str
+    entry_count: int
+    total_size_bytes: int
+    total_size_mb: float
+    ttl_days: int
+
+
+class AISettingsResponse(BaseModel):
+    """Response for AI settings."""
+    enabled: bool
+    providers: Dict[str, Any]
+    task_priorities: Dict[str, Any]
+    cli_timeout_seconds: int
+    max_retries: int = 2
+    retry_delay_seconds: int = 1
+    cache_enabled: bool
+    cache_ttl_days: int
+    cache_directory: str = "~/.synapse/store/data/cache/ai"
+    always_fallback_to_rule_based: bool
+    show_provider_in_results: bool = True
+    log_requests: bool = True
+    log_level: str = "INFO"
+    log_prompts: bool = False
+    log_responses: bool = False
+
+
+class AISettingsUpdateRequest(BaseModel):
+    """Request for updating AI settings."""
+    enabled: Optional[bool] = None
+    providers: Optional[Dict[str, Any]] = None
+    task_priorities: Optional[Dict[str, Any]] = None
+    cli_timeout_seconds: Optional[int] = None
+    max_retries: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
+    cache_enabled: Optional[bool] = None
+    cache_ttl_days: Optional[int] = None
+    always_fallback_to_rule_based: Optional[bool] = None
+    show_provider_in_results: Optional[bool] = None
+    log_requests: Optional[bool] = None
+    log_level: Optional[str] = None
+    log_prompts: Optional[bool] = None
+    log_responses: Optional[bool] = None
+
+
+@ai_router.get("/providers", response_model=AIDetectionResponse)
+def detect_providers():
+    """Detect available AI providers."""
+    from src.ai import detect_ai_providers
+
+    providers = detect_ai_providers()
+
+    response_providers = {}
+    for pid, status in providers.items():
+        response_providers[pid] = AIProviderStatusResponse(
+            provider_id=status.provider_id,
+            available=status.available,
+            running=status.running,
+            version=status.version,
+            models=status.models,
+            error=status.error,
+        )
+
+    return AIDetectionResponse(
+        providers=response_providers,
+        available_count=sum(1 for s in providers.values() if s.available),
+        running_count=sum(1 for s in providers.values() if s.running),
+    )
+
+
+@ai_router.post("/extract", response_model=AIExtractionResponse)
+def extract_parameters(request: AIExtractionRequest):
+    """Extract generation parameters from description using AI."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    result = service.extract_parameters(
+        description=request.description,
+        use_cache=request.use_cache,
+    )
+
+    return AIExtractionResponse(
+        success=result.success,
+        parameters=result.output if result.success else None,
+        error=result.error,
+        provider_id=result.provider_id,
+        model=result.model,
+        cached=result.cached,
+        execution_time_ms=result.execution_time_ms,
+    )
+
+
+@ai_router.get("/cache/stats", response_model=AICacheStatsResponse)
+def get_cache_stats():
+    """Get AI cache statistics."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    stats = service.get_cache_stats()
+
+    return AICacheStatsResponse(**stats)
+
+
+@ai_router.delete("/cache")
+def clear_cache():
+    """Clear all AI cache entries."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    count = service.clear_cache()
+
+    return {"cleared": count}
+
+
+@ai_router.post("/cache/cleanup")
+def cleanup_cache():
+    """Remove expired AI cache entries."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    count = service.cleanup_cache()
+
+    return {"cleaned": count}
+
+
+@ai_router.get("/settings", response_model=AISettingsResponse)
+def get_ai_settings():
+    """Get current AI settings."""
+    from src.ai import AIServicesSettings
+
+    settings = AIServicesSettings.load()
+
+    return AISettingsResponse(
+        enabled=settings.enabled,
+        providers={k: v.to_dict() for k, v in settings.providers.items()},
+        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
+        cli_timeout_seconds=settings.cli_timeout_seconds,
+        max_retries=settings.max_retries,
+        retry_delay_seconds=settings.retry_delay_seconds,
+        cache_enabled=settings.cache_enabled,
+        cache_ttl_days=settings.cache_ttl_days,
+        cache_directory=settings.cache_directory,
+        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
+        show_provider_in_results=settings.show_provider_in_results,
+        log_requests=settings.log_requests,
+        log_level=settings.log_level,
+        log_prompts=settings.log_prompts,
+        log_responses=settings.log_responses,
+    )
+
+
+@ai_router.patch("/settings", response_model=AISettingsResponse)
+def update_ai_settings(request: AISettingsUpdateRequest):
+    """
+    Update AI settings and persist to disk.
+
+    Settings are saved to: ~/.synapse/store/data/ai_settings.json
+    """
+    from src.ai import AIServicesSettings, ProviderConfig, TaskPriorityConfig
+
+    # Load current settings from disk
+    settings = AIServicesSettings.load()
+
+    # Update only provided fields
+    if request.enabled is not None:
+        settings.enabled = request.enabled
+
+    if request.providers is not None:
+        for provider_id, provider_data in request.providers.items():
+            # Ensure provider_id is set in the data
+            provider_data["provider_id"] = provider_id
+            settings.providers[provider_id] = ProviderConfig.from_dict(provider_data)
+
+    if request.task_priorities is not None:
+        for task_type, priority_data in request.task_priorities.items():
+            # Ensure task_type is set in the data
+            priority_data["task_type"] = task_type
+            settings.task_priorities[task_type] = TaskPriorityConfig.from_dict(priority_data)
+
+    if request.cli_timeout_seconds is not None:
+        settings.cli_timeout_seconds = request.cli_timeout_seconds
+
+    if request.max_retries is not None:
+        settings.max_retries = request.max_retries
+
+    if request.retry_delay_seconds is not None:
+        settings.retry_delay_seconds = request.retry_delay_seconds
+
+    if request.cache_enabled is not None:
+        settings.cache_enabled = request.cache_enabled
+
+    if request.cache_ttl_days is not None:
+        settings.cache_ttl_days = request.cache_ttl_days
+
+    if request.always_fallback_to_rule_based is not None:
+        settings.always_fallback_to_rule_based = request.always_fallback_to_rule_based
+
+    if request.show_provider_in_results is not None:
+        settings.show_provider_in_results = request.show_provider_in_results
+
+    if request.log_requests is not None:
+        settings.log_requests = request.log_requests
+
+    if request.log_level is not None:
+        settings.log_level = request.log_level
+
+    if request.log_prompts is not None:
+        settings.log_prompts = request.log_prompts
+
+    if request.log_responses is not None:
+        settings.log_responses = request.log_responses
+
+    # Save to disk
+    if not settings.save():
+        raise HTTPException(status_code=500, detail="Failed to save AI settings to disk")
+
+    logger.info(f"[ai-settings] Updated and saved AI settings: enabled={settings.enabled}")
+
+    return AISettingsResponse(
+        enabled=settings.enabled,
+        providers={k: v.to_dict() for k, v in settings.providers.items()},
+        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
+        cli_timeout_seconds=settings.cli_timeout_seconds,
+        max_retries=settings.max_retries,
+        retry_delay_seconds=settings.retry_delay_seconds,
+        cache_enabled=settings.cache_enabled,
+        cache_ttl_days=settings.cache_ttl_days,
+        cache_directory=settings.cache_directory,
+        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
+        show_provider_in_results=settings.show_provider_in_results,
+        log_requests=settings.log_requests,
+        log_level=settings.log_level,
+        log_prompts=settings.log_prompts,
+        log_responses=settings.log_responses,
+    )
+
+
+# =============================================================================
 # Router Factory
 # =============================================================================
 
 def create_store_routers() -> List[APIRouter]:
     """
     Create all store routers.
-    
+
     Returns:
         List of APIRouter instances to be included in FastAPI app
     """
@@ -4012,4 +4954,5 @@ def create_store_routers() -> List[APIRouter]:
         profiles_router,
         updates_router,
         search_router,
+        ai_router,
     ]

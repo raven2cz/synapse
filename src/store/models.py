@@ -21,7 +21,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer, model_validator
 
 
 # =============================================================================
@@ -73,6 +73,19 @@ class ConflictMode(str, Enum):
     LAST_WINS = "last_wins"
     FIRST_WINS = "first_wins"
     STRICT = "strict"
+
+
+class PackCategory(str, Enum):
+    """
+    Category determines pack's origin and editability.
+
+    - EXTERNAL: Imported from Civitai, HuggingFace, etc. (metadata read-only)
+    - CUSTOM: Created locally from scratch (fully editable)
+    - INSTALL: Installation pack for UI environments (script-based management)
+    """
+    EXTERNAL = "external"
+    CUSTOM = "custom"
+    INSTALL = "install"
 
 
 # =============================================================================
@@ -422,8 +435,47 @@ class PackResources(BaseModel):
     workflows_keep_in_git: bool = True
 
 
+class PackDependencyRef(BaseModel):
+    """
+    Reference to another pack this pack depends on.
+
+    This enables pack dependency trees where:
+    - A LoRA pack can depend on a Checkpoint pack (its base model)
+    - A Workflow pack can depend on all required LoRA/VAE packs
+    - An Install pack can depend on another Install pack
+
+    The dependency is resolved at runtime by checking if the referenced
+    pack exists and is installed.
+    """
+    pack_name: str  # Name of the dependent pack
+    required: bool = True  # Is this dependency required?
+    version_constraint: Optional[str] = None  # e.g., ">=1.0.0", "latest"
+
+    @field_validator("pack_name")
+    @classmethod
+    def validate_pack_name(cls, v: str) -> str:
+        return validate_safe_name(v)
+
+
 class GenerationParameters(BaseModel):
-    """Default generation parameters extracted from Civitai or user-defined."""
+    """
+    Default generation parameters extracted from Civitai or user-defined.
+
+    All fields are Optional to avoid "ghost" values in JSON serialization.
+    Uses custom serializer to exclude None values automatically.
+
+    IMPORTANT: extra="allow" permits any additional parameters from the frontend
+    (e.g., controlnet, inpainting, batch, SDXL, FreeU, IP-Adapter settings).
+
+    AI Response Normalization:
+    The model_validator normalizes various AI response formats to standard fields:
+    - sampler: ['DPM++ 2M'] → 'DPM++ 2M'
+    - highres_fix_settings: {upscale_factor: 2} → hires_fix=True, hires_scale=2.0
+    - cfg_scale: {min: 5, max: 7, recommended: 7} → 7.0
+    - resolution: '512x768' → width=512, height=768
+    """
+    model_config = ConfigDict(extra="allow")
+
     sampler: Optional[str] = None
     scheduler: Optional[str] = None
     steps: Optional[int] = None
@@ -433,10 +485,290 @@ class GenerationParameters(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     seed: Optional[int] = None
-    hires_fix: bool = False
+    # LoRA strength
+    strength: Optional[float] = None
+    eta: Optional[float] = None
+    # HiRes parameters - all Optional to avoid ghost values
+    hires_fix: Optional[bool] = None
     hires_upscaler: Optional[str] = None
     hires_steps: Optional[int] = None
     hires_denoise: Optional[float] = None
+    hires_scale: Optional[float] = None
+    hires_width: Optional[int] = None
+    hires_height: Optional[int] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_ai_response(cls, data: Any) -> Any:
+        """Normalize AI response formats to standard field types.
+
+        CRITICAL: Never lose data! If normalization fails, preserve as extra field.
+
+        Handles various AI output formats and converts them to expected types:
+        - Lists → first element (e.g., sampler: ['DPM++'] → 'DPM++')
+        - Range dicts → recommended/max value (e.g., {min: 5, max: 7} → 7)
+        - Resolution string → width/height (e.g., '512x768' → width=512, height=768)
+        - Nested hires settings → flat fields
+        """
+        if not isinstance(data, dict):
+            return data
+
+        result = dict(data)
+
+        # Helper to safely convert to number, preserving original if fails
+        def safe_to_number(value: Any, as_float: bool = False) -> Any:
+            """Try to convert to number, return original if fails."""
+            if value is None:
+                return None
+            if isinstance(value, (int, float)):
+                return float(value) if as_float else value
+            if isinstance(value, str):
+                try:
+                    return float(value) if as_float else int(value)
+                except ValueError:
+                    return value  # Keep as string
+            return value
+
+        # Normalize list values to single items (sampler, scheduler)
+        for key in ["sampler", "scheduler"]:
+            if key in result and isinstance(result[key], list) and result[key]:
+                result[key] = result[key][0]
+
+        # Normalize list values to single items for numeric fields
+        # AI sometimes returns [1, 2] instead of just 1
+        # IMPORTANT: If list contains non-numeric, keep first element anyway
+        numeric_fields = [
+            "steps", "cfg_scale", "clip_skip", "denoise", "strength",
+            "width", "height", "seed", "eta",
+            "hires_steps", "hires_denoise", "hires_scale", "hires_width", "hires_height"
+        ]
+        for key in numeric_fields:
+            if key in result and isinstance(result[key], list) and result[key]:
+                # Take first element from list
+                first = result[key][0]
+                # Try to convert to appropriate type
+                if key in ["cfg_scale", "denoise", "strength", "hires_denoise", "hires_scale", "eta"]:
+                    result[key] = safe_to_number(first, as_float=True)
+                else:
+                    result[key] = safe_to_number(first, as_float=False)
+
+        # Normalize range dicts to single values
+        # Format: {min: X, max: Y, recommended: Z} → use recommended, then max
+        # IMPORTANT: If can't extract value, preserve as string representation
+        for key in ["steps", "cfg_scale", "clip_skip", "denoise", "strength"]:
+            if key in result and isinstance(result[key], dict):
+                range_dict = result[key]
+                extracted = None
+                if "recommended" in range_dict:
+                    extracted = range_dict["recommended"]
+                elif "best" in range_dict:
+                    extracted = range_dict["best"]
+                elif "max" in range_dict:
+                    extracted = range_dict["max"]
+                elif "value" in range_dict:
+                    extracted = range_dict["value"]
+
+                if extracted is not None:
+                    result[key] = extracted
+                else:
+                    # Can't extract single value - preserve as string for display
+                    # Move to custom field so we don't lose the info
+                    result[f"_raw_{key}"] = str(range_dict)
+                    del result[key]
+
+        # Normalize 'cfg' alias to 'cfg_scale'
+        if "cfg" in result and "cfg_scale" not in result:
+            cfg_val = result.pop("cfg")
+            if isinstance(cfg_val, dict):
+                if "recommended" in cfg_val:
+                    result["cfg_scale"] = cfg_val["recommended"]
+                elif "max" in cfg_val:
+                    result["cfg_scale"] = cfg_val["max"]
+            else:
+                result["cfg_scale"] = cfg_val
+
+        # Parse resolution string to width/height
+        if "resolution" in result and isinstance(result["resolution"], str):
+            resolution = result.pop("resolution")
+            match = re.match(r"(\d+)\s*[xX×]\s*(\d+)", resolution)
+            if match:
+                if "width" not in result or result["width"] is None:
+                    result["width"] = int(match.group(1))
+                if "height" not in result or result["height"] is None:
+                    result["height"] = int(match.group(2))
+
+        # Normalize hires_fix when it's a list (AI may return [{upscaler: '2x', denoising: 0.5}])
+        if "hires_fix" in result and isinstance(result["hires_fix"], list) and result["hires_fix"]:
+            # Take first element from list
+            first = result["hires_fix"][0]
+            if isinstance(first, dict):
+                result["hires_fix"] = first
+            elif isinstance(first, bool):
+                result["hires_fix"] = first
+            else:
+                # Something unexpected, try to coerce to bool
+                result["hires_fix"] = bool(first)
+
+        # Normalize hires_fix when it's a dict (AI may return {upscaler: '2x', denoising: 0.5})
+        if "hires_fix" in result and isinstance(result["hires_fix"], dict):
+            hires = result.pop("hires_fix")
+            result["hires_fix"] = True
+            # Map nested fields
+            field_map = {
+                "upscale_factor": "hires_scale",
+                "scale": "hires_scale",
+                "upscaler": "hires_scale",  # '2x' will be converted below
+                "denoising_strength": "hires_denoise",
+                "denoise": "hires_denoise",
+                "denoising": "hires_denoise",
+                "steps": "hires_steps",
+            }
+            for src, dst in field_map.items():
+                if src in hires and (dst not in result or result[dst] is None):
+                    val = hires[src]
+                    # Convert '2x' format to float
+                    if isinstance(val, str) and val.endswith('x'):
+                        try:
+                            val = float(val[:-1])
+                        except ValueError:
+                            pass
+                    result[dst] = val
+
+        # Normalize highres_fix (alternate spelling) to hires_fix
+        if "highres_fix" in result:
+            highres = result.pop("highres_fix")
+            # If it's a dict with settings, extract them
+            if isinstance(highres, dict):
+                result["hires_fix"] = True
+                # Map nested fields
+                field_map = {
+                    "upscale_factor": "hires_scale",
+                    "scale": "hires_scale",
+                    "upscaler": "hires_upscaler",
+                    "denoising_strength": "hires_denoise",
+                    "denoise": "hires_denoise",
+                    "denoising": "hires_denoise",
+                    "steps": "hires_steps",
+                }
+                for src, dst in field_map.items():
+                    if src in highres and (dst not in result or result[dst] is None):
+                        val = highres[src]
+                        # Convert '2x' format to float
+                        if isinstance(val, str) and val.endswith('x'):
+                            try:
+                                val = float(val[:-1])
+                            except ValueError:
+                                pass
+                        result[dst] = val
+            elif isinstance(highres, bool):
+                result["hires_fix"] = highres
+            elif isinstance(highres, str):
+                # Could be "recommended", "required", etc.
+                lower = highres.lower()
+                if lower in ("true", "yes", "1", "enabled", "on", "recommended", "required", "must"):
+                    result["hires_fix"] = True
+                elif lower in ("false", "no", "0", "disabled", "off", "optional"):
+                    result["hires_fix"] = False
+                else:
+                    # Store original as note
+                    result["_raw_highres_fix"] = highres
+                    result["hires_fix"] = True  # Assume True if mentioned
+
+        # Normalize highres_fix_settings to flat fields
+        if "highres_fix_settings" in result and isinstance(result["highres_fix_settings"], dict):
+            hires = result.pop("highres_fix_settings")
+            # Set hires_fix to True if we have settings
+            if result.get("hires_fix") is None:
+                result["hires_fix"] = True
+            # Map nested fields
+            field_map = {
+                "upscale_factor": "hires_scale",
+                "scale": "hires_scale",
+                "upscaler": "hires_upscaler",
+                "denoising_strength": "hires_denoise",
+                "denoise": "hires_denoise",
+                "steps": "hires_steps",
+            }
+            for src, dst in field_map.items():
+                if src in hires and (dst not in result or result[dst] is None):
+                    result[dst] = hires[src]
+
+        # IMPORTANT: Do NOT filter out any fields!
+        # AI is instructed to extract ALL information including:
+        # - compatibility notes
+        # - usage tips
+        # - recommended models
+        # - warnings
+        # - workflow tips
+        # These are stored as extra fields (model_config extra="allow")
+        # and displayed in the UI's "AI Notes" section.
+
+        # Final pass: Validate types for known fields, move invalid to _raw_ prefix
+        # This ensures Pydantic validation won't fail and lose data
+        int_fields = ["steps", "clip_skip", "width", "height", "seed", "hires_steps", "hires_width", "hires_height"]
+        float_fields = ["cfg_scale", "denoise", "strength", "eta", "hires_denoise", "hires_scale"]
+        bool_fields = ["hires_fix"]
+        str_fields = ["sampler", "scheduler", "hires_upscaler"]
+
+        for key in int_fields:
+            if key in result and result[key] is not None:
+                val = result[key]
+                if not isinstance(val, int):
+                    try:
+                        result[key] = int(float(val))  # Handle "20.0" -> 20
+                    except (ValueError, TypeError):
+                        # Can't convert - preserve original in _raw_ field
+                        result[f"_raw_{key}"] = str(val) if not isinstance(val, str) else val
+                        del result[key]
+
+        for key in float_fields:
+            if key in result and result[key] is not None:
+                val = result[key]
+                if not isinstance(val, (int, float)):
+                    try:
+                        result[key] = float(val)
+                    except (ValueError, TypeError):
+                        result[f"_raw_{key}"] = str(val) if not isinstance(val, str) else val
+                        del result[key]
+
+        for key in bool_fields:
+            if key in result and result[key] is not None:
+                val = result[key]
+                if not isinstance(val, bool):
+                    # Try common string representations
+                    if isinstance(val, str):
+                        lower = val.lower()
+                        if lower in ("true", "yes", "1", "enabled", "on"):
+                            result[key] = True
+                        elif lower in ("false", "no", "0", "disabled", "off"):
+                            result[key] = False
+                        else:
+                            result[f"_raw_{key}"] = val
+                            del result[key]
+                    else:
+                        result[f"_raw_{key}"] = str(val)
+                        del result[key]
+
+        for key in str_fields:
+            if key in result and result[key] is not None:
+                val = result[key]
+                if not isinstance(val, str):
+                    # Convert to string - this should always work
+                    result[key] = str(val)
+
+        return result
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler) -> dict:
+        """Custom serializer that excludes None values to avoid ghost parameters.
+
+        Includes both defined fields and extra fields (from model_config extra="allow").
+        """
+        d = handler(self)
+        # Include extra fields that were set dynamically
+        if hasattr(self, '__pydantic_extra__') and self.__pydantic_extra__:
+            d.update(self.__pydantic_extra__)
+        return {k: v for k, v in d.items() if v is not None}
 
 
 class ModelInfo(BaseModel):
@@ -505,8 +837,10 @@ class Pack(BaseModel):
     schema_: str = Field(default="synapse.pack.v2", alias="schema")
     name: str
     pack_type: AssetKind
+    pack_category: PackCategory = PackCategory.EXTERNAL  # Default for backwards compat
     source: PackSource
     dependencies: List[PackDependency] = Field(default_factory=list)
+    pack_dependencies: List[PackDependencyRef] = Field(default_factory=list)  # Dependencies on other packs
     resources: PackResources = Field(default_factory=PackResources)
 
     # Previews with metadata (canonical source of truth)
@@ -532,6 +866,7 @@ class Pack(BaseModel):
     
     # Generation parameters and model info
     parameters: Optional[GenerationParameters] = None
+    parameters_source: Optional[str] = None  # AI provider that extracted params (e.g., "ollama", "rule_based")
     model_info: Optional[ModelInfo] = None
     
     # ComfyUI workflows

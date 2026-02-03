@@ -381,7 +381,7 @@ class TestCivitaiParametersExtraction:
             width=civitai_meta.get("width"),
             height=civitai_meta.get("height"),
             denoise=civitai_meta.get("denoise"),
-            hires_fix=bool(civitai_meta.get("hiresFix")),
+            hires_fix=civitai_meta.get("hiresFix"),  # Pass directly, no bool() conversion
             hires_upscaler=civitai_meta.get("hiresUpscaler"),
             hires_steps=civitai_meta.get("hiresSteps"),
             hires_denoise=civitai_meta.get("hiresDenoising"),
@@ -489,22 +489,312 @@ class TestCivitaiParametersExtraction:
             "cfgScale": 7,
             "steps": 20
         }
-        
+
         params = GenerationParameters(
             cfg_scale=partial_meta.get("cfgScale"),
             steps=partial_meta.get("steps"),
         )
-        
+
         assert params.cfg_scale == 7
         assert params.steps == 20
         assert params.sampler is None
         assert params.clip_skip is None
-        
+
         # to_dict should only include set values
         d = params.to_dict()
         assert "cfg_scale" in d
         assert "steps" in d
         assert "sampler" not in d or d.get("sampler") is None
+
+
+class TestHiresFixSerialization:
+    """Tests for hires_fix serialization - no ghost values."""
+
+    def test_hires_fix_none_not_serialized(self):
+        """Test that hires_fix=None is NOT included in serialized output."""
+        params = GenerationParameters(
+            steps=20,
+            cfg_scale=7.0,
+            # hires_fix is None by default
+        )
+
+        d = params.to_dict()
+
+        assert "steps" in d
+        assert "cfg_scale" in d
+        assert "hires_fix" not in d, "hires_fix=None should NOT be in serialized output"
+
+    def test_hires_fix_true_serialized(self):
+        """Test that hires_fix=True IS included in serialized output."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=True,
+        )
+
+        d = params.to_dict()
+
+        assert "hires_fix" in d
+        assert d["hires_fix"] is True
+
+    def test_hires_fix_false_serialized(self):
+        """Test that hires_fix=False IS included in serialized output (explicit False)."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=False,
+        )
+
+        d = params.to_dict()
+
+        assert "hires_fix" in d
+        assert d["hires_fix"] is False
+
+    def test_no_ghost_hires_parameters(self):
+        """Test that hires_* parameters don't appear as ghosts when not set."""
+        params = GenerationParameters(
+            sampler="Euler a",
+            steps=20,
+            cfg_scale=7.0,
+        )
+
+        d = params.to_dict()
+
+        # None of the hires params should appear
+        assert "hires_fix" not in d
+        assert "hires_upscaler" not in d
+        assert "hires_steps" not in d
+        assert "hires_denoise" not in d
+
+    def test_all_hires_params_when_set(self):
+        """Test all hires parameters are serialized when explicitly set."""
+        params = GenerationParameters(
+            steps=20,
+            hires_fix=True,
+            hires_upscaler="4x-UltraSharp",
+            hires_steps=15,
+            hires_denoise=0.45,
+        )
+
+        d = params.to_dict()
+
+        assert d["hires_fix"] is True
+        assert d["hires_upscaler"] == "4x-UltraSharp"
+        assert d["hires_steps"] == 15
+        assert d["hires_denoise"] == 0.45
+
+    def test_from_dict_preserves_none(self):
+        """Test that from_dict with missing hires_fix results in None."""
+        data = {"steps": 20, "cfg_scale": 7.0}
+
+        params = GenerationParameters.from_dict(data)
+
+        assert params.hires_fix is None
+        assert params.steps == 20
+        assert params.cfg_scale == 7.0
+
+
+class TestAINormalization:
+    """Test AI response normalization - handles various AI output formats.
+
+    Uses src/store/models.GenerationParameters which is the Pydantic version
+    with the normalize_ai_response validator.
+    """
+
+    def test_normalize_clip_skip_list(self):
+        """Test that clip_skip as list [1, 2] is normalized to first element."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {"clip_skip": [1, 2], "steps": 20}
+        params = StoreParams.model_validate(data)
+
+        assert params.clip_skip == 1
+        assert params.steps == 20
+
+    def test_normalize_hires_fix_list_of_dicts(self):
+        """Test that hires_fix as list of dicts is normalized."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": 20,
+            "hires_fix": [{"upscale_by": 2, "denoising_strength": 0.5}]
+        }
+        params = StoreParams.model_validate(data)
+
+        # hires_fix should be True (from dict extraction)
+        assert params.hires_fix is True
+        # Nested values should be extracted
+        assert params.hires_denoise == 0.5
+
+    def test_normalize_hires_fix_list_of_bools(self):
+        """Test that hires_fix as list of bools takes first element."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {"steps": 20, "hires_fix": [True, False]}
+        params = StoreParams.model_validate(data)
+
+        assert params.hires_fix is True
+
+    def test_normalize_numeric_lists(self):
+        """Test that all numeric fields handle list input."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": [25, 30],
+            "cfg_scale": [7.0, 8.0],
+            "width": [512, 768],
+            "height": [768, 1024],
+            "seed": [12345, 67890],
+            "denoise": [0.7, 0.8],
+        }
+        params = StoreParams.model_validate(data)
+
+        # All should take first element
+        assert params.steps == 25
+        assert params.cfg_scale == 7.0
+        assert params.width == 512
+        assert params.height == 768
+        assert params.seed == 12345
+        assert params.denoise == 0.7
+
+    def test_normalize_hires_numeric_lists(self):
+        """Test that hires_* numeric fields handle list input."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": 20,
+            "hires_fix": True,
+            "hires_steps": [10, 15],
+            "hires_denoise": [0.4, 0.5],
+            "hires_scale": [1.5, 2.0],
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.hires_steps == 10
+        assert params.hires_denoise == 0.4
+        assert params.hires_scale == 1.5
+
+    def test_normalize_range_dict(self):
+        """Test normalization of range dicts {min, max, recommended}."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": {"min": 15, "max": 30, "recommended": 20},
+            "cfg_scale": {"min": 5, "max": 10},  # No recommended, use max
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.steps == 20  # recommended
+        assert params.cfg_scale == 10  # max (no recommended)
+
+    def test_normalize_sampler_scheduler_lists(self):
+        """Test that sampler/scheduler lists take first element."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "sampler": ["DPM++ 2M Karras", "Euler a"],
+            "scheduler": ["normal", "karras"],
+            "steps": 20,
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.sampler == "DPM++ 2M Karras"
+        assert params.scheduler == "normal"
+
+    def test_normalize_resolution_string(self):
+        """Test resolution string parsing to width/height."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {"resolution": "512x768", "steps": 20}
+        params = StoreParams.model_validate(data)
+
+        assert params.width == 512
+        assert params.height == 768
+
+    def test_normalize_hires_fix_dict_with_nested_fields(self):
+        """Test hires_fix dict extraction of nested fields."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": 20,
+            "hires_fix": {
+                "upscale_factor": 2.0,
+                "denoising_strength": 0.5,
+                "steps": 15,
+            }
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.hires_fix is True
+        assert params.hires_scale == 2.0
+        assert params.hires_denoise == 0.5
+        assert params.hires_steps == 15
+
+    def test_normalize_extra_fields_preserved(self):
+        """Test that AI notes/extra fields are preserved (model_config extra='allow')."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "compatibility": "Works best with SD 1.5",
+            "usage_tips": "Use lower CFG for better results",
+            "warnings": "May produce artifacts at high steps",
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.steps == 20
+        assert params.cfg_scale == 7.0
+        # Extra fields should be accessible via __pydantic_extra__
+        assert hasattr(params, '__pydantic_extra__')
+        assert params.__pydantic_extra__.get("compatibility") == "Works best with SD 1.5"
+        assert params.__pydantic_extra__.get("usage_tips") == "Use lower CFG for better results"
+
+    def test_unconvertible_values_preserved_as_raw(self):
+        """Test that values which can't be converted are preserved in _raw_ fields."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": 20,
+            "clip_skip": "varies by model",  # String that can't be int
+            "cfg_scale": "between 7 and 9",  # String that can't be float
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.steps == 20
+        # Original fields should be removed
+        assert params.clip_skip is None
+        assert params.cfg_scale is None
+        # But data preserved in _raw_ fields
+        assert params.__pydantic_extra__.get("_raw_clip_skip") == "varies by model"
+        assert params.__pydantic_extra__.get("_raw_cfg_scale") == "between 7 and 9"
+
+    def test_range_dict_without_extractable_value_preserved(self):
+        """Test that range dicts without extractable value are preserved."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "steps": {"note": "depends on model", "typical": "20-30"},  # No min/max/recommended
+        }
+        params = StoreParams.model_validate(data)
+
+        assert params.steps is None
+        # Original dict preserved as string
+        assert "_raw_steps" in params.__pydantic_extra__
+
+    def test_no_data_loss_on_complex_ai_response(self):
+        """Test complete AI response with mixed formats - nothing should be lost."""
+        from src.store.models import GenerationParameters as StoreParams
+        data = {
+            "sampler": ["DPM++ 2M Karras", "Euler a"],  # List
+            "steps": {"min": 15, "max": 30, "recommended": 20},  # Range dict
+            "cfg_scale": [7.0, 8.0],  # Numeric list
+            "clip_skip": "1 or 2",  # Unconvertible string
+            "hires_fix": [{"upscale_by": 2}],  # List of dicts
+            "compatibility": "SD 1.5",  # Extra field
+            "warnings": "May be slow",  # Extra field
+        }
+        params = StoreParams.model_validate(data)
+
+        # Converted values
+        assert params.sampler == "DPM++ 2M Karras"
+        assert params.steps == 20
+        assert params.cfg_scale == 7.0
+        assert params.hires_fix is True
+
+        # clip_skip couldn't be converted
+        assert params.clip_skip is None
+        assert params.__pydantic_extra__.get("_raw_clip_skip") == "1 or 2"
+
+        # Extra fields preserved
+        assert params.__pydantic_extra__.get("compatibility") == "SD 1.5"
+        assert params.__pydantic_extra__.get("warnings") == "May be slow"
 
 
 if __name__ == "__main__":

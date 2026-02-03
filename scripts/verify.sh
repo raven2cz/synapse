@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ⬢ Synapse - Verification Script v2.6.0
+# ⬢ Synapse - Verification Script v2.7.0
 #
 # Comprehensive verification tool for the Synapse project.
 # Run before committing to ensure all checks pass.
@@ -174,7 +174,7 @@ done
 echo -e "${MAGENTA}"
 echo "╔════════════════════════════════════════════════════════════════════╗"
 echo "║                                                                    ║"
-echo "║   ⬢ Synapse - Verification Script v2.6.0                          ║"
+echo "║   ⬢ Synapse - Verification Script v2.7.0                          ║"
 echo "║                                                                    ║"
 echo "╚════════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
