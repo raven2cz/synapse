@@ -157,6 +157,8 @@ export interface ParametersInfo {
   hires_upscaler?: string
   hires_steps?: number
   hires_denoise?: number
+  /** AI provider that extracted these parameters */
+  _extracted_by?: string
   [key: string]: unknown // Allow custom parameters
 }
 
@@ -241,6 +243,8 @@ export interface PackDetail {
     pack_dependencies?: PackDependencyRef[]  // Dependencies on other packs
     base_model?: string
     trigger_words?: string[]
+    /** AI provider that extracted parameters during import */
+    parameters_source?: string
     // Other fields available but not commonly needed in UI
     [key: string]: unknown
   }

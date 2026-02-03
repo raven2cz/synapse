@@ -539,23 +539,32 @@ class PackService:
             model_info=model_info,
         )
 
-        # Extract parameters from description (if available)
+        # Extract parameters from description using AI (with rule-based fallback)
         if pack.description:
-            from src.utils.parameter_extractor import extract_from_description
+            from src.ai import AIService
             from .models import GenerationParameters
 
             logger.info(f"[parameter-extraction] Extracting from description (length: {len(pack.description)})")
-            extraction_result = extract_from_description(pack.description)
 
-            if extraction_result.parameters:
-                param_keys = list(extraction_result.parameters.keys())
-                logger.info(f"[parameter-extraction] Found {len(param_keys)} params: {param_keys}")
+            try:
+                ai_service = AIService()
+                result = ai_service.extract_parameters(pack.description)
 
-                # Convert to GenerationParameters model
-                pack.parameters = GenerationParameters(**extraction_result.parameters)
-                logger.info(f"[parameter-extraction] Parameters saved to pack")
-            else:
-                logger.info(f"[parameter-extraction] No parameters found in description")
+                if result.success and result.output:
+                    param_keys = list(result.output.keys())
+                    logger.info(
+                        f"[parameter-extraction] Found {len(param_keys)} params via {result.provider_id}: {param_keys}"
+                    )
+
+                    # Convert to GenerationParameters model
+                    pack.parameters = GenerationParameters(**result.output)
+                    pack.parameters_source = result.provider_id  # Track extraction source
+                    logger.info(f"[parameter-extraction] Parameters saved to pack (source: {result.provider_id})")
+                else:
+                    logger.info(f"[parameter-extraction] No parameters found in description")
+
+            except Exception as e:
+                logger.warning(f"[parameter-extraction] AI extraction failed, skipping: {e}")
 
         # Save pack
         self.layout.save_pack(pack)

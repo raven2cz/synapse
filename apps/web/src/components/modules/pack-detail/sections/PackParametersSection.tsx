@@ -15,7 +15,8 @@
 import { useState, useMemo, useCallback } from 'react'
 import {
   Info, Edit3, Sliders, Maximize2, Sparkles, Settings2, ChevronDown, ChevronRight,
-  Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, ImageIcon, FileText, Calculator, Pencil,
+  Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, ImageIcon, FileText, Calculator, Pencil, Bot,
+  Lightbulb, AlertTriangle, CheckCircle2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
@@ -137,6 +138,95 @@ const CATEGORY_META: Record<CategoryKey, { label: string; icon: React.ElementTyp
 
 const HIGHLIGHT_PARAMS = new Set(['clip_skip', 'strength', 'strength_recommended'])
 
+// AI Notes - extracted metadata that should be displayed as text, not parameter cards
+// These are excluded from regular parameter display and shown in AI Insights section
+const AI_NOTES_KEYS = new Set([
+  // Internal
+  '_extracted_by',
+  // Text notes
+  'compatibility',
+  'compatibility_notes',
+  'usage_tips',
+  'warnings',
+  'style_notes',
+  'quality_notes',
+  'best_practices',
+  'additional_notes',
+  'notes',
+  'tips',
+  'recommendation',
+  'recommendations',
+  'resolution_notes',
+  // List-based recommendations (should be formatted nicely, not as cards)
+  'recommended_models',
+  'related_models',
+  'recommended_prompts',
+  'example_prompts',
+  'recommended_resolutions',
+  'hires_fix_options',
+  'highres_fix_recommendation',
+  // Embeddings (various AI naming conventions)
+  'embeddings',
+  'recommended_embeddings',
+  'negative_embeddings',
+  'positive_embeddings',
+  'textual_inversions',
+  'avoid_resources',
+  'avoid_embeddings',
+  // VAE recommendations
+  'vae',
+  'vae_recommendation',
+  'recommended_vae',
+  // LoRA/Model recommendations
+  'loras',
+  'recommended_loras',
+  'related_loras',
+  // Negative prompt suggestions
+  'negative_prompt',
+  'negative_prompts',
+  'recommended_negative',
+])
+
+// Labels for AI notes keys
+const AI_NOTES_LABELS: Record<string, string> = {
+  compatibility: 'Compatibility',
+  compatibility_notes: 'Compatibility Notes',
+  usage_tips: 'Usage Tips',
+  warnings: 'Warnings',
+  recommended_models: 'Recommended Models',
+  related_models: 'Related Models',
+  highres_fix_recommendation: 'HiRes Fix',
+  hires_fix_options: 'HiRes Fix Options',
+  style_notes: 'Style Notes',
+  quality_notes: 'Quality Notes',
+  best_practices: 'Best Practices',
+  additional_notes: 'Notes',
+  notes: 'Notes',
+  tips: 'Tips',
+  recommendation: 'Recommendation',
+  recommendations: 'Recommendations',
+  resolution_notes: 'Resolution Notes',
+  recommended_prompts: 'Recommended Prompts',
+  example_prompts: 'Example Prompts',
+  embeddings: 'Recommended Embeddings',
+  recommended_embeddings: 'Recommended Embeddings',
+  negative_embeddings: 'Recommended Embeddings',
+  positive_embeddings: 'Positive Embeddings',
+  textual_inversions: 'Textual Inversions',
+  avoid_resources: 'Avoid These',
+  avoid_embeddings: 'Avoid Embeddings',
+  recommended_resolutions: 'Recommended Resolutions',
+  vae: 'Recommended VAE',
+  vae_recommendation: 'Recommended VAE',
+  recommended_vae: 'Recommended VAE',
+  loras: 'Recommended LoRAs',
+  recommended_loras: 'Recommended LoRAs',
+  related_loras: 'Related LoRAs',
+  negative_prompt: 'Negative Prompt',
+  negative_prompts: 'Negative Prompts',
+  recommended_negative: 'Recommended Negative',
+}
+
 // =============================================================================
 // Utility Functions
 // =============================================================================
@@ -152,6 +242,23 @@ function formatParamValue(_key: string, value: unknown): string {
     if (Number.isInteger(value)) return value.toString()
     return value.toFixed(2).replace(/\.?0+$/, '')
   }
+  // Handle arrays - join with line break for multi-value display
+  if (Array.isArray(value)) {
+    // Filter out objects, format simple values
+    const formatted = value.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        // For objects, extract meaningful value or skip
+        return Object.values(item).filter(v => typeof v !== 'object').join(', ')
+      }
+      return String(item)
+    }).filter(Boolean)
+    return formatted.join('\n')
+  }
+  // Handle objects - extract values
+  if (typeof value === 'object' && value !== null) {
+    const vals = Object.values(value).filter(v => typeof v !== 'object')
+    return vals.join(', ')
+  }
   return String(value)
 }
 
@@ -160,6 +267,23 @@ function getParamCategory(key: string): CategoryKey {
     if (keys.includes(key)) return category as CategoryKey
   }
   return 'custom'
+}
+
+/**
+ * Recursively format any value to string (handles nested objects/arrays)
+ */
+function formatAnyValueRecursive(v: unknown): string {
+  if (v === null || v === undefined) return ''
+  if (typeof v === 'object') {
+    if (Array.isArray(v)) {
+      return v.map(item => formatAnyValueRecursive(item)).join(', ')
+    }
+    // Nested object - format key:value pairs
+    return Object.entries(v)
+      .map(([k, val]) => `${k}: ${formatAnyValueRecursive(val)}`)
+      .join(', ')
+  }
+  return String(v)
 }
 
 // =============================================================================
@@ -497,6 +621,12 @@ export function PackParametersSection({
       for (const [key, value] of Object.entries(parameters)) {
         if (value === null || value === undefined) continue
 
+        // Skip AI notes - they're displayed in a separate section
+        if (AI_NOTES_KEYS.has(key)) continue
+
+        // Skip _raw_* fields - these are unnormalized data shown in AI notes
+        if (key.startsWith('_raw_') || key.startsWith('_')) continue
+
         // Skip width/height individually if we're showing combined resolution
         if (hasResolution && (key === 'width' || key === 'height')) continue
 
@@ -525,6 +655,96 @@ export function PackParametersSection({
     return result
   }, [parameters, modelInfo])
 
+  // Helper to format AI note values nicely
+  const formatNoteValue = useCallback((value: unknown): string => {
+    if (value === null || value === undefined) return ''
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      // Check if array contains objects
+      if (value.length > 0 && typeof value[0] === 'object' && value[0] !== null) {
+        // Format each object nicely
+        return value.map(item => {
+          if (typeof item === 'object' && item !== null) {
+            // Extract key values from object, handling nested values
+            return Object.entries(item)
+              .map(([k, v]) => `${k}: ${formatAnyValueRecursive(v)}`)
+              .join(', ')
+          }
+          return String(item)
+        }).join(' • ')
+      }
+      // Simple array - join with bullet
+      return value.map(item => formatAnyValueRecursive(item)).join(' • ')
+    }
+
+    // Handle objects
+    if (typeof value === 'object' && value !== null) {
+      return Object.entries(value)
+        .map(([k, v]) => `${k}: ${formatAnyValueRecursive(v)}`)
+        .join(', ')
+    }
+
+    return String(value)
+  }, [])
+
+  // Extract AI notes (text-based metadata from AI extraction)
+  // Includes:
+  // - AI_NOTES_KEYS (explicit AI note fields)
+  // - _raw_* fields (unnormalized data that couldn't be parsed)
+  // - Unknown category fields when AI-extracted (not user custom params)
+  const aiNotes = useMemo(() => {
+    if (!parameters) return []
+
+    const notes: Array<{ key: string; label: string; value: string; isWarning?: boolean; isRaw?: boolean; isList?: boolean; isUnknown?: boolean }> = []
+    const isAiExtracted = Boolean(parameters._extracted_by)
+
+    for (const [key, value] of Object.entries(parameters)) {
+      if (value === null || value === undefined) continue
+      if (key === '_extracted_by') continue
+
+      // Check field type
+      const isAiNote = AI_NOTES_KEYS.has(key)
+      const isRawField = key.startsWith('_raw_')
+      const isInternalField = key.startsWith('_')
+      const category = getParamCategory(key)
+      // Unknown fields from AI extraction go to AI Insights (not Custom Parameters)
+      const isUnknownFromAi = isAiExtracted && category === 'custom' && !isInternalField
+
+      // Include: explicit AI notes, raw fields, or unknown fields from AI
+      if (!isAiNote && !isRawField && !isUnknownFromAi) continue
+
+      const displayValue = formatNoteValue(value)
+      const isList = Array.isArray(value) && value.length > 1
+
+      if (displayValue.trim()) {
+        // Determine label based on field type
+        let label: string
+        if (isRawField) {
+          const fieldName = key.replace('_raw_', '')
+          label = (PARAM_LABELS[fieldName] || fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) + ' (raw)'
+        } else if (isUnknownFromAi) {
+          // AI-extracted unknown field - nice label
+          label = AI_NOTES_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        } else {
+          label = AI_NOTES_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        }
+
+        notes.push({
+          key,
+          label,
+          value: displayValue,
+          isWarning: key === 'warnings' || key.includes('warning') || key.includes('avoid'),
+          isRaw: isRawField,
+          isList,
+          isUnknown: isUnknownFromAi,
+        })
+      }
+    }
+
+    return notes
+  }, [parameters, formatNoteValue])
+
   // Check if any parameters exist
   const hasParameters = Object.values(categorizedParams).some(arr => arr.length > 0)
 
@@ -542,10 +762,19 @@ export function PackParametersSection({
       <Card className="p-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-synapse flex items-center gap-2">
-            <Sliders className="w-4 h-4" />
-            Generation Settings
-          </h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-semibold text-synapse flex items-center gap-2">
+              <Sliders className="w-4 h-4" />
+              Generation Settings
+            </h3>
+            {/* Extracted by indicator */}
+            {parameters?._extracted_by && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-slate-dark/50 text-text-muted border border-slate-mid/30">
+                <Bot className="w-3 h-3" />
+                {parameters._extracted_by}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             {/* Source Picker - only show if we have previews with meta */}
             {onApplyFromSource && previews.length > 0 && (
@@ -587,6 +816,115 @@ export function PackParametersSection({
             <p className="text-text-muted text-sm">
               No generation parameters set. Click Edit to add some.
             </p>
+          </div>
+        )}
+
+        {/* AI Insights Section - extracted tips, recommendations, warnings */}
+        {aiNotes.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-slate-mid/30">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/10">
+                <Lightbulb className="w-4 h-4 text-amber-400" />
+              </div>
+              <span className="text-sm font-medium text-text-secondary">AI Insights</span>
+            </div>
+
+            <div className="space-y-3">
+              {aiNotes.map(({ key, label, value, isWarning, isRaw, isList }) => {
+                // Determine icon and colors based on content
+                const isTip = key.includes('tip') || key.includes('best') || key.includes('usage')
+                const isResolution = key.includes('resolution')
+                const isAvoid = key.includes('avoid')
+                const isCompat = key.includes('compat')
+                const isQuality = key.includes('quality') || key.includes('style')
+
+                // Get appropriate icon
+                const IconComponent = isWarning || isAvoid ? AlertTriangle
+                  : isRaw ? FileText
+                  : isTip ? CheckCircle2
+                  : isCompat ? Info
+                  : isQuality ? Sparkles
+                  : isResolution ? Grid3X3
+                  : Info
+
+                // Get colors - more subtle
+                const iconColor = isWarning || isAvoid ? 'text-amber-400'
+                  : isRaw ? 'text-purple-400'
+                  : isTip ? 'text-emerald-400'
+                  : 'text-slate-400'
+
+                const bgColor = isWarning || isAvoid ? 'bg-amber-500/5'
+                  : isRaw ? 'bg-purple-500/5'
+                  : isTip ? 'bg-emerald-500/5'
+                  : 'bg-slate-800/30'
+
+                // Split tips/text by bullet separator, newline, comma, or sentence for bullet points
+                const shouldSplitAsBullets = isTip && (value.includes(' • ') || value.includes('\n') || value.includes(',') || value.includes('.'))
+                const bulletItems = shouldSplitAsBullets
+                  ? value.split(/ • |[\n,.]/).map(s => s.trim()).filter(s => s.length > 3)
+                  : null
+
+                // Split list values for tags
+                const listItems = isList && !shouldSplitAsBullets ? value.split(' • ') : null
+
+                return (
+                  <div
+                    key={key}
+                    className={clsx(
+                      "rounded-xl p-3 transition-all duration-200",
+                      bgColor,
+                      "border border-slate-mid/10 hover:border-slate-mid/30"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <IconComponent className={clsx("w-4 h-4 flex-shrink-0 mt-0.5", iconColor)} />
+                      <div className="flex-1 min-w-0">
+                        <div className={clsx(
+                          "text-xs font-medium mb-1.5 uppercase tracking-wide",
+                          isWarning || isAvoid ? "text-amber-400/80" : "text-slate-500"
+                        )}>
+                          {label}
+                        </div>
+                        {bulletItems ? (
+                          // Render as bullet list for tips
+                          <ul className="space-y-1">
+                            {bulletItems.map((item, i) => (
+                              <li
+                                key={i}
+                                className="flex items-center gap-2 text-sm text-slate-300/90 leading-relaxed"
+                              >
+                                <span className="text-emerald-400/60 text-lg leading-none">•</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : listItems ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {listItems.map((item, i) => (
+                              <span
+                                key={i}
+                                className={clsx(
+                                  "inline-flex items-center px-2 py-0.5 rounded-md text-xs",
+                                  isWarning || isAvoid
+                                    ? "bg-amber-500/10 text-amber-300/90"
+                                    : "bg-slate-700/50 text-slate-300/80"
+                                )}
+                              >
+                                {item}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-300/80 leading-relaxed">
+                            {value}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </Card>

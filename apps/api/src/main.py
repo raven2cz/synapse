@@ -28,11 +28,12 @@ from .routers import system, downloads, browse, comfyui
 
 # Store v2 routers - ALL pack operations use v2 Store
 from src.store.api import (
-    store_router, 
+    store_router,
     v2_packs_router,  # This is the ONLY packs router - uses v2 Store
     profiles_router,
-    updates_router, 
+    updates_router,
     search_router,
+    ai_router,  # AI services (provider detection, parameter extraction)
 )
 from .core.config import settings
 
@@ -127,6 +128,9 @@ app.include_router(store_router, prefix="/api/store", tags=["Store"])
 app.include_router(profiles_router, prefix="/api/profiles", tags=["Profiles"])
 app.include_router(updates_router, prefix="/api/updates", tags=["Updates"])
 app.include_router(search_router, prefix="/api/search", tags=["Search"])
+
+# AI Services - provider detection, parameter extraction, caching
+app.include_router(ai_router, prefix="/api", tags=["AI"])
 
 # Serve preview images - V2 Store path
 from pathlib import Path

@@ -2994,7 +2994,7 @@ def extract_pack_parameters(
             )
 
         elif request.source == 'description':
-            # Extract from pack description
+            # Extract from pack description using AI service
             if not pack.description:
                 return ExtractParametersResponse(
                     parameters={},
@@ -3002,12 +3002,36 @@ def extract_pack_parameters(
                     confidence=0.0,
                 )
 
-            result = extract_from_description(pack.description)
-            return ExtractParametersResponse(
-                parameters=result.parameters,
-                source='description',
-                confidence=result.confidence if result.parameters else 0.0,
-            )
+            from src.ai import AIService
+
+            ai_service = AIService()
+            ai_result = ai_service.extract_parameters(pack.description)
+
+            if ai_result.success and ai_result.output:
+                # Normalize AI output using GenerationParameters validator
+                # This converts AI formats like {recommended: 7} to plain values
+                try:
+                    normalized = GenerationParameters(**ai_result.output)
+                    # Get normalized dict, excluding None values and _extracted_by
+                    params = {
+                        k: v for k, v in normalized.model_dump(exclude_none=True).items()
+                        if k != "_extracted_by"
+                    }
+                except Exception as e:
+                    logger.warning(f"[extract-parameters] Normalization failed: {e}, using raw output")
+                    params = {k: v for k, v in ai_result.output.items() if k != "_extracted_by"}
+
+                return ExtractParametersResponse(
+                    parameters=params,
+                    source=f'description:{ai_result.provider_id}',  # Include provider info
+                    confidence=1.0 if ai_result.provider_id != "rule_based" else 0.8,
+                )
+            else:
+                return ExtractParametersResponse(
+                    parameters={},
+                    source='description',
+                    confidence=0.0,
+                )
 
         else:
             raise HTTPException(status_code=400, detail=f"Invalid source: {request.source}")
@@ -4635,13 +4659,292 @@ def search_packs(
 
 
 # =============================================================================
+# AI Services Router
+# =============================================================================
+
+ai_router = APIRouter(prefix="/ai", tags=["ai"])
+
+
+class AIProviderStatusResponse(BaseModel):
+    """Status of an AI provider."""
+    provider_id: str
+    available: bool
+    running: bool
+    version: Optional[str] = None
+    models: List[str] = []
+    error: Optional[str] = None
+
+
+class AIDetectionResponse(BaseModel):
+    """Response for provider detection."""
+    providers: Dict[str, AIProviderStatusResponse]
+    available_count: int
+    running_count: int
+
+
+class AIExtractionRequest(BaseModel):
+    """Request for parameter extraction."""
+    description: str
+    use_cache: bool = True
+
+
+class AIExtractionResponse(BaseModel):
+    """Response for parameter extraction."""
+    success: bool
+    parameters: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    provider_id: Optional[str] = None
+    model: Optional[str] = None
+    cached: bool = False
+    execution_time_ms: int = 0
+
+
+class AICacheStatsResponse(BaseModel):
+    """Response for cache stats."""
+    cache_dir: str
+    entry_count: int
+    total_size_bytes: int
+    total_size_mb: float
+    ttl_days: int
+
+
+class AISettingsResponse(BaseModel):
+    """Response for AI settings."""
+    enabled: bool
+    providers: Dict[str, Any]
+    task_priorities: Dict[str, Any]
+    cli_timeout_seconds: int
+    max_retries: int = 2
+    retry_delay_seconds: int = 1
+    cache_enabled: bool
+    cache_ttl_days: int
+    cache_directory: str = "~/.synapse/store/data/cache/ai"
+    always_fallback_to_rule_based: bool
+    show_provider_in_results: bool = True
+    log_requests: bool = True
+    log_level: str = "INFO"
+    log_prompts: bool = False
+    log_responses: bool = False
+
+
+class AISettingsUpdateRequest(BaseModel):
+    """Request for updating AI settings."""
+    enabled: Optional[bool] = None
+    providers: Optional[Dict[str, Any]] = None
+    task_priorities: Optional[Dict[str, Any]] = None
+    cli_timeout_seconds: Optional[int] = None
+    max_retries: Optional[int] = None
+    retry_delay_seconds: Optional[int] = None
+    cache_enabled: Optional[bool] = None
+    cache_ttl_days: Optional[int] = None
+    always_fallback_to_rule_based: Optional[bool] = None
+    show_provider_in_results: Optional[bool] = None
+    log_requests: Optional[bool] = None
+    log_level: Optional[str] = None
+    log_prompts: Optional[bool] = None
+    log_responses: Optional[bool] = None
+
+
+@ai_router.get("/providers", response_model=AIDetectionResponse)
+def detect_providers():
+    """Detect available AI providers."""
+    from src.ai import detect_ai_providers
+
+    providers = detect_ai_providers()
+
+    response_providers = {}
+    for pid, status in providers.items():
+        response_providers[pid] = AIProviderStatusResponse(
+            provider_id=status.provider_id,
+            available=status.available,
+            running=status.running,
+            version=status.version,
+            models=status.models,
+            error=status.error,
+        )
+
+    return AIDetectionResponse(
+        providers=response_providers,
+        available_count=sum(1 for s in providers.values() if s.available),
+        running_count=sum(1 for s in providers.values() if s.running),
+    )
+
+
+@ai_router.post("/extract", response_model=AIExtractionResponse)
+def extract_parameters(request: AIExtractionRequest):
+    """Extract generation parameters from description using AI."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    result = service.extract_parameters(
+        description=request.description,
+        use_cache=request.use_cache,
+    )
+
+    return AIExtractionResponse(
+        success=result.success,
+        parameters=result.output if result.success else None,
+        error=result.error,
+        provider_id=result.provider_id,
+        model=result.model,
+        cached=result.cached,
+        execution_time_ms=result.execution_time_ms,
+    )
+
+
+@ai_router.get("/cache/stats", response_model=AICacheStatsResponse)
+def get_cache_stats():
+    """Get AI cache statistics."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    stats = service.get_cache_stats()
+
+    return AICacheStatsResponse(**stats)
+
+
+@ai_router.delete("/cache")
+def clear_cache():
+    """Clear all AI cache entries."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    count = service.clear_cache()
+
+    return {"cleared": count}
+
+
+@ai_router.post("/cache/cleanup")
+def cleanup_cache():
+    """Remove expired AI cache entries."""
+    from src.ai import AIService, AIServicesSettings
+
+    service = AIService(AIServicesSettings.load())
+    count = service.cleanup_cache()
+
+    return {"cleaned": count}
+
+
+@ai_router.get("/settings", response_model=AISettingsResponse)
+def get_ai_settings():
+    """Get current AI settings."""
+    from src.ai import AIServicesSettings
+
+    settings = AIServicesSettings.load()
+
+    return AISettingsResponse(
+        enabled=settings.enabled,
+        providers={k: v.to_dict() for k, v in settings.providers.items()},
+        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
+        cli_timeout_seconds=settings.cli_timeout_seconds,
+        max_retries=settings.max_retries,
+        retry_delay_seconds=settings.retry_delay_seconds,
+        cache_enabled=settings.cache_enabled,
+        cache_ttl_days=settings.cache_ttl_days,
+        cache_directory=settings.cache_directory,
+        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
+        show_provider_in_results=settings.show_provider_in_results,
+        log_requests=settings.log_requests,
+        log_level=settings.log_level,
+        log_prompts=settings.log_prompts,
+        log_responses=settings.log_responses,
+    )
+
+
+@ai_router.patch("/settings", response_model=AISettingsResponse)
+def update_ai_settings(request: AISettingsUpdateRequest):
+    """
+    Update AI settings and persist to disk.
+
+    Settings are saved to: ~/.synapse/store/data/ai_settings.json
+    """
+    from src.ai import AIServicesSettings, ProviderConfig, TaskPriorityConfig
+
+    # Load current settings from disk
+    settings = AIServicesSettings.load()
+
+    # Update only provided fields
+    if request.enabled is not None:
+        settings.enabled = request.enabled
+
+    if request.providers is not None:
+        for provider_id, provider_data in request.providers.items():
+            # Ensure provider_id is set in the data
+            provider_data["provider_id"] = provider_id
+            settings.providers[provider_id] = ProviderConfig.from_dict(provider_data)
+
+    if request.task_priorities is not None:
+        for task_type, priority_data in request.task_priorities.items():
+            # Ensure task_type is set in the data
+            priority_data["task_type"] = task_type
+            settings.task_priorities[task_type] = TaskPriorityConfig.from_dict(priority_data)
+
+    if request.cli_timeout_seconds is not None:
+        settings.cli_timeout_seconds = request.cli_timeout_seconds
+
+    if request.max_retries is not None:
+        settings.max_retries = request.max_retries
+
+    if request.retry_delay_seconds is not None:
+        settings.retry_delay_seconds = request.retry_delay_seconds
+
+    if request.cache_enabled is not None:
+        settings.cache_enabled = request.cache_enabled
+
+    if request.cache_ttl_days is not None:
+        settings.cache_ttl_days = request.cache_ttl_days
+
+    if request.always_fallback_to_rule_based is not None:
+        settings.always_fallback_to_rule_based = request.always_fallback_to_rule_based
+
+    if request.show_provider_in_results is not None:
+        settings.show_provider_in_results = request.show_provider_in_results
+
+    if request.log_requests is not None:
+        settings.log_requests = request.log_requests
+
+    if request.log_level is not None:
+        settings.log_level = request.log_level
+
+    if request.log_prompts is not None:
+        settings.log_prompts = request.log_prompts
+
+    if request.log_responses is not None:
+        settings.log_responses = request.log_responses
+
+    # Save to disk
+    if not settings.save():
+        raise HTTPException(status_code=500, detail="Failed to save AI settings to disk")
+
+    logger.info(f"[ai-settings] Updated and saved AI settings: enabled={settings.enabled}")
+
+    return AISettingsResponse(
+        enabled=settings.enabled,
+        providers={k: v.to_dict() for k, v in settings.providers.items()},
+        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
+        cli_timeout_seconds=settings.cli_timeout_seconds,
+        max_retries=settings.max_retries,
+        retry_delay_seconds=settings.retry_delay_seconds,
+        cache_enabled=settings.cache_enabled,
+        cache_ttl_days=settings.cache_ttl_days,
+        cache_directory=settings.cache_directory,
+        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
+        show_provider_in_results=settings.show_provider_in_results,
+        log_requests=settings.log_requests,
+        log_level=settings.log_level,
+        log_prompts=settings.log_prompts,
+        log_responses=settings.log_responses,
+    )
+
+
+# =============================================================================
 # Router Factory
 # =============================================================================
 
 def create_store_routers() -> List[APIRouter]:
     """
     Create all store routers.
-    
+
     Returns:
         List of APIRouter instances to be included in FastAPI app
     """
@@ -4651,4 +4954,5 @@ def create_store_routers() -> List[APIRouter]:
         profiles_router,
         updates_router,
         search_router,
+        ai_router,
     ]

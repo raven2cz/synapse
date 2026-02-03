@@ -222,7 +222,8 @@ class TestExtractFromDescription:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["source"] == "description"
+        # Source is 'description' or 'description:provider' if AI was used
+        assert data["source"].startswith("description")
         # Description contains "CFG 7, Steps 25, Clip Skip 2"
         assert data["parameters"].get("cfg_scale") == 7.0
         assert data["parameters"].get("steps") == 25

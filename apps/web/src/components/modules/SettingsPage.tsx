@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Settings, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Key, FolderOpen, Eye, EyeOff, Database, Layers, Zap, Cloud, Link2, Unlink } from 'lucide-react'
 import { Card, CardTitle, CardDescription } from '../ui/Card'
 import { Button } from '../ui/Button'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { toast } from '../../stores/toastStore'
 import type { BackupStatus, BackupConfigRequest } from './inventory/types'
 import { formatBytes } from '../../lib/utils/format'
+import { AIServicesSettings, type AIServicesSettingsHandle } from './settings/AIServicesSettings'
 
 interface SettingsResponse {
   comfyui_path: string
@@ -38,6 +39,7 @@ interface DiagnosticsResponse {
 export function SettingsPage() {
   const queryClient = useQueryClient()
   const { nsfwBlurEnabled, setNsfwBlur } = useSettingsStore()
+  const aiSettingsRef = useRef<AIServicesSettingsHandle>(null)
   const [comfyuiPath, setComfyuiPath] = useState('~/ComfyUI')
   const [civitaiToken, setCivitaiToken] = useState('')
   const [hfToken, setHfToken] = useState('')
@@ -178,11 +180,19 @@ export function SettingsPage() {
         warn_before_delete_last_copy: warnBeforeDeleteLastCopy,
       }
 
-      // Execute both saves
-      await Promise.all([
+      // Build promises array - only include AI settings if there are changes
+      const savePromises: Promise<unknown>[] = [
         updateSettingsMutation.mutateAsync(updates),
         updateBackupConfigMutation.mutateAsync(backupConfig),
-      ])
+      ]
+
+      // Include AI settings save if there are unsaved changes
+      if (aiSettingsRef.current?.hasChanges()) {
+        savePromises.push(aiSettingsRef.current.save())
+      }
+
+      // Execute all saves
+      await Promise.all(savePromises)
 
       toast.success('Settings saved successfully')
     } catch (error) {
@@ -463,6 +473,9 @@ export function SettingsPage() {
             </div>
           </div>
         </Card>
+
+        {/* AI Services Settings */}
+        <AIServicesSettings ref={aiSettingsRef} />
 
         {/* UI Settings */}
         <Card>

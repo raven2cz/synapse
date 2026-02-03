@@ -181,7 +181,8 @@ class TestParameterExtractionDuringImport:
         assert pack.parameters is not None
         assert pack.parameters.hires_fix is True
         assert pack.parameters.hires_scale == 2.0
-        assert pack.parameters.denoise == 0.5
+        # Denoising in hires context goes to hires_denoise
+        assert pack.parameters.hires_denoise == 0.5
 
     def test_import_extracts_best_value_from_range(
         self, temp_store: Store, mock_civitai_client
@@ -228,10 +229,14 @@ class TestParameterExtractionDuringImport:
         # Parameters should be None or empty
         assert pack.parameters is None or len(pack.parameters.model_dump(exclude_none=True)) == 0
 
-    def test_import_with_no_parameters_in_description(
+    def test_import_with_no_numeric_parameters_in_description(
         self, temp_store: Store, mock_civitai_client
     ):
-        """Pack with description but no parameters should have no extracted parameters."""
+        """Pack with description but no numeric parameters may still have info fields.
+
+        AI extracts ALL information including compatibility notes, tips, etc.
+        These non-numeric fields are preserved and displayed in the UI.
+        """
         description = """
         <p>This is a great model for creating beautiful art!</p>
         <p>Works well with most checkpoints.</p>
@@ -251,8 +256,20 @@ class TestParameterExtractionDuringImport:
             download_previews=False,
         )
 
-        # Parameters should be None when nothing was extracted
-        assert pack.parameters is None
+        # AI may extract non-numeric info like compatibility notes
+        # These are valid and should be preserved
+        if pack.parameters is not None:
+            params_dict = pack.parameters.model_dump(exclude_none=True)
+            # Remove metadata fields for counting
+            params_dict.pop("_extracted_by", None)
+            # No NUMERIC parameters expected (cfg_scale, steps, etc.)
+            numeric_params = {
+                k: v for k, v in params_dict.items()
+                if k in {"cfg_scale", "steps", "clip_skip", "width", "height",
+                         "sampler", "scheduler", "strength", "denoise", "seed",
+                         "hires_fix", "hires_scale", "hires_denoise", "hires_steps"}
+            }
+            assert len(numeric_params) == 0, f"Expected no numeric parameters but got: {numeric_params}"
 
     def test_import_extracts_resolution_from_description(
         self, temp_store: Store, mock_civitai_client

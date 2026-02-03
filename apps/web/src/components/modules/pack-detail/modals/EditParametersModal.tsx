@@ -977,7 +977,11 @@ export function EditParametersModal({
   // Reset when modal opens
   useEffect(() => {
     if (isOpen) {
-      setParameters(initialParameters)
+      const stringified: Record<string, string> = {}
+      for (const [key, value] of Object.entries(initialParameters)) {
+        stringified[key] = String(value ?? '')
+      }
+      setParameters(stringified)
       setCustomTypes(new Map())
       setCustomCategories(new Map())
       setActiveSections(new Set())
@@ -1079,18 +1083,21 @@ export function EditParametersModal({
       const normalizedKey = normalizeKey(key)
       const paramType = customTypes.get(normalizedKey) ?? getParamType(normalizedKey)
 
+      let convertedValue: unknown
       if (paramType === 'boolean') {
-        converted[normalizedKey] = value === 'true'
+        convertedValue = value === 'true'
       } else if (paramType === 'number') {
         const numValue = parseFloat(value)
         if (!isNaN(numValue)) {
-          converted[normalizedKey] = numValue
+          convertedValue = numValue
         } else {
-          converted[normalizedKey] = value
+          convertedValue = value
         }
       } else {
-        converted[normalizedKey] = value
+        convertedValue = value
       }
+
+      converted[normalizedKey] = convertedValue
     }
 
     onSave(converted)
