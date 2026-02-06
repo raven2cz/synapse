@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import {
   Package,
   Download,
@@ -16,12 +17,12 @@ import { Logo } from '../ui/Logo'
 import { clsx } from 'clsx'
 
 const navItems = [
-  { to: '/', icon: Package, label: 'Packs' },
-  { to: '/inventory', icon: HardDrive, label: 'Inventory' },
-  { to: '/profiles', icon: Layers, label: 'Profiles' },
-  { to: '/browse', icon: Search, label: 'Browse Civitai' },
-  { to: '/downloads', icon: Download, label: 'Downloads', badge: true },
-  { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/', icon: Package, labelKey: 'nav.packs' },
+  { to: '/inventory', icon: HardDrive, labelKey: 'nav.inventory' },
+  { to: '/profiles', icon: Layers, labelKey: 'nav.profiles' },
+  { to: '/browse', icon: Search, labelKey: 'nav.browse' },
+  { to: '/downloads', icon: Download, labelKey: 'nav.downloads', badge: true },
+  { to: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]
 
 // Sidebar widths
@@ -32,6 +33,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 64 // w-16
 const SIDEBAR_COLLAPSED_KEY = 'synapse-sidebar-collapsed'
 
 export function Sidebar() {
+  const { t } = useTranslation()
   // Initialize from localStorage
   const [isCollapsed, setIsCollapsed] = useState(() => {
     try {
@@ -104,7 +106,7 @@ export function Sidebar() {
             // Show on hover or when collapsed
             isHovering || isCollapsed ? "opacity-100" : "opacity-0 pointer-events-none"
           )}
-          title={isCollapsed ? "Expand sidebar (⌘ \\)" : "Collapse sidebar (⌘ \\)"}
+          title={isCollapsed ? `${t('sidebar.expandSidebar')} (⌘ \\)` : `${t('sidebar.collapseSidebar')} (⌘ \\)`}
         >
           {isCollapsed ? (
             <ChevronRight className="w-3.5 h-3.5" />
@@ -118,12 +120,12 @@ export function Sidebar() {
           "flex-1 space-y-1 overflow-y-auto overflow-x-hidden",
           isCollapsed ? "p-2" : "p-4"
         )}>
-          {navItems.map(({ to, icon: Icon, label, badge }) => (
+          {navItems.map(({ to, icon: Icon, labelKey, badge }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
-              title={isCollapsed ? label : undefined}
+              title={isCollapsed ? t(labelKey) : undefined}
               className={({ isActive }) =>
                 clsx(
                   "relative flex items-center rounded-xl font-medium",
@@ -140,7 +142,7 @@ export function Sidebar() {
               <Icon className="w-5 h-5 shrink-0" />
               {!isCollapsed && (
                 <span className="flex-1 text-sm whitespace-nowrap overflow-hidden">
-                  {label}
+                  {t(labelKey)}
                 </span>
               )}
               {badge && activeDownloads > 0 && (
@@ -185,7 +187,7 @@ export function Sidebar() {
                   "text-[10px] truncate",
                   isConnected ? 'text-slate-500' : 'text-red-500/70'
                 )}>
-                  {isConnected ? 'All systems ready' : 'Disconnected'}
+                  {isConnected ? t('sidebar.allSystemsReady') : t('sidebar.disconnected')}
                 </div>
               </div>
             )}

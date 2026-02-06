@@ -3,6 +3,7 @@
  * Custom UI dropdowns (not native selects)
  */
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Search, ChevronDown, Check, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { InventoryFilters as Filters, AssetKind, BlobStatus, BlobLocation } from './types'
@@ -12,31 +13,32 @@ interface InventoryFiltersProps {
   onChange: (filters: Filters) => void
 }
 
-const KIND_OPTIONS: Array<{ value: AssetKind | 'all'; label: string }> = [
-  { value: 'all', label: 'All Types' },
-  { value: 'checkpoint', label: 'Checkpoint' },
-  { value: 'lora', label: 'LoRA' },
-  { value: 'vae', label: 'VAE' },
-  { value: 'embedding', label: 'Embedding' },
-  { value: 'controlnet', label: 'ControlNet' },
-  { value: 'upscaler', label: 'Upscaler' },
-  { value: 'other', label: 'Other' },
+// Options with translation keys - labels resolved at render time
+const KIND_OPTIONS: Array<{ value: AssetKind | 'all'; labelKey: string }> = [
+  { value: 'all', labelKey: 'all' },
+  { value: 'checkpoint', labelKey: 'kinds.checkpoint' },
+  { value: 'lora', labelKey: 'kinds.lora' },
+  { value: 'vae', labelKey: 'kinds.vae' },
+  { value: 'embedding', labelKey: 'kinds.embedding' },
+  { value: 'controlnet', labelKey: 'kinds.controlnet' },
+  { value: 'upscaler', labelKey: 'kinds.upscaler' },
+  { value: 'other', labelKey: 'kinds.other' },
 ]
 
-const STATUS_OPTIONS: Array<{ value: BlobStatus | 'all'; label: string }> = [
-  { value: 'all', label: 'All Status' },
-  { value: 'referenced', label: 'Referenced' },
-  { value: 'orphan', label: 'Orphan' },
-  { value: 'missing', label: 'Missing' },
-  { value: 'backup_only', label: 'Backup Only' },
+const STATUS_OPTIONS: Array<{ value: BlobStatus | 'all'; labelKey: string }> = [
+  { value: 'all', labelKey: 'all' },
+  { value: 'referenced', labelKey: 'statuses.installed' },
+  { value: 'orphan', labelKey: 'statuses.orphan' },
+  { value: 'missing', labelKey: 'statuses.missing' },
+  { value: 'backup_only', labelKey: 'locations.backup' },
 ]
 
-const LOCATION_OPTIONS: Array<{ value: BlobLocation | 'all'; label: string }> = [
-  { value: 'all', label: 'All Locations' },
-  { value: 'both', label: 'Both (synced)' },
-  { value: 'local_only', label: 'Local Only' },
-  { value: 'backup_only', label: 'Backup Only' },
-  { value: 'nowhere', label: 'Missing' },
+const LOCATION_OPTIONS: Array<{ value: BlobLocation | 'all'; labelKey: string }> = [
+  { value: 'all', labelKey: 'all' },
+  { value: 'both', labelKey: 'locations.both' },
+  { value: 'local_only', labelKey: 'locations.local' },
+  { value: 'backup_only', labelKey: 'locations.backup' },
+  { value: 'nowhere', labelKey: 'locations.missing' },
 ]
 
 // =============================================================================
@@ -54,7 +56,7 @@ function Dropdown<T extends string>({
   value,
   options,
   onChange,
-  placeholder = 'Select...',
+  placeholder,
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -181,6 +183,8 @@ function FilterChip({ label, onClear }: FilterChipProps) {
 // =============================================================================
 
 export function InventoryFilters({ filters, onChange }: InventoryFiltersProps) {
+  const { t } = useTranslation()
+
   const hasActiveFilters =
     filters.kind !== 'all' || filters.status !== 'all' || filters.location !== 'all'
 
@@ -193,6 +197,22 @@ export function InventoryFilters({ filters, onChange }: InventoryFiltersProps) {
     })
   }
 
+  // Resolve translation keys to labels
+  const kindOptions = KIND_OPTIONS.map(o => ({
+    value: o.value,
+    label: t(`inventory.filters.${o.labelKey}`)
+  }))
+
+  const statusOptions = STATUS_OPTIONS.map(o => ({
+    value: o.value,
+    label: t(`inventory.filters.${o.labelKey}`)
+  }))
+
+  const locationOptions = LOCATION_OPTIONS.map(o => ({
+    value: o.value,
+    label: t(`inventory.filters.${o.labelKey}`)
+  }))
+
   return (
     <div className="flex flex-col gap-3">
       {/* Main Filter Row */}
@@ -204,7 +224,7 @@ export function InventoryFilters({ filters, onChange }: InventoryFiltersProps) {
             type="text"
             value={filters.search}
             onChange={(e) => onChange({ ...filters, search: e.target.value })}
-            placeholder="Search by name or SHA256..."
+            placeholder={t('inventory.filters.search')}
             className="w-full pl-10 pr-4 py-2.5 bg-slate-dark border border-slate-mid rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-synapse transition-colors text-sm"
           />
         </div>
@@ -212,50 +232,50 @@ export function InventoryFilters({ filters, onChange }: InventoryFiltersProps) {
         {/* Kind filter */}
         <Dropdown<AssetKind | 'all'>
           value={filters.kind}
-          options={KIND_OPTIONS}
+          options={kindOptions}
           onChange={(kind) => onChange({ ...filters, kind })}
-          placeholder="All Types"
+          placeholder={t('inventory.filters.all')}
         />
 
         {/* Status filter */}
         <Dropdown<BlobStatus | 'all'>
           value={filters.status}
-          options={STATUS_OPTIONS}
+          options={statusOptions}
           onChange={(status) => onChange({ ...filters, status })}
-          placeholder="All Status"
+          placeholder={t('inventory.filters.all')}
         />
 
         {/* Location filter */}
         <Dropdown<BlobLocation | 'all'>
           value={filters.location}
-          options={LOCATION_OPTIONS}
+          options={locationOptions}
           onChange={(location) => onChange({ ...filters, location })}
-          placeholder="All Locations"
+          placeholder={t('inventory.filters.all')}
         />
       </div>
 
       {/* Active Filters Row (shown when filters are active) */}
       {hasActiveFilters && (
         <div className="flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-text-muted mr-1">Active filters:</span>
+          <span className="text-xs text-text-muted mr-1">{t('packs.filter.activeFilters')}:</span>
 
           {filters.kind !== 'all' && (
             <FilterChip
-              label={KIND_OPTIONS.find((o) => o.value === filters.kind)?.label || filters.kind}
+              label={kindOptions.find((o) => o.value === filters.kind)?.label || filters.kind}
               onClear={() => onChange({ ...filters, kind: 'all' })}
             />
           )}
 
           {filters.status !== 'all' && (
             <FilterChip
-              label={STATUS_OPTIONS.find((o) => o.value === filters.status)?.label || filters.status}
+              label={statusOptions.find((o) => o.value === filters.status)?.label || filters.status}
               onClear={() => onChange({ ...filters, status: 'all' })}
             />
           )}
 
           {filters.location !== 'all' && (
             <FilterChip
-              label={LOCATION_OPTIONS.find((o) => o.value === filters.location)?.label || filters.location}
+              label={locationOptions.find((o) => o.value === filters.location)?.label || filters.location}
               onClear={() => onChange({ ...filters, location: 'all' })}
             />
           )}
@@ -264,7 +284,7 @@ export function InventoryFilters({ filters, onChange }: InventoryFiltersProps) {
             onClick={clearAllFilters}
             className="text-xs text-red-400 hover:text-red-300 ml-2 hover:underline"
           >
-            Clear all
+            {t('common.remove')}
           </button>
         </div>
       )}

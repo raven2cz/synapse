@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import {
     X,
@@ -389,6 +390,8 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
     versions,
     isLoading = false,
 }) {
+    const { t } = useTranslation()
+
     // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
@@ -580,7 +583,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-text-primary">
-                                Import to Pack
+                                {t('import.title')}
                             </h2>
                             <p className="text-sm text-text-muted truncate max-w-md">
                                 {modelName}
@@ -605,7 +608,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                 <div className="flex-1 overflow-y-auto p-6 space-y-4">
                     {/* Pack Details Section */}
                     <CollapsibleSection
-                        title="Pack Details"
+                        title={t('import.packDetails')}
                         icon={<Package className="w-5 h-5" />}
                         isOpen={sectionsOpen.packDetails}
                         onToggle={() => toggleSection('packDetails')}
@@ -613,7 +616,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                         <div className="space-y-4">
                             {/* Editable Pack Name */}
                             <div>
-                                <label className="text-sm text-text-muted mb-2 block">Pack Name</label>
+                                <label className="text-sm text-text-muted mb-2 block">{t('import.packName')}</label>
                                 <div className="flex items-center gap-2">
                                     {isEditingName ? (
                                         <input
@@ -654,7 +657,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 {packName !== modelName && (
                                     <p className="text-xs text-synapse mt-1 flex items-center gap-1">
                                         <Info className="w-3 h-3" />
-                                        Custom name will be used for the pack
+                                        {t('import.customNameHint')}
                                     </p>
                                 )}
                             </div>
@@ -662,7 +665,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                             {/* Description */}
                             {modelDescription && (
                                 <div>
-                                    <label className="text-sm text-text-muted mb-2 block">Description</label>
+                                    <label className="text-sm text-text-muted mb-2 block">{t('import.description')}</label>
                                     <div
                                         className="px-4 py-3 rounded-xl bg-white/5 text-text-muted text-sm max-h-24 overflow-y-auto"
                                         dangerouslySetInnerHTML={{
@@ -678,7 +681,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
 
                     {/* Version Selection */}
                     <CollapsibleSection
-                        title="Select Versions"
+                        title={t('import.selectVersions')}
                         icon={<Sparkles className="w-5 h-5" />}
                         isOpen={sectionsOpen.versions}
                         onToggle={() => toggleSection('versions')}
@@ -690,7 +693,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 onClick={toggleAllVersions}
                                 className="text-sm text-synapse hover:underline"
                             >
-                                {selectedVersionIds.size === versions.length ? 'Deselect All' : 'Select All'}
+                                {selectedVersionIds.size === versions.length ? t('import.deselectAll') : t('import.selectAll')}
                             </button>
                         </div>
 
@@ -709,7 +712,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
 
                     {/* Import Options */}
                     <CollapsibleSection
-                        title="Download Options"
+                        title={t('import.downloadOptions')}
                         icon={<Download className="w-5 h-5" />}
                         isOpen={sectionsOpen.options}
                         onToggle={() => toggleSection('options')}
@@ -728,8 +731,8 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 />
                                 <ImageIcon className="w-5 h-5 text-blue-400" />
                                 <div className="flex-1">
-                                    <span className="font-medium text-text-primary">Download Images</span>
-                                    <p className="text-sm text-text-muted">Save preview images (.jpg, .png)</p>
+                                    <span className="font-medium text-text-primary">{t('import.downloadImages')}</span>
+                                    <p className="text-sm text-text-muted">{t('import.downloadImagesDesc')}</p>
                                 </div>
                             </label>
 
@@ -746,8 +749,8 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 />
                                 <Video className="w-5 h-5 text-purple-400" />
                                 <div className="flex-1">
-                                    <span className="font-medium text-text-primary">Download Videos</span>
-                                    <p className="text-sm text-text-muted">Save preview videos (.mp4)</p>
+                                    <span className="font-medium text-text-primary">{t('import.downloadVideos')}</span>
+                                    <p className="text-sm text-text-muted">{t('import.downloadVideosDesc')}</p>
                                 </div>
                             </label>
 
@@ -768,8 +771,8 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                     <EyeOff className="w-5 h-5 text-text-muted" />
                                 )}
                                 <div className="flex-1">
-                                    <span className="font-medium text-text-primary">Include NSFW</span>
-                                    <p className="text-sm text-text-muted">Download mature content previews</p>
+                                    <span className="font-medium text-text-primary">{t('import.includeNsfw')}</span>
+                                    <p className="text-sm text-text-muted">{t('import.includeNsfwDesc')}</p>
                                 </div>
                             </label>
 
@@ -786,11 +789,11 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 />
                                 <Sparkles className="w-5 h-5 text-amber-400" />
                                 <div className="flex-1">
-                                    <span className="font-medium text-text-primary">Download from all versions</span>
+                                    <span className="font-medium text-text-primary">{t('import.downloadAllVersions')}</span>
                                     <p className="text-sm text-text-muted">
                                         {options.downloadFromAllVersions
-                                            ? `Get previews from all ${versions.length} versions`
-                                            : `Get previews only from ${selectedVersionIds.size} selected version${selectedVersionIds.size !== 1 ? 's' : ''}`}
+                                            ? t('import.downloadAllVersionsDesc', { count: versions.length })
+                                            : t('import.downloadSelectedVersionsDesc', { count: selectedVersionIds.size })}
                                     </p>
                                 </div>
                             </label>
@@ -801,7 +804,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                             <div className="flex items-center justify-between mb-3">
                                 <h4 className="font-medium text-text-primary flex items-center gap-2">
                                     <Info className="w-4 h-4 text-synapse" />
-                                    Download Summary
+                                    {t('import.downloadSummary')}
                                 </h4>
                                 <button
                                     onClick={() => {
@@ -821,7 +824,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                     <div className="text-lg font-bold text-text-primary">
                                         {formatFileSize(totalSize + previewStats.estimatedSize)}
                                     </div>
-                                    <div className="text-xs text-text-muted">Estimated Total</div>
+                                    <div className="text-xs text-text-muted">{t('import.estimatedTotal')}</div>
                                 </div>
 
                                 {/* Images */}
@@ -830,7 +833,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                     <div className="text-lg font-bold text-text-primary">
                                         {previewStats.imageCount}
                                     </div>
-                                    <div className="text-xs text-text-muted">Images</div>
+                                    <div className="text-xs text-text-muted">{t('import.images')}</div>
                                 </div>
 
                                 {/* Videos */}
@@ -839,14 +842,14 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                     <div className="text-lg font-bold text-text-primary">
                                         {previewStats.videoCount}
                                     </div>
-                                    <div className="text-xs text-text-muted">Videos</div>
+                                    <div className="text-xs text-text-muted">{t('import.videos')}</div>
                                 </div>
                             </div>
 
                             {previewStats.imageCount === 0 && previewStats.videoCount === 0 && (
                                 <p className="text-sm text-amber-400 mt-3 flex items-center gap-2">
                                     <AlertTriangle className="w-4 h-4" />
-                                    No previews will be downloaded with current options
+                                    {t('import.noPreviewsWarning')}
                                 </p>
                             )}
                         </div>
@@ -855,13 +858,13 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                     {/* Thumbnail Selection */}
                     {selectedVersionPreviews.length > 0 && (
                         <CollapsibleSection
-                            title="Pack Thumbnail"
+                            title={t('import.packThumbnail')}
                             icon={<FileImage className="w-5 h-5" />}
                             isOpen={sectionsOpen.thumbnail}
                             onToggle={() => toggleSection('thumbnail')}
                         >
                             <p className="text-sm text-text-muted mb-3">
-                                Select a preview image to use as the pack thumbnail
+                                {t('import.selectThumbnail')}
                             </p>
 
                             <div className="grid grid-cols-4 gap-2">
@@ -954,7 +957,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                     {selectedVersionIds.size === 0 && (
                         <div className="flex items-center gap-2 mb-4 p-3 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400">
                             <AlertTriangle className="w-5 h-5" />
-                            <span className="text-sm">Select at least one version to import</span>
+                            <span className="text-sm">{t('import.selectVersionWarning')}</span>
                         </div>
                     )}
 
@@ -969,7 +972,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                 isLoading && 'opacity-50 cursor-not-allowed'
                             )}
                         >
-                            Cancel
+                            {t('import.cancel')}
                         </button>
 
                         <button
@@ -986,12 +989,12 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                             {isLoading ? (
                                 <>
                                     <Loader2 className="w-5 h-5 animate-spin" />
-                                    <span>Importing...</span>
+                                    <span>{t('import.importing')}</span>
                                 </>
                             ) : (
                                 <>
                                     <Download className="w-5 h-5" />
-                                    <span>Import Pack</span>
+                                    <span>{t('import.importPack')}</span>
                                 </>
                             )}
                         </button>

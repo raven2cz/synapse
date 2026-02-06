@@ -9,6 +9,7 @@
  */
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -43,6 +44,7 @@ export function CleanupWizard({
   onExecute,
   onComplete,
 }: CleanupWizardProps) {
+  const { t } = useTranslation()
   const [step, setStep] = useState<WizardStep>('scan')
   const [isLoading, setIsLoading] = useState(false)
   const [scanResult, setScanResult] = useState<CleanupResult | null>(null)
@@ -82,7 +84,7 @@ export function CleanupWizard({
       setScanResult(result)
       setStep('review')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to scan for orphans')
+      setError(err instanceof Error ? err.message : t('inventory.cleanup.scanFailed'))
     } finally {
       setIsLoading(false)
     }
@@ -97,7 +99,7 @@ export function CleanupWizard({
       setExecuteResult(result)
       setStep('complete')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cleanup orphans')
+      setError(err instanceof Error ? err.message : t('inventory.cleanup.executeFailed'))
       setStep('review')
     } finally {
       setIsLoading(false)
@@ -139,10 +141,10 @@ export function CleanupWizard({
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-primary">
-                Cleanup Orphan Blobs
+                {t('inventory.cleanup.title')}
               </h2>
               <p className="text-sm text-text-muted">
-                Remove unreferenced models to free disk space
+                {t('inventory.cleanup.subtitle')}
               </p>
             </div>
           </div>
@@ -164,21 +166,21 @@ export function CleanupWizard({
         <div className="flex items-center justify-center gap-4 px-6 py-4 border-b border-slate-mid/30">
           <StepIndicator
             step={1}
-            label="Scan"
+            label={t('inventory.cleanup.steps.scan')}
             current={step === 'scan'}
             completed={step !== 'scan'}
           />
           <div className="w-12 h-0.5 bg-slate-mid/50" />
           <StepIndicator
             step={2}
-            label="Review"
+            label={t('inventory.cleanup.steps.review')}
             current={step === 'review' || step === 'executing'}
             completed={step === 'complete'}
           />
           <div className="w-12 h-0.5 bg-slate-mid/50" />
           <StepIndicator
             step={3}
-            label="Complete"
+            label={t('inventory.cleanup.steps.complete')}
             current={step === 'complete'}
             completed={false}
           />
@@ -201,11 +203,10 @@ export function CleanupWizard({
                 <Search className="w-8 h-8 text-text-muted" />
               </div>
               <h3 className="text-lg font-medium text-text-primary mb-2">
-                Scan for Orphan Blobs
+                {t('inventory.cleanup.scanTitle')}
               </h3>
               <p className="text-text-muted mb-6 max-w-sm mx-auto">
-                This will scan your storage for blobs that are not referenced by any pack.
-                They can be safely deleted to free disk space.
+                {t('inventory.cleanup.scanDescription')}
               </p>
               <Button
                 variant="primary"
@@ -214,7 +215,7 @@ export function CleanupWizard({
                 isLoading={isLoading}
                 leftIcon={<Search className="w-4 h-4" />}
               >
-                {isLoading ? 'Scanning...' : 'Start Scan'}
+                {isLoading ? t('inventory.cleanup.scanning') : t('inventory.cleanup.startScan')}
               </Button>
             </div>
           )}
@@ -228,10 +229,10 @@ export function CleanupWizard({
                     <CheckCircle className="w-8 h-8 text-green-500" />
                   </div>
                   <h3 className="text-lg font-medium text-text-primary mb-2">
-                    No Orphans Found
+                    {t('inventory.cleanup.noOrphans')}
                   </h3>
                   <p className="text-text-muted">
-                    Your storage is clean! All blobs are referenced by packs.
+                    {t('inventory.cleanup.noOrphansDescription')}
                   </p>
                 </div>
               ) : (
@@ -243,7 +244,7 @@ export function CleanupWizard({
                         {scanResult.orphans_found}
                       </div>
                       <div className="text-sm text-text-muted mt-1">
-                        Orphan blobs found
+                        {t('inventory.cleanup.orphansFound')}
                       </div>
                     </Card>
                     <Card padding="md" className="text-center">
@@ -251,7 +252,7 @@ export function CleanupWizard({
                         {formatBytes(scanResult.bytes_freed)}
                       </div>
                       <div className="text-sm text-text-muted mt-1">
-                        Will be freed
+                        {t('inventory.cleanup.willFree')}
                       </div>
                     </Card>
                   </div>
@@ -259,7 +260,7 @@ export function CleanupWizard({
                   {/* Items list */}
                   <div>
                     <h4 className="text-sm font-medium text-text-secondary mb-3">
-                      Items to delete ({scanResult.deleted.length})
+                      {t('inventory.cleanup.itemsToDelete', { count: scanResult.deleted.length })}
                     </h4>
                     <div className="max-h-64 overflow-y-auto border border-slate-mid/30 rounded-xl">
                       {scanResult.deleted.map((item) => (
@@ -279,10 +280,10 @@ export function CleanupWizard({
                 <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
               </div>
               <h3 className="text-lg font-medium text-text-primary mb-2">
-                Cleaning Up...
+                {t('inventory.cleanup.cleaningUp')}
               </h3>
               <p className="text-text-muted mb-4">
-                Deleting {scanResult?.orphans_found} orphan blobs
+                {t('inventory.cleanup.deletingOrphans', { count: scanResult?.orphans_found })}
               </p>
               <div className="max-w-xs mx-auto">
                 <ProgressBar progress={50} size="md" />
@@ -297,23 +298,23 @@ export function CleanupWizard({
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
               <h3 className="text-xl font-bold text-text-primary mb-2">
-                Cleanup Complete!
+                {t('inventory.cleanup.complete')}
               </h3>
               <p className="text-text-muted mb-6">
-                Successfully deleted {executeResult.orphans_deleted} orphan blobs
+                {t('inventory.cleanup.successMessage', { count: executeResult.orphans_deleted })}
               </p>
 
               <div className="inline-flex items-center gap-3 px-6 py-3 bg-green-500/10 border border-green-500/20 rounded-xl">
                 <HardDrive className="w-5 h-5 text-green-500" />
                 <span className="text-lg font-medium text-green-400">
-                  {formatBytes(executeResult.bytes_freed)} freed
+                  {t('inventory.cleanup.freed', { size: formatBytes(executeResult.bytes_freed) })}
                 </span>
               </div>
 
               {executeResult.errors.length > 0 && (
                 <div className="mt-6 text-left max-w-md mx-auto">
                   <h4 className="text-sm font-medium text-amber-400 mb-2">
-                    Some errors occurred:
+                    {t('inventory.cleanup.someErrors')}
                   </h4>
                   <ul className="text-sm text-text-muted space-y-1">
                     {executeResult.errors.map((err, i) => (
@@ -330,14 +331,14 @@ export function CleanupWizard({
         <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-mid/30">
           {step === 'scan' && (
             <Button variant="secondary" onClick={handleClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           )}
 
           {step === 'review' && scanResult && (
             <>
               <Button variant="secondary" onClick={handleClose}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               {scanResult.orphans_found > 0 && (
                 <Button
@@ -345,7 +346,7 @@ export function CleanupWizard({
                   onClick={handleExecute}
                   leftIcon={<Trash2 className="w-4 h-4" />}
                 >
-                  Delete {scanResult.orphans_found} Orphans
+                  {t('inventory.cleanup.execute', { count: scanResult.orphans_found })}
                 </Button>
               )}
             </>
@@ -353,7 +354,7 @@ export function CleanupWizard({
 
           {step === 'complete' && (
             <Button variant="primary" onClick={handleClose}>
-              Close
+              {t('common.close')}
             </Button>
           )}
         </div>

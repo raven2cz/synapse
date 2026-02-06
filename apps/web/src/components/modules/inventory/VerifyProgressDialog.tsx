@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -42,6 +43,7 @@ export function VerifyProgressDialog({
   onStart,
   onComplete,
 }: VerifyProgressDialogProps) {
+  const { t } = useTranslation()
   const [state, setState] = useState<DialogState>('ready')
   const [result, setResult] = useState<VerifyResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +88,7 @@ export function VerifyProgressDialog({
       setProgress(100)
       setState('complete')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed')
+      setError(err instanceof Error ? err.message : t('inventory.verify.error'))
       setState('ready')
     } finally {
       clearInterval(progressInterval)
@@ -143,10 +145,10 @@ export function VerifyProgressDialog({
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-primary">
-                Verify Integrity
+                {t('inventory.verify.title')}
               </h2>
               <p className="text-sm text-text-muted">
-                Check SHA256 checksums of all blobs
+                {t('inventory.verify.subtitle')}
               </p>
             </div>
           </div>
@@ -181,11 +183,10 @@ export function VerifyProgressDialog({
                 <Shield className="w-8 h-8 text-blue-500" />
               </div>
               <h3 className="text-lg font-medium text-text-primary mb-2">
-                Verify Blob Integrity
+                {t('inventory.verify.readyTitle')}
               </h3>
               <p className="text-text-muted mb-6 max-w-sm mx-auto">
-                This will compute SHA256 checksums for all blobs and verify they match.
-                This may take a while for large storage.
+                {t('inventory.verify.readyDescription')}
               </p>
             </div>
           )}
@@ -197,10 +198,10 @@ export function VerifyProgressDialog({
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
               </div>
               <h3 className="text-lg font-medium text-text-primary mb-2">
-                Verifying...
+                {t('inventory.verify.verifying')}
               </h3>
               <p className="text-text-muted mb-4">
-                Computing and checking SHA256 checksums
+                {t('inventory.verify.verifyingDescription')}
               </p>
               <div className="max-w-xs mx-auto">
                 <ProgressBar progress={progress} size="md" />
@@ -224,7 +225,7 @@ export function VerifyProgressDialog({
                   )}
                 </div>
                 <h3 className="text-xl font-bold text-text-primary mb-2">
-                  {allPassed ? 'All Blobs Verified!' : 'Verification Failed'}
+                  {allPassed ? t('inventory.verify.allVerified') : t('inventory.verify.verificationFailed')}
                 </h3>
               </div>
 
@@ -235,7 +236,7 @@ export function VerifyProgressDialog({
                     <CheckCircle className="w-4 h-4" />
                     <span className="text-xl font-bold">{result.verified}</span>
                   </div>
-                  <div className="text-xs text-text-muted mt-1">Verified</div>
+                  <div className="text-xs text-text-muted mt-1">{t('inventory.verify.verified')}</div>
                 </Card>
                 <Card padding="sm" className="text-center">
                   <div className={clsx(
@@ -245,19 +246,19 @@ export function VerifyProgressDialog({
                     <XCircle className="w-4 h-4" />
                     <span className="text-xl font-bold">{result.failed}</span>
                   </div>
-                  <div className="text-xs text-text-muted mt-1">Failed</div>
+                  <div className="text-xs text-text-muted mt-1">{t('inventory.verify.failed')}</div>
                 </Card>
               </div>
 
               <div className="text-center text-sm text-text-muted">
-                {formatBytes(result.bytes_verified)} verified
+                {t('inventory.verify.sizeVerified', { size: formatBytes(result.bytes_verified) })}
               </div>
 
               {/* Failed items */}
               {result.errors.length > 0 && (
                 <div className="mt-4">
                   <h4 className="text-sm font-medium text-red-400 mb-2">
-                    Failed blobs:
+                    {t('inventory.verify.failedBlobs')}
                   </h4>
                   <div className="max-h-32 overflow-y-auto border border-red-500/20 rounded-xl">
                     {result.errors.map((err, i) => (
@@ -285,21 +286,21 @@ export function VerifyProgressDialog({
           {state === 'ready' && (
             <>
               <Button variant="secondary" onClick={handleClose}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="primary"
                 onClick={handleStart}
                 leftIcon={<Shield className="w-4 h-4" />}
               >
-                Start Verification
+                {t('inventory.verify.start')}
               </Button>
             </>
           )}
 
           {state === 'complete' && (
             <Button variant="primary" onClick={handleClose}>
-              Close
+              {t('common.close')}
             </Button>
           )}
         </div>

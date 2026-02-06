@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
@@ -98,14 +99,15 @@ interface Toast {
   details?: string
 }
 
+// Labels are translated via t('browse.types.*') in the component
 const MODEL_TYPES = [
-  { value: '', label: 'All Types' },
-  { value: 'LORA', label: 'LoRA' },
-  { value: 'Checkpoint', label: 'Checkpoint' },
-  { value: 'TextualInversion', label: 'Embedding' },
-  { value: 'VAE', label: 'VAE' },
-  { value: 'Controlnet', label: 'ControlNet' },
-  { value: 'Upscaler', label: 'Upscaler' },
+  { value: '', labelKey: 'all' },
+  { value: 'LORA', labelKey: 'lora' },
+  { value: 'Checkpoint', labelKey: 'checkpoint' },
+  { value: 'TextualInversion', labelKey: 'embedding' },
+  { value: 'VAE', labelKey: 'vae' },
+  { value: 'Controlnet', labelKey: 'controlnet' },
+  { value: 'Upscaler', labelKey: 'upscaler' },
 ]
 
 // Card widths for zoom - fixed sizes like Civitai
@@ -118,6 +120,7 @@ const CARD_WIDTHS = {
 type CardSize = keyof typeof CARD_WIDTHS
 
 export function BrowsePage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -300,7 +303,7 @@ export function BrowsePage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
-    addToast('info', 'Copied to clipboard')
+    addToast('info', t('browse.copiedToClipboard'))
   }
 
   // Format helpers
@@ -434,12 +437,12 @@ export function BrowsePage() {
                 throw new Error(err.detail || 'Import failed')
               }
               const data = await res.json()
-              addToast('success', `Successfully imported '${data.pack_name}'`)
+              addToast('success', t('browse.importSuccess', { name: data.pack_name }))
               queryClient.invalidateQueries({ queryKey: ['packs'] })
               setShowImportWizard(false)
               setSelectedModel(null)
             } catch (error) {
-              addToast('error', 'Import failed', (error as Error).message)
+              addToast('error', t('browse.importFailed'), (error as Error).message)
             } finally {
               setImportWizardLoading(false)
             }
@@ -450,10 +453,10 @@ export function BrowsePage() {
       {/* Header with zoom */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-text-primary">Browse Civitai</h1>
-          <p className="text-text-muted mt-1">
-            Search and import models. Use <code className="text-synapse px-1 py-0.5 bg-synapse/10 rounded">tag:</code> for tags.
-          </p>
+          <h1 className="text-2xl font-bold text-text-primary">{t('browse.title')}</h1>
+          <p className="text-text-muted mt-1" dangerouslySetInnerHTML={{
+            __html: t('browse.subtitle').replace('<code>', '<code class="text-synapse px-1 py-0.5 bg-synapse/10 rounded">')
+          }} />
         </div>
         <div className="flex items-center gap-3">
           {/* Zoom controls */}
@@ -462,7 +465,7 @@ export function BrowsePage() {
               onClick={zoomOut}
               disabled={cardSize === 'sm'}
               className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Smaller cards"
+              title={t('browse.zoom.smaller')}
             >
               <ZoomOut className="w-4 h-4 text-text-secondary" />
             </button>
@@ -471,7 +474,7 @@ export function BrowsePage() {
               onClick={zoomIn}
               disabled={cardSize === 'lg'}
               className="p-2 rounded-lg hover:bg-slate-mid disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              title="Larger cards"
+              title={t('browse.zoom.larger')}
             >
               <ZoomIn className="w-4 h-4 text-text-secondary" />
             </button>
@@ -487,7 +490,7 @@ export function BrowsePage() {
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search models... (tag:anime, url:civitai.com/...)"
+            placeholder={t('browse.searchPlaceholder')}
             className="w-full bg-slate-dark border border-slate-mid rounded-xl pl-12 pr-4 py-3 text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-synapse"
           />
         </div>
@@ -503,12 +506,12 @@ export function BrowsePage() {
           }}
           className="bg-slate-dark border border-slate-mid rounded-xl px-4 py-3 text-text-primary focus:outline-none focus:ring-2 focus:ring-synapse"
         >
-          {MODEL_TYPES.map(t => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+          {MODEL_TYPES.map(type => (
+            <option key={type.value} value={type.value}>{t(`browse.types.${type.labelKey}`)}</option>
           ))}
         </select>
         <Button type="submit" disabled={isLoading && !isFetching}>
-          {isLoading && !isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Search'}
+          {isLoading && !isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : t('browse.search')}
         </Button>
       </form>
 
@@ -577,8 +580,8 @@ export function BrowsePage() {
       {isLoading && allModels.length === 0 && !isLoadingMore.current && (
         <BreathingOrb
           size="lg"
-          text="Searching models..."
-          subtext={`Connecting to ${searchProvider === 'trpc' ? 'tRPC' : searchProvider === 'archive' ? 'CivArchive' : 'Civitai'}`}
+          text={t('browse.loading')}
+          subtext={t('browse.connectingTo', { provider: searchProvider === 'trpc' ? 'tRPC' : searchProvider === 'archive' ? 'CivArchive' : 'Civitai' })}
           className="py-16"
         />
       )}
@@ -659,7 +662,7 @@ export function BrowsePage() {
             variant="secondary"
             className="px-8 py-3"
           >
-            Load More ({allModels.length} loaded)
+            {t('browse.loadMore', { count: allModels.length })}
           </Button>
         </div>
       )}
@@ -667,7 +670,7 @@ export function BrowsePage() {
       {/* Empty state */}
       {!isLoading && !isFetching && allModels.length === 0 && activeSearch && (
         <div className="text-center py-12 text-text-muted">
-          No models found for "{activeSearch}"
+          {t('browse.noResults', { query: activeSearch })}
         </div>
       )}
 
@@ -682,7 +685,7 @@ export function BrowsePage() {
             onClick={e => e.stopPropagation()}
           >
             {isLoadingDetail ? (
-              <BreathingOrb size="md" text="Loading model..." className="py-20" />
+              <BreathingOrb size="md" text={t('browse.loadingModel')} className="py-20" />
             ) : modelDetail ? (
               <>
                 {/* Modal Header */}
@@ -709,7 +712,7 @@ export function BrowsePage() {
                       className="bg-gradient-to-r from-synapse to-pulse hover:shadow-lg hover:shadow-synapse/25 whitespace-nowrap"
                     >
                       <Download className="w-4 h-4 mr-2" />
-                      Import to Pack...
+                      {t('browse.modal.importToPack')}
                     </Button>
                     <button
                       onClick={() => setSelectedModel(null)}
@@ -725,7 +728,7 @@ export function BrowsePage() {
                   {/* Preview Gallery */}
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-text-primary">
-                      Preview Images ({modelDetail.previews.length})
+                      {t('browse.modal.previewImages', { count: modelDetail.previews.length })}
                     </h3>
                     <div className="grid grid-cols-6 gap-3 max-h-[360px] overflow-y-auto p-1">
                       {modelDetail.previews.map((preview, idx) => (
@@ -748,36 +751,36 @@ export function BrowsePage() {
                   <div className="bg-gradient-to-r from-synapse/10 to-pulse/10 border border-synapse/30 rounded-xl p-4">
                     <h3 className="text-sm font-semibold text-synapse mb-3 flex items-center gap-2">
                       <Info className="w-4 h-4" />
-                      Usage Tips
+                      {t('browse.modal.usageTips')}
                     </h3>
                     <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                       {modelDetail.example_params?.clip_skip != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
-                          <span className="text-text-muted block text-xs mb-1">Clip Skip</span>
+                          <span className="text-text-muted block text-xs mb-1">{t('browse.params.clipSkip')}</span>
                           <span className="text-synapse font-bold text-xl">{modelDetail.example_params.clip_skip}</span>
                         </div>
                       )}
                       {modelDetail.type === 'LORA' && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
-                          <span className="text-text-muted block text-xs mb-1">Strength</span>
+                          <span className="text-text-muted block text-xs mb-1">{t('browse.params.strength')}</span>
                           <span className="text-synapse font-bold text-xl">1.0</span>
                         </div>
                       )}
                       {modelDetail.example_params?.cfg_scale != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
-                          <span className="text-text-muted block text-xs mb-1">CFG Scale</span>
+                          <span className="text-text-muted block text-xs mb-1">{t('browse.params.cfgScale')}</span>
                           <span className="text-synapse font-bold text-xl">{modelDetail.example_params.cfg_scale}</span>
                         </div>
                       )}
                       {modelDetail.example_params?.steps != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center">
-                          <span className="text-text-muted block text-xs mb-1">Steps</span>
+                          <span className="text-text-muted block text-xs mb-1">{t('browse.params.steps')}</span>
                           <span className="text-synapse font-bold text-xl">{modelDetail.example_params.steps}</span>
                         </div>
                       )}
                       {modelDetail.example_params?.sampler != null && (
                         <div className="bg-slate-dark/80 rounded-xl p-3 text-center col-span-2">
-                          <span className="text-text-muted block text-xs mb-1">Sampler</span>
+                          <span className="text-text-muted block text-xs mb-1">{t('browse.params.sampler')}</span>
                           <span className="text-synapse font-bold text-sm">{modelDetail.example_params.sampler}</span>
                         </div>
                       )}
@@ -787,7 +790,7 @@ export function BrowsePage() {
                   {/* Trigger Words */}
                   {modelDetail.trained_words?.length > 0 && (
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-text-primary">Trigger Words</h3>
+                      <h3 className="text-sm font-semibold text-text-primary">{t('browse.modal.triggerWords')}</h3>
                       <div className="flex flex-wrap gap-2">
                         {modelDetail.trained_words.map((word, idx) => (
                           <button
@@ -807,7 +810,7 @@ export function BrowsePage() {
                   {modelDetail.versions?.length > 0 && (
                     <div className="space-y-3">
                       <h3 className="text-sm font-semibold text-text-primary">
-                        Versions ({modelDetail.versions.length})
+                        {t('browse.modal.versions', { count: modelDetail.versions.length })}
                       </h3>
                       <div className="space-y-2">
                         {modelDetail.versions.slice(0, 5).map((version, idx) => (
@@ -822,7 +825,7 @@ export function BrowsePage() {
                               <div>
                                 <span className="font-medium text-text-primary">{version.name}</span>
                                 {idx === 0 && (
-                                  <span className="ml-2 text-xs bg-synapse/30 text-synapse px-2 py-0.5 rounded">Latest</span>
+                                  <span className="ml-2 text-xs bg-synapse/30 text-synapse px-2 py-0.5 rounded">{t('browse.modal.latest')}</span>
                                 )}
                                 <div className="text-xs text-text-muted mt-1 flex items-center gap-3">
                                   {version.base_model && <span>{version.base_model}</span>}
@@ -849,7 +852,7 @@ export function BrowsePage() {
                   {/* Description */}
                   {modelDetail.description && (
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-text-primary">Description</h3>
+                      <h3 className="text-sm font-semibold text-text-primary">{t('browse.modal.description')}</h3>
                       <div
                         className="prose prose-invert prose-sm max-w-none text-text-secondary"
                         dangerouslySetInnerHTML={{ __html: modelDetail.description }}
@@ -860,7 +863,7 @@ export function BrowsePage() {
                   {/* Tags */}
                   {modelDetail.tags?.length > 0 && (
                     <div className="space-y-2">
-                      <h3 className="text-sm font-semibold text-text-primary">Tags</h3>
+                      <h3 className="text-sm font-semibold text-text-primary">{t('browse.modal.tags')}</h3>
                       <div className="flex flex-wrap gap-2">
                         {modelDetail.tags.map((tag, idx) => (
                           <span
@@ -882,12 +885,12 @@ export function BrowsePage() {
                   <div className="flex items-center gap-4 pt-4 border-t border-slate-mid text-sm text-text-muted">
                     <span className="flex items-center gap-1">
                       <Download className="w-4 h-4" />
-                      {formatNumber(modelDetail.download_count)} downloads
+                      {t('browse.modal.downloads', { num: formatNumber(modelDetail.download_count) })}
                     </span>
                     {modelDetail.rating != null && (
                       <span className="flex items-center gap-1">
                         <Heart className="w-4 h-4" />
-                        {modelDetail.rating.toFixed(1)} ({formatNumber(modelDetail.rating_count)} ratings)
+                        {t('browse.modal.ratings', { rating: modelDetail.rating.toFixed(1), num: formatNumber(modelDetail.rating_count) })}
                       </span>
                     )}
                     <a
@@ -897,14 +900,14 @@ export function BrowsePage() {
                       className="flex items-center gap-1 text-synapse hover:underline ml-auto"
                     >
                       <ExternalLink className="w-4 h-4" />
-                      View on Civitai
+                      {t('browse.modal.viewOnCivitai')}
                     </a>
                   </div>
                 </div>
               </>
             ) : (
               <div className="p-6 text-center text-text-muted">
-                Model not found
+                {t('browse.modelNotFound')}
               </div>
             )}
           </div>

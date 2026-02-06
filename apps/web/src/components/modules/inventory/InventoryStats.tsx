@@ -3,6 +3,7 @@
  */
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -70,6 +71,7 @@ export function InventoryStats({
   onSyncToBackup,
   onDoctor,
 }: InventoryStatsProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -102,11 +104,11 @@ export function InventoryStats({
     mutationFn: async (direction: string) => stateSyncApi.sync(direction, false),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['state-sync-status'] })
-      toast.success(`Synced ${result.synced_files} file(s)`)
+      toast.success(t('inventory.stats.syncedFiles', { count: result.synced_files }))
       setConfirmDialog(null)
     },
     onError: (error: Error) => {
-      toast.error(`Sync failed: ${error.message}`)
+      toast.error(t('inventory.stats.syncFailed', { error: error.message }))
       setConfirmDialog(null)
     },
   })
@@ -145,8 +147,8 @@ export function InventoryStats({
                   <HardDrive className="w-5 h-5 text-text-secondary" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-text-primary">Local Storage</div>
-                  <div className="text-xs text-text-muted">{summary?.blobs_total || 0} model files</div>
+                  <div className="text-sm font-medium text-text-primary">{t('inventory.stats.localStorage')}</div>
+                  <div className="text-xs text-text-muted">{t('inventory.stats.modelFiles', { count: summary?.blobs_total || 0 })}</div>
                 </div>
               </div>
 
@@ -170,8 +172,8 @@ export function InventoryStats({
                   />
                 </div>
                 <div className="flex justify-between text-xs text-text-muted">
-                  <span>{formatBytes(summary?.disk_free || 0)} free</span>
-                  <span>{diskUsagePercent.toFixed(0)}% used</span>
+                  <span>{t('inventory.stats.free', { size: formatBytes(summary?.disk_free || 0) })}</span>
+                  <span>{t('inventory.stats.used', { percent: diskUsagePercent.toFixed(0) })}</span>
                 </div>
               </div>
 
@@ -179,38 +181,38 @@ export function InventoryStats({
               {localOnlyCount > 0 && backupStatus?.connected && (
                 <div className="mt-3 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 rounded-lg px-2 py-1.5">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>{localOnlyCount} models not backed up</span>
+                  <span>{t('inventory.stats.notBackedUp', { count: localOnlyCount })}</span>
                 </div>
               )}
             </div>
 
             {/* Blob Status Card */}
             <div className="rounded-xl border border-slate-mid/50 bg-slate-deep/80 p-4">
-              <div className="text-sm font-medium text-text-primary mb-4">Blob Status</div>
+              <div className="text-sm font-medium text-text-primary mb-4">{t('inventory.stats.blobStatus')}</div>
               <div className="space-y-3">
                 <StatusRow
                   icon={<CheckCircle className="w-4 h-4" />}
                   color="text-green-400"
-                  label="Referenced"
+                  label={t('inventory.stats.referenced')}
                   count={summary?.blobs_referenced || 0}
                 />
                 <StatusRow
                   icon={<AlertTriangle className="w-4 h-4" />}
                   color="text-gray-400"
-                  label="Orphan"
+                  label={t('inventory.stats.orphan')}
                   count={summary?.blobs_orphan || 0}
                 />
                 <StatusRow
                   icon={<Cloud className="w-4 h-4" />}
                   color="text-blue-400"
-                  label="Backup Only"
+                  label={t('inventory.stats.backupOnly')}
                   count={backupOnlyCount}
                 />
                 {(summary?.blobs_missing || 0) > 0 && (
                   <StatusRow
                     icon={<AlertCircle className="w-4 h-4" />}
                     color="text-red-400"
-                    label="Missing"
+                    label={t('inventory.stats.missing')}
                     count={summary?.blobs_missing || 0}
                     highlight
                   />
@@ -223,16 +225,16 @@ export function InventoryStats({
           <div className="rounded-xl border border-slate-mid/50 bg-slate-deep/80 p-4">
             <div className="flex items-center gap-2 mb-3">
               <Zap className="w-4 h-4 text-amber-400" />
-              <span className="text-sm font-medium text-text-primary">Quick Actions</span>
+              <span className="text-sm font-medium text-text-primary">{t('inventory.stats.quickActions')}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {/* Cleanup Orphans - local operation */}
               <QuickActionButton
                 onClick={onCleanup}
                 icon={<Trash2 className="w-4 h-4" />}
-                label="Cleanup"
+                label={t('inventory.stats.cleanup')}
                 count={(summary?.blobs_orphan || 0) > 0 ? summary?.blobs_orphan : undefined}
-                tooltip="Delete model files that are no longer referenced by any pack. Frees up disk space."
+                tooltip={t('inventory.stats.cleanupTooltip')}
                 color="amber"
                 disabled={(summary?.blobs_orphan || 0) === 0}
               />
@@ -241,8 +243,8 @@ export function InventoryStats({
               <QuickActionButton
                 onClick={onVerify}
                 icon={<Shield className="w-4 h-4" />}
-                label="Verify"
-                tooltip="Check all files match their SHA256 checksums. Detects corrupted files."
+                label={t('inventory.stats.verify')}
+                tooltip={t('inventory.stats.verifyTooltip')}
                 color="purple"
               />
 
@@ -250,8 +252,8 @@ export function InventoryStats({
               <QuickActionButton
                 onClick={onDoctor}
                 icon={<Wrench className="w-4 h-4" />}
-                label="Doctor"
-                tooltip="Scan and repair issues: fix broken references, rebuild indexes, optimize database."
+                label={t('inventory.stats.doctor')}
+                tooltip={t('inventory.stats.doctorTooltip')}
                 color="blue"
               />
 
@@ -259,14 +261,14 @@ export function InventoryStats({
               <QuickActionButton
                 onClick={onSyncToBackup}
                 icon={<Upload className="w-4 h-4" />}
-                label="Backup"
+                label={t('inventory.stats.backup')}
                 count={localOnlyCount > 0 ? localOnlyCount : undefined}
                 tooltip={
                   !backupStatus?.connected
-                    ? "Backup storage not connected. Connect your backup drive first."
+                    ? t('inventory.stats.backupNotConnected')
                     : localOnlyCount === 0
-                      ? "All model files are already backed up."
-                      : "Copy all local-only model files to backup storage. Protects against data loss."
+                      ? t('inventory.stats.allBackedUp')
+                      : t('inventory.stats.backupTooltip')
                 }
                 color="synapse"
                 disabled={!backupStatus?.connected || localOnlyCount === 0}
@@ -300,7 +302,7 @@ export function InventoryStats({
               )}>
                 <Cloud className="w-4 h-4" />
               </div>
-              <div className="text-sm font-medium text-text-primary">Backup</div>
+              <div className="text-sm font-medium text-text-primary">{t('inventory.stats.backup')}</div>
             </div>
 
             {/* Status Badge */}
@@ -315,7 +317,7 @@ export function InventoryStats({
                   'w-1.5 h-1.5 rounded-full',
                   backupStatus?.connected ? 'bg-green-400' : 'bg-amber-400 animate-pulse'
                 )} />
-                {backupStatus?.connected ? 'Connected' : 'Offline'}
+                {backupStatus?.connected ? t('inventory.stats.connected') : t('inventory.stats.offline')}
               </div>
             )}
           </div>
@@ -326,14 +328,14 @@ export function InventoryStats({
               <div className="w-12 h-12 rounded-xl bg-slate-mid/30 flex items-center justify-center mx-auto mb-3">
                 <Cloud className="w-6 h-6 text-text-muted" />
               </div>
-              <p className="text-sm text-text-muted mb-3">Not enabled</p>
+              <p className="text-sm text-text-muted mb-3">{t('inventory.stats.notEnabled')}</p>
               <Button
                 variant="ghost"
                 size="sm"
                 leftIcon={<Settings className="w-4 h-4" />}
                 onClick={() => navigate('/settings#backup-config')}
               >
-                Enable Backup
+                {t('inventory.stats.enableBackup')}
               </Button>
             </div>
           ) : !backupStatus?.connected ? (
@@ -342,8 +344,8 @@ export function InventoryStats({
               <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center mx-auto mb-3">
                 <AlertCircle className="w-6 h-6 text-amber-400" />
               </div>
-              <p className="text-sm text-amber-400 mb-1">Disconnected</p>
-              <p className="text-xs text-text-muted">Connect your drive</p>
+              <p className="text-sm text-amber-400 mb-1">{t('inventory.stats.disconnected')}</p>
+              <p className="text-xs text-text-muted">{t('inventory.stats.connectDrive')}</p>
             </div>
           ) : (
             /* Connected - Show Models & Packs */
@@ -352,7 +354,7 @@ export function InventoryStats({
               <div className="rounded-lg border border-slate-mid/30 bg-slate-mid/10 p-3">
                 <div className="flex items-center gap-2 mb-2">
                   <Database className="w-4 h-4 text-synapse" />
-                  <span className="text-xs font-medium text-text-primary">Model Files</span>
+                  <span className="text-xs font-medium text-text-primary">{t('inventory.stats.modelFilesTitle')}</span>
                 </div>
 
                 <div className="text-xl font-bold text-text-primary mb-2">
@@ -362,15 +364,15 @@ export function InventoryStats({
                 <div className="grid grid-cols-3 gap-1 text-center">
                   <div className="bg-slate-mid/30 rounded px-2 py-1">
                     <div className="text-sm font-bold text-green-400">{syncedCount}</div>
-                    <div className="text-[9px] text-text-muted uppercase">Synced</div>
+                    <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.synced')}</div>
                   </div>
                   <div className="bg-slate-mid/30 rounded px-2 py-1">
                     <div className="text-sm font-bold text-amber-400">{localOnlyCount}</div>
-                    <div className="text-[9px] text-text-muted uppercase">Pending</div>
+                    <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.pending')}</div>
                   </div>
                   <div className="bg-slate-mid/30 rounded px-2 py-1">
                     <div className="text-sm font-bold text-blue-400">{backupOnlyCount}</div>
-                    <div className="text-[9px] text-text-muted uppercase">Backup</div>
+                    <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.backup')}</div>
                   </div>
                 </div>
 
@@ -382,7 +384,7 @@ export function InventoryStats({
                     onClick={onSyncToBackup}
                     leftIcon={<Upload className="w-3 h-3" />}
                   >
-                    Backup Pending
+                    {t('inventory.stats.backupPending')}
                   </Button>
                 )}
               </div>
@@ -392,12 +394,12 @@ export function InventoryStats({
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <FolderOpen className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs font-medium text-text-primary">Pack Data</span>
+                    <span className="text-xs font-medium text-text-primary">{t('inventory.stats.packData')}</span>
                   </div>
                   {stateNeedsSync === 0 && stateSyncStatus && (
                     <span className="text-[10px] text-green-400 flex items-center gap-1">
                       <Check className="w-3 h-3" />
-                      Synced
+                      {t('inventory.stats.synced')}
                     </span>
                   )}
                 </div>
@@ -406,31 +408,31 @@ export function InventoryStats({
                 {hasGitChanges && (
                   <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-500/10 rounded px-2 py-1 mb-2">
                     <GitBranch className="w-3 h-3" />
-                    <span>Local changes detected</span>
+                    <span>{t('inventory.stats.localChanges')}</span>
                   </div>
                 )}
 
                 {stateSyncStatus ? (
                   <>
                     <div className="text-xs text-text-muted mb-2">
-                      {stateSyncStatus.summary.total_files} files
+                      {t('inventory.stats.files', { count: stateSyncStatus.summary.total_files })}
                       {stateNeedsSync > 0 && (
-                        <span className="text-amber-400 ml-1">({stateNeedsSync} pending)</span>
+                        <span className="text-amber-400 ml-1">{t('inventory.stats.pendingCount', { count: stateNeedsSync })}</span>
                       )}
                     </div>
 
                     <div className="grid grid-cols-3 gap-1 text-center mb-2">
                       <div className="bg-slate-mid/30 rounded px-2 py-1">
                         <div className="text-sm font-bold text-green-400">{stateSyncStatus.summary.synced}</div>
-                        <div className="text-[9px] text-text-muted uppercase">Synced</div>
+                        <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.synced')}</div>
                       </div>
                       <div className="bg-slate-mid/30 rounded px-2 py-1">
                         <div className="text-sm font-bold text-cyan-400">{stateSyncStatus.summary.local_only}</div>
-                        <div className="text-[9px] text-text-muted uppercase">Local</div>
+                        <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.local')}</div>
                       </div>
                       <div className="bg-slate-mid/30 rounded px-2 py-1">
                         <div className="text-sm font-bold text-purple-400">{stateSyncStatus.summary.modified}</div>
-                        <div className="text-[9px] text-text-muted uppercase">Modified</div>
+                        <div className="text-[9px] text-text-muted uppercase">{t('inventory.stats.modified')}</div>
                       </div>
                     </div>
 
@@ -440,44 +442,44 @@ export function InventoryStats({
                         <button
                           onClick={() => handleSyncClick(
                             'to_backup',
-                            'Push to Backup',
-                            `This will copy ${stateSyncStatus.summary.local_only + stateSyncStatus.summary.modified} local file(s) to backup storage. Backup files will be overwritten.`
+                            t('inventory.stats.pushToBackup'),
+                            t('inventory.stats.pushMessage', { count: stateSyncStatus.summary.local_only + stateSyncStatus.summary.modified })
                           )}
                           disabled={stateSyncMutation.isPending}
                           className="px-2 py-1.5 text-[10px] font-medium rounded bg-synapse/20 text-synapse hover:bg-synapse/30 border border-synapse/30 flex items-center justify-center gap-1"
                         >
                           <Upload className="w-3 h-3" />
-                          Push
+                          {t('inventory.stats.push')}
                         </button>
                         <button
                           onClick={() => handleSyncClick(
                             'from_backup',
-                            'Pull from Backup',
-                            `This will restore ${stateSyncStatus.summary.backup_only + stateSyncStatus.summary.modified} file(s) from backup. Local files will be overwritten.`
+                            t('inventory.stats.pullFromBackup'),
+                            t('inventory.stats.pullMessage', { count: stateSyncStatus.summary.backup_only + stateSyncStatus.summary.modified })
                           )}
                           disabled={stateSyncMutation.isPending}
                           className="px-2 py-1.5 text-[10px] font-medium rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 flex items-center justify-center gap-1"
                         >
                           <Download className="w-3 h-3" />
-                          Pull
+                          {t('inventory.stats.pull')}
                         </button>
                         <button
                           onClick={() => handleSyncClick(
                             'bidirectional',
-                            'Merge Both Ways',
-                            `This will sync all files bidirectionally. Newer files will overwrite older ones on both sides.`
+                            t('inventory.stats.mergeBothWays'),
+                            t('inventory.stats.mergeMessage')
                           )}
                           disabled={stateSyncMutation.isPending}
                           className="px-2 py-1.5 text-[10px] font-medium rounded bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/30 flex items-center justify-center gap-1"
                         >
                           <ArrowUpDown className="w-3 h-3" />
-                          Merge
+                          {t('inventory.stats.merge')}
                         </button>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="text-xs text-text-muted">Loading...</div>
+                  <div className="text-xs text-text-muted">{t('inventory.stats.loading')}</div>
                 )}
               </div>
 
@@ -506,7 +508,7 @@ export function InventoryStats({
                 size="sm"
                 onClick={() => setConfirmDialog(null)}
               >
-                Cancel
+                {t('inventory.stats.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -514,7 +516,7 @@ export function InventoryStats({
                 onClick={confirmSync}
                 isLoading={stateSyncMutation.isPending}
               >
-                Confirm
+                {t('inventory.stats.confirm')}
               </Button>
             </div>
           </div>

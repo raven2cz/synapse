@@ -10,6 +10,7 @@
  */
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import { AlertTriangle, Trash2, Info, X, Shield, Cloud, HardDrive } from 'lucide-react'
 import { Button } from '../../ui/Button'
@@ -34,6 +35,8 @@ export function DeleteConfirmationDialog({
   onConfirm,
   isLoading = false,
 }: DeleteConfirmationDialogProps) {
+  const { t } = useTranslation()
+
   // Handle escape key
   useEffect(() => {
     if (!open) return
@@ -58,9 +61,6 @@ export function DeleteConfirmationDialog({
 
   const isReferenced = item.status === 'referenced'
   const hasHighRisk = isLastCopy && isReferenced
-
-  // Get target label for UI
-  const targetLabel = target === 'both' ? 'everywhere' : `from ${target}`
 
   const dialogContent = (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -98,10 +98,14 @@ export function DeleteConfirmationDialog({
             )}
             <div>
               <h2 className="text-xl font-bold text-text-primary">
-                {isLastCopy ? 'Delete Last Copy?' : 'Delete Blob?'}
+                {isLastCopy ? t('inventory.delete.titleLastCopy') : t('inventory.delete.title')}
               </h2>
               <p className="text-sm text-text-muted">
-                {target === 'both' ? 'Remove from all locations' : `Delete ${targetLabel}`}
+                {target === 'both'
+                  ? t('inventory.delete.subtitleBoth')
+                  : target === 'local'
+                    ? t('inventory.delete.subtitleLocal')
+                    : t('inventory.delete.subtitleBackup')}
               </p>
             </div>
           </div>
@@ -145,7 +149,7 @@ export function DeleteConfirmationDialog({
                       )}
                     >
                       <HardDrive className="w-3 h-3" />
-                      Local {(target === 'local' || target === 'both') && '(will delete)'}
+                      {t('inventory.delete.local')} {(target === 'local' || target === 'both') && t('inventory.delete.willDelete')}
                     </span>
                   )}
                   {item.on_backup && (
@@ -158,7 +162,7 @@ export function DeleteConfirmationDialog({
                       )}
                     >
                       <Cloud className="w-3 h-3" />
-                      Backup {(target === 'backup' || target === 'both') && '(will delete)'}
+                      {t('inventory.delete.backup')} {(target === 'backup' || target === 'both') && t('inventory.delete.willDelete')}
                     </span>
                   )}
                 </div>
@@ -172,12 +176,12 @@ export function DeleteConfirmationDialog({
               <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
               <div>
                 <div className="font-medium text-red-400">
-                  This is the ONLY copy of this model!
+                  {t('inventory.delete.lastCopyTitle')}
                 </div>
                 <div className="text-sm text-red-400/80 mt-1">
-                  Deleting it will permanently remove it.
+                  {t('inventory.delete.lastCopyDescription')}
                   {item.origin?.provider && (
-                    <> You&apos;ll need to re-download from {item.origin.provider}.</>
+                    <> {t('inventory.delete.lastCopyRedownload', { provider: item.origin.provider })}</>
                   )}
                 </div>
               </div>
@@ -190,15 +194,15 @@ export function DeleteConfirmationDialog({
               <Info className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
               <div>
                 <div className="font-medium text-amber-400">
-                  This blob is used by {item.used_by_packs.length} pack(s)
+                  {t('inventory.delete.usedByTitle', { count: item.used_by_packs.length })}
                 </div>
                 <div className="text-sm text-amber-400/80 mt-1">
                   {item.used_by_packs.slice(0, 3).join(', ')}
-                  {item.used_by_packs.length > 3 && ` and ${item.used_by_packs.length - 3} more`}
+                  {item.used_by_packs.length > 3 && ` ${t('inventory.delete.andMore', { count: item.used_by_packs.length - 3 })}`}
                 </div>
                 {item.active_in_uis.length > 0 && (
                   <div className="text-sm text-amber-400/80 mt-1">
-                    Active in: {item.active_in_uis.join(', ')}
+                    {t('inventory.delete.activeIn')} {item.active_in_uis.join(', ')}
                   </div>
                 )}
               </div>
@@ -211,10 +215,10 @@ export function DeleteConfirmationDialog({
               <Shield className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-green-400">
                 {target === 'local' && item.on_backup && (
-                  <>Backup copy will be preserved. You can restore later.</>
+                  <>{t('inventory.delete.backupPreserved')}</>
                 )}
                 {target === 'backup' && item.on_local && (
-                  <>Local copy will be preserved.</>
+                  <>{t('inventory.delete.localPreserved')}</>
                 )}
               </div>
             </div>
@@ -228,7 +232,7 @@ export function DeleteConfirmationDialog({
             onClick={() => onOpenChange(false)}
             disabled={isLoading}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant={isLastCopy ? 'danger' : 'primary'}
@@ -236,7 +240,7 @@ export function DeleteConfirmationDialog({
             isLoading={isLoading}
             leftIcon={isLastCopy ? <AlertTriangle className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
           >
-            {isLastCopy ? 'Delete Permanently' : 'Delete'}
+            {isLastCopy ? t('inventory.delete.deletePermanently') : t('common.delete')}
           </Button>
         </div>
       </div>

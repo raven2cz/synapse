@@ -1,8 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { 
-  Layers, 
-  ArrowLeft, 
-  AlertTriangle, 
+import { useTranslation } from 'react-i18next'
+import {
+  Layers,
+  ArrowLeft,
+  AlertTriangle,
   RefreshCw,
   CheckCircle,
   ChevronRight,
@@ -33,6 +34,7 @@ interface ProfilesStatus {
 }
 
 export function ProfilesPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   // Fetch profiles status
@@ -59,10 +61,10 @@ export function ProfilesPage() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['profiles-status'] })
-      toast.success(`Switched to: ${data?.new_profile || 'previous profile'}`)
+      toast.success(t('profiles.toast.switchedTo', { profile: data?.new_profile || 'previous profile' }))
     },
     onError: (error: Error) => {
-      toast.error(`Back failed: ${error.message}`)
+      toast.error(t('profiles.toast.backFailed', { error: error.message }))
     },
   })
 
@@ -79,10 +81,10 @@ export function ProfilesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles-status'] })
-      toast.success('Reset to global profile')
+      toast.success(t('profiles.toast.resetSuccess'))
     },
     onError: (error: Error) => {
-      toast.error(`Reset failed: ${error.message}`)
+      toast.error(t('profiles.toast.resetFailed', { error: error.message }))
     },
   })
 
@@ -99,13 +101,13 @@ export function ProfilesPage() {
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-slate-200 mb-2">Error Loading Profiles</h2>
+          <h2 className="text-xl font-semibold text-slate-200 mb-2">{t('profiles.error.title')}</h2>
           <p className="text-slate-400 mb-4">{(error as Error).message}</p>
           <button
             onClick={() => refetch()}
             className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
           >
-            Retry
+            {t('profiles.error.retry')}
           </button>
         </div>
       </div>
@@ -119,19 +121,19 @@ export function ProfilesPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
             <Layers className="w-7 h-7 text-indigo-400" />
-            Profiles
+            {t('profiles.title')}
           </h1>
           <p className="text-slate-400 mt-1">
-            Manage active profiles and view stack state per UI
+            {t('profiles.subtitle')}
           </p>
         </div>
-        
+
         <button
           onClick={() => refetch()}
           className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:bg-slate-700"
         >
           <RefreshCw className="w-4 h-4" />
-          Refresh
+          {t('profiles.refresh')}
         </button>
       </div>
 
@@ -139,7 +141,7 @@ export function ProfilesPage() {
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
           <Package className="w-5 h-5 text-indigo-400" />
-          Active Profiles per UI
+          {t('profiles.activeProfiles')}
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -155,7 +157,7 @@ export function ProfilesPage() {
                     {uiStatus.ui}
                   </h3>
                   <p className="text-sm text-slate-400">
-                    Active: <span className="text-indigo-400 font-medium">{uiStatus.active_profile}</span>
+                    {t('profiles.active')}: <span className="text-indigo-400 font-medium">{uiStatus.active_profile}</span>
                   </p>
                 </div>
                 
@@ -169,7 +171,7 @@ export function ProfilesPage() {
                         className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 disabled:opacity-50"
                       >
                         <ArrowLeft className="w-4 h-4" />
-                        Back
+                        {t('profiles.back')}
                       </button>
                       <button
                         onClick={() => resetMutation.mutate(uiStatus.ui)}
@@ -177,14 +179,14 @@ export function ProfilesPage() {
                         className="flex items-center gap-1 px-3 py-1.5 text-sm bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 disabled:opacity-50"
                       >
                         <Home className="w-4 h-4" />
-                        Reset
+                        {t('profiles.reset')}
                       </button>
                     </>
                   )}
                   {uiStatus.active_profile === 'global' && (
                     <span className="flex items-center gap-1 px-3 py-1.5 text-sm text-green-400">
                       <CheckCircle className="w-4 h-4" />
-                      At Global
+                      {t('profiles.atGlobal')}
                     </span>
                   )}
                 </div>
@@ -192,7 +194,7 @@ export function ProfilesPage() {
               
               {/* Stack Visualization */}
               <div className="bg-slate-900/50 rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">Stack ({uiStatus.stack_depth})</p>
+                <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">{t('profiles.stack')} ({uiStatus.stack_depth})</p>
                 <div className="flex flex-wrap gap-2">
                   {uiStatus.stack.map((profile, index) => (
                     <div key={index} className="flex items-center">
@@ -216,7 +218,7 @@ export function ProfilesPage() {
         
         {(!status?.ui_statuses || status.ui_statuses.length === 0) && (
           <div className="bg-slate-800/30 border border-slate-700/30 rounded-xl p-8 text-center">
-            <p className="text-slate-400">No UI configurations found. Check Store settings.</p>
+            <p className="text-slate-400">{t('profiles.noUiConfigs')}</p>
           </div>
         )}
       </section>
@@ -226,17 +228,17 @@ export function ProfilesPage() {
         <section>
           <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-amber-400" />
-            Shadowed Files ({status.shadowed_count})
+            {t('profiles.shadowedCount', { count: status.shadowed_count })}
           </h2>
           
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl overflow-hidden">
             <table className="w-full">
               <thead className="bg-amber-500/10">
                 <tr>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">UI</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">File Path</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">Winner</th>
-                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">Shadowed</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">{t('profiles.table.ui')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">{t('profiles.table.filePath')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">{t('profiles.table.winner')}</th>
+                  <th className="text-left px-4 py-3 text-sm font-medium text-amber-400">{t('profiles.table.shadowed')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-amber-500/20">
@@ -253,8 +255,7 @@ export function ProfilesPage() {
           </div>
           
           <p className="text-sm text-slate-500 mt-3">
-            Shadowed files occur when multiple packs expose files to the same path. 
-            The "winner" pack's file is used, while the "shadowed" pack's file is hidden.
+            {t('profiles.shadowedExplanation')}
           </p>
         </section>
       )}
@@ -265,14 +266,14 @@ export function ProfilesPage() {
           <div className="flex items-center gap-3">
             <RefreshCw className="w-5 h-5 text-indigo-400" />
             <span className="text-slate-200">
-              {status.updates_available} pack{status.updates_available > 1 ? 's' : ''} with updates available
+              {t('profiles.updatesAvailable', { count: status.updates_available })}
             </span>
           </div>
           <a
             href="/"
             className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
           >
-            View Packs
+            {t('profiles.viewPacks')}
           </a>
         </div>
       )}

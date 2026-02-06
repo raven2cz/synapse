@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 import { ProfileDropdown } from './ProfileDropdown'
@@ -6,6 +7,7 @@ import { Logo } from '../ui/Logo'
 import { APP_VERSION } from '../../config'
 
 export function Header() {
+  const { t } = useTranslation()
   const { nsfwBlurEnabled, toggleNsfwBlur } = useSettingsStore()
 
   return (
@@ -31,7 +33,7 @@ export function Header() {
               v{APP_VERSION}
             </span>
           </div>
-          <span className="text-xs font-semibold text-slate-200">The Pack-First Model Manager</span>
+          <span className="text-xs font-semibold text-slate-200">{t('header.tagline')}</span>
         </div>
       </Link>
 
@@ -55,7 +57,7 @@ export function Header() {
             <Eye className="w-4 h-4 text-red-400" />
           )}
           <span className={`text-xs font-medium ${nsfwBlurEnabled ? 'text-indigo-300' : 'text-red-300'}`}>
-            NSFW
+            {t('header.nsfw')}
           </span>
           {/* Compact toggle indicator */}
           <div className={`w-8 h-4 rounded-full relative transition-colors duration-200 ${

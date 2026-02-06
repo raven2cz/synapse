@@ -13,6 +13,7 @@
  */
 import { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { HardDrive, RefreshCw } from 'lucide-react'
 import { Button } from '../../ui/Button'
 import { toast } from '../../../stores/toastStore'
@@ -162,6 +163,7 @@ const api = {
 }
 
 export function InventoryPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [filters, setFilters] = useState<Filters>({
     kind: 'all',
@@ -212,10 +214,10 @@ export function InventoryPage() {
     mutationFn: api.backupBlob,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
-      toast.success('Blob backed up successfully')
+      toast.success(t('inventory.toast.backupSuccess'))
     },
     onError: (error: Error) => {
-      toast.error(`Backup failed: ${error.message}`)
+      toast.error(t('inventory.toast.backupFailed', { error: error.message }))
     },
   })
 
@@ -223,10 +225,10 @@ export function InventoryPage() {
     mutationFn: api.restoreBlob,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
-      toast.success('Blob restored successfully')
+      toast.success(t('inventory.toast.restoreSuccess'))
     },
     onError: (error: Error) => {
-      toast.error(`Restore failed: ${error.message}`)
+      toast.error(t('inventory.toast.restoreFailed', { error: error.message }))
     },
   })
 
@@ -236,11 +238,11 @@ export function InventoryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] })
       setDeleteDialogOpen(false)
-      toast.success('Blob deleted successfully')
+      toast.success(t('inventory.toast.deleteSuccess'))
     },
     onError: (error: Error) => {
       setDeleteDialogOpen(false)
-      toast.error(`Delete failed: ${error.message}`)
+      toast.error(t('inventory.toast.deleteFailed', { error: error.message }))
     },
   })
 
@@ -335,9 +337,9 @@ export function InventoryPage() {
           }
         }
         queryClient.invalidateQueries({ queryKey: ['inventory'] })
-        toast.success(`Bulk ${action} completed for ${sha256s.length} blob(s)`)
+        toast.success(t('inventory.toast.bulkSuccess', { action, count: sha256s.length }))
       } catch (error) {
-        toast.error(`Bulk action failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        toast.error(t('inventory.toast.bulkFailed', { error: error instanceof Error ? error.message : 'Unknown error' }))
       }
     },
     [handleBackup, handleRestore, queryClient]
@@ -365,14 +367,14 @@ export function InventoryPage() {
       })
       if (res.ok) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] })
-        toast.success('Doctor completed successfully')
+        toast.success(t('inventory.toast.doctorSuccess'))
       } else {
         const err = await res.text()
-        toast.error(`Doctor failed: ${err}`)
+        toast.error(`${t('inventory.toast.doctorFailed')}: ${err}`)
       }
     } catch (err) {
       console.error('Doctor failed:', err)
-      toast.error('Doctor failed')
+      toast.error(t('inventory.toast.doctorFailed'))
     }
   }, [queryClient])
 
@@ -418,10 +420,10 @@ export function InventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
             <HardDrive className="w-7 h-7 text-synapse" />
-            Inventory
+            {t('inventory.title')}
           </h1>
           <p className="text-text-muted mt-1">
-            Manage your model storage and backups
+            {t('inventory.subtitle')}
           </p>
         </div>
 
@@ -432,21 +434,21 @@ export function InventoryPage() {
           leftIcon={<RefreshCw className="w-4 h-4" />}
           isLoading={isLoading}
         >
-          Refresh
+          {t('inventory.refresh')}
         </Button>
       </div>
 
       {/* Error state */}
       {error && (
         <div className="bg-red-900/20 border border-red-500/50 rounded-xl p-4 text-red-400">
-          <p className="font-medium">Error loading inventory</p>
+          <p className="font-medium">{t('inventory.error.title')}</p>
           <p className="text-sm mt-1">{(error as Error).message}</p>
         </div>
       )}
 
       {/* Loading state */}
       {isLoading && !inventory && (
-        <BreathingOrb size="lg" text="Loading inventory..." className="py-16" />
+        <BreathingOrb size="lg" text={t('inventory.loading')} className="py-16" />
       )}
 
       {/* Content */}
