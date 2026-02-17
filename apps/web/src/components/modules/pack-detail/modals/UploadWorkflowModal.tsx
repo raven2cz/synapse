@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Loader2, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -57,6 +58,7 @@ export function UploadWorkflowModal({
   onClose,
   isUploading = false,
 }: UploadWorkflowModalProps) {
+  const { t } = useTranslation()
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -115,7 +117,7 @@ export function UploadWorkflowModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-text-primary">Upload Workflow</h3>
+          <h3 className="text-lg font-semibold text-text-primary">{t('pack.modals.workflow.title')}</h3>
           <button
             onClick={onClose}
             className={clsx(
@@ -132,7 +134,7 @@ export function UploadWorkflowModal({
           {/* File Input */}
           <div>
             <label className="block text-sm text-text-secondary mb-2">
-              Workflow File (.json)
+              {t('pack.modals.workflow.fileLabel')}
             </label>
             <input
               type="file"
@@ -153,7 +155,7 @@ export function UploadWorkflowModal({
             />
             {file && (
               <p className="text-xs text-text-muted mt-1">
-                Selected: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                {t('pack.modals.workflow.selected', { name: `${file.name} (${(file.size / 1024).toFixed(1)} KB)` })}
               </p>
             )}
           </div>
@@ -161,13 +163,13 @@ export function UploadWorkflowModal({
           {/* Workflow Name */}
           <div>
             <label className="block text-sm text-text-secondary mb-2">
-              Workflow Name
+              {t('pack.modals.workflow.workflowName')}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Custom Workflow"
+              placeholder={t('pack.modals.workflow.namePlaceholder')}
               className={clsx(
                 "w-full px-4 py-2.5 rounded-lg",
                 "bg-slate-dark border border-slate-mid",
@@ -181,12 +183,12 @@ export function UploadWorkflowModal({
           {/* Description (optional) */}
           <div>
             <label className="block text-sm text-text-secondary mb-2">
-              Description <span className="text-text-muted">(optional)</span>
+              {t('pack.modals.workflow.descriptionOptional')}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what this workflow does..."
+              placeholder={t('pack.modals.workflow.descriptionPlaceholder')}
               rows={3}
               className={clsx(
                 "w-full px-4 py-2.5 rounded-lg resize-none",
@@ -205,7 +207,7 @@ export function UploadWorkflowModal({
             variant="secondary"
             onClick={onClose}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -217,7 +219,7 @@ export function UploadWorkflowModal({
             ) : (
               <Upload className="w-4 h-4" />
             )}
-            Upload
+            {t('pack.modals.workflow.upload')}
           </Button>
         </div>
       </div>

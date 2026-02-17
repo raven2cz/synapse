@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X, ChevronLeft, ChevronRight, Download, ExternalLink, Eye, EyeOff,
@@ -34,9 +35,9 @@ export const QUALITY_LABELS: Record<VideoQuality, string> = {
 }
 
 export function getQualityBadge(q: VideoQuality): string | null {
-  if (q === 'sd') return 'Fast'
-  if (q === 'hd') return 'Standard'
-  if (q === 'fhd') return 'Best'
+  if (q === 'sd') return 'viewer.qualityFast'
+  if (q === 'hd') return 'viewer.qualityStandard'
+  if (q === 'fhd') return 'viewer.qualityBest'
   return null
 }
 
@@ -104,6 +105,7 @@ function isLikelyVideo(url: string): boolean {
 export function FullscreenMediaViewer({
   items, initialIndex = 0, isOpen, onClose, onIndexChange,
 }: FullscreenMediaViewerProps) {
+  const { t } = useTranslation()
   const nsfwBlurEnabled = useSettingsStore((s) => s.nsfwBlurEnabled)
 
   // Navigation & animation state
@@ -450,10 +452,10 @@ export function FullscreenMediaViewer({
             <div className="w-24 h-24 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center mx-auto mb-6">
               <EyeOff className="w-12 h-12 text-white/60" />
             </div>
-            <p className="text-white/80 text-xl mb-6">NSFW Content</p>
+            <p className="text-white/80 text-xl mb-6">{t('media.nsfwContent')}</p>
             {isActive && (
               <button onClick={() => setIsRevealed(true)} className="px-8 py-3 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-medium transition-colors">
-                Click to reveal
+                {t('media.clickToReveal')}
               </button>
             )}
           </div>
@@ -516,7 +518,7 @@ export function FullscreenMediaViewer({
         }}
       />
     )
-  }, [nsfwBlurEnabled, isRevealed, videoQuality, isLooping, isMuted, getThumbUrl, getVideoClass, togglePlay, isBuffering, imageZoom, imagePosition, isDragging])
+  }, [nsfwBlurEnabled, isRevealed, videoQuality, isLooping, isMuted, getThumbUrl, getVideoClass, togglePlay, isBuffering, imageZoom, imagePosition, isDragging, t])
 
 
   if (!isOpen || !currentItem) return null
@@ -563,7 +565,7 @@ export function FullscreenMediaViewer({
                   showMetadata && currentHasMeta ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/60 hover:bg-white/20',
                   !currentHasMeta && 'opacity-30 cursor-not-allowed'
                 )}
-                title={currentHasMeta ? (showMetadata ? 'Hide info (I)' : 'Show info (I)') : 'No metadata'}
+                title={currentHasMeta ? (showMetadata ? t('viewer.hideInfo') : t('viewer.showInfo')) : t('viewer.noMetadata')}
               >
                 <Info className="w-5 h-5" />
               </button>
@@ -651,8 +653,8 @@ export function FullscreenMediaViewer({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button onClick={togglePlay} className="p-2 rounded-lg hover:bg-white/10 text-white" title={isPlaying ? 'Pause (K/Space)' : 'Play (K/Space)'}>{isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 fill-white" />}</button>
-                <button onClick={() => skip(-10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title="Back 10s (J)"><SkipBack className="w-5 h-5" /></button>
-                <button onClick={() => skip(10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title="Forward 10s (;)"><SkipForward className="w-5 h-5" /></button>
+                <button onClick={() => skip(-10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title={t('viewer.backSeconds')}><SkipBack className="w-5 h-5" /></button>
+                <button onClick={() => skip(10)} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title={t('viewer.forwardSeconds')}><SkipForward className="w-5 h-5" /></button>
                 <div className="flex items-center gap-2 group/vol">
                   <button onClick={toggleMute} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white" title={isMuted ? 'Unmute (M)' : 'Mute (M)'}>{isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>
                   <input type="range" min="0" max="1" step="0.05" value={volume} onChange={handleVolumeChange} className="w-0 group-hover/vol:w-20 transition-all accent-indigo-500 opacity-0 group-hover/vol:opacity-100" />
@@ -670,7 +672,7 @@ export function FullscreenMediaViewer({
                         ? 'bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40'
                         : 'bg-white/10 text-white/80 hover:bg-white/20'
                     )}
-                    title="Video quality"
+                    title={t('viewer.videoQuality')}
                   >
                     {QUALITY_LABELS[videoQuality]}
                   </button>
@@ -691,15 +693,15 @@ export function FullscreenMediaViewer({
                           )}
                         >
                           <span>{QUALITY_LABELS[q]}</span>
-                          {getQualityBadge(q) && <span className="text-xs text-white/40">{getQualityBadge(q)}</span>}
+                          {getQualityBadge(q) && <span className="text-xs text-white/40">{q === 'sd' ? t('viewer.qualityFast') : q === 'hd' ? t('viewer.qualityStandard') : t('viewer.qualityBest')}</span>}
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
 
-                <button onClick={cycleVideoFit} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40" title={videoFit === 'fit' ? 'Fit to screen' : videoFit === 'fill' ? 'Fill screen' : 'Original size'}>{FIT_LABELS[videoFit]}</button>
-                <span className={clsx('px-2 py-1 rounded text-xs font-medium cursor-pointer', isLooping ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/50')} onClick={() => setIsLooping(l => !l)} title="Toggle loop (L)">{isLooping ? 'LOOP' : 'ONCE'}</span>
+                <button onClick={cycleVideoFit} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40" title={videoFit === 'fit' ? t('viewer.fitToScreen') : videoFit === 'fill' ? t('viewer.fillScreen') : t('viewer.originalSize')}>{FIT_LABELS[videoFit]}</button>
+                <span className={clsx('px-2 py-1 rounded text-xs font-medium cursor-pointer', isLooping ? 'bg-indigo-500/30 text-indigo-300' : 'bg-white/10 text-white/50')} onClick={() => setIsLooping(l => !l)} title={t('viewer.toggleLoop')}>{isLooping ? t('viewer.loop') : t('viewer.once')}</span>
               </div>
             </div>
           </div>
@@ -767,7 +769,7 @@ export function FullscreenMediaViewer({
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0 bg-black/20">
               <h3 className="text-white font-semibold flex items-center gap-2">
                 <Info className="w-4 h-4 text-indigo-400" />
-                Generation Data
+                {t('genData.title')}
               </h3>
               <button
                 onClick={() => setShowMetadata(false)}
@@ -788,13 +790,13 @@ export function FullscreenMediaViewer({
 
                 // Grid metadata fields
                 const gridFields = [
-                  { label: 'Model', value: meta.Model || meta.model_name },
-                  { label: 'Sampler', value: meta.sampler },
-                  { label: 'Steps', value: meta.steps },
-                  { label: 'CFG Scale', value: meta.cfgScale || meta.cfg_scale },
-                  { label: 'Seed', value: meta.seed },
-                  { label: 'Clip Skip', value: meta.clipSkip || meta.clip_skip },
-                  { label: 'Size', value: meta.Size || (meta.width && meta.height ? `${meta.width}×${meta.height}` : undefined) },
+                  { label: t('genData.model'), value: meta.Model || meta.model_name },
+                  { label: t('genData.sampler'), value: meta.sampler },
+                  { label: t('genData.steps'), value: meta.steps },
+                  { label: t('genData.cfgScale'), value: meta.cfgScale || meta.cfg_scale },
+                  { label: t('genData.seed'), value: meta.seed },
+                  { label: t('genData.clipSkip'), value: meta.clipSkip || meta.clip_skip },
+                  { label: t('genData.size'), value: meta.Size || (meta.width && meta.height ? `${meta.width}×${meta.height}` : undefined) },
                 ].filter(f => f.value !== undefined && f.value !== null && f.value !== '')
 
                 // Fields we've handled specially
@@ -811,11 +813,11 @@ export function FullscreenMediaViewer({
                     {resources && resources.length > 0 && (
                       <section className="space-y-2 group/section">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Resources</h4>
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('genData.resources')}</h4>
                           <button
                             onClick={() => copyToClipboard(JSON.stringify(resources, null, 2), 'resources')}
                             className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Copy resources"
+                            title={t('genData.copyResources')}
                           >
                             {copiedField === 'resources' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                           </button>
@@ -843,11 +845,11 @@ export function FullscreenMediaViewer({
                     {prompt && (
                       <section className="space-y-2 group">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Prompt</h4>
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('genData.prompt')}</h4>
                           <button
                             onClick={() => copyToClipboard(prompt, 'prompt')}
                             className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Copy prompt"
+                            title={t('genData.copyPrompt')}
                           >
                             {copiedField === 'prompt' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                           </button>
@@ -862,11 +864,11 @@ export function FullscreenMediaViewer({
                     {negativePrompt && (
                       <section className="space-y-2 group">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-bold text-red-400/60 uppercase tracking-widest">Negative Prompt</h4>
+                          <h4 className="text-[10px] font-bold text-red-400/60 uppercase tracking-widest">{t('genData.negativePrompt')}</h4>
                           <button
                             onClick={() => copyToClipboard(negativePrompt, 'negativePrompt')}
                             className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/10 text-white/40 hover:text-red-400 transition-all"
-                            title="Copy negative prompt"
+                            title={t('genData.copyNegativePrompt')}
                           >
                             {copiedField === 'negativePrompt' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                           </button>
@@ -881,11 +883,11 @@ export function FullscreenMediaViewer({
                     {gridFields.length > 0 && (
                       <section className="space-y-2 group/section">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Parameters</h4>
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('genData.parameters')}</h4>
                           <button
                             onClick={() => copyToClipboard(JSON.stringify(Object.fromEntries(gridFields.map(f => [f.label, f.value])), null, 2), 'parameters')}
                             className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Copy parameters"
+                            title={t('genData.copyParameters')}
                           >
                             {copiedField === 'parameters' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                           </button>
@@ -905,11 +907,11 @@ export function FullscreenMediaViewer({
                     {hashes && Object.keys(hashes).length > 0 && (
                       <section className="space-y-2 group/section">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Hashes</h4>
+                          <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('genData.hashes')}</h4>
                           <button
                             onClick={() => copyToClipboard(JSON.stringify(hashes, null, 2), 'hashes')}
                             className="opacity-0 group-hover/section:opacity-100 p-1 rounded hover:bg-white/10 text-white/40 hover:text-white transition-all"
-                            title="Copy hashes"
+                            title={t('genData.copyHashes')}
                           >
                             {copiedField === 'hashes' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                           </button>
@@ -928,7 +930,7 @@ export function FullscreenMediaViewer({
                     {/* Other Fields (fallback) */}
                     {otherFields.length > 0 && (
                       <section className="space-y-2">
-                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Other</h4>
+                        <h4 className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t('genData.other')}</h4>
                         <div className="space-y-2">
                           {otherFields.map(([key, value]) => {
                             const displayKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())

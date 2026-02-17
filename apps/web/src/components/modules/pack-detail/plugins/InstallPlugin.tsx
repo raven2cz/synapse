@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Terminal,
   Play,
@@ -37,6 +38,7 @@ import type {
   PluginContext,
   PluginBadge,
 } from './types'
+import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
 // =============================================================================
@@ -61,26 +63,27 @@ interface ScriptsSectionProps {
 }
 
 function ScriptsSection({ context }: ScriptsSectionProps) {
+  const { t } = useTranslation()
   const { toast } = context
   const [runningScript, setRunningScript] = useState<string | null>(null)
 
   // Mock scripts - in full implementation, these would come from pack data
   const scripts: Script[] = [
-    { name: 'install.sh', description: 'Install the environment', status: 'idle' },
-    { name: 'start.sh', description: 'Start the server', status: 'idle' },
-    { name: 'stop.sh', description: 'Stop the server', status: 'idle' },
-    { name: 'update.sh', description: 'Update to latest version', status: 'idle' },
+    { name: 'install.sh', description: t('pack.plugins.install.scripts.install'), status: 'idle' },
+    { name: 'start.sh', description: t('pack.plugins.install.scripts.start'), status: 'idle' },
+    { name: 'stop.sh', description: t('pack.plugins.install.scripts.stop'), status: 'idle' },
+    { name: 'update.sh', description: t('pack.plugins.install.scripts.update'), status: 'idle' },
   ]
 
   const handleRunScript = async (scriptName: string) => {
     setRunningScript(scriptName)
-    toast.info(`Running ${scriptName}...`)
+    toast.info(t('pack.plugins.install.scriptRunning', { script: scriptName }))
 
     // Simulate script execution
     await new Promise(resolve => setTimeout(resolve, 2000))
 
     setRunningScript(null)
-    toast.success(`${scriptName} completed`)
+    toast.success(t('pack.plugins.install.scriptCompleted', { script: scriptName }))
   }
 
   return (
@@ -91,9 +94,9 @@ function ScriptsSection({ context }: ScriptsSectionProps) {
             <Terminal className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <h3 className="font-medium text-text-primary">Scripts</h3>
+            <h3 className="font-medium text-text-primary">{t('pack.plugins.install.scriptsTitle')}</h3>
             <p className="text-sm text-text-muted">
-              Manage installation and runtime
+              {t('pack.plugins.install.manageInstall')}
             </p>
           </div>
         </div>
@@ -140,7 +143,7 @@ function ScriptsSection({ context }: ScriptsSectionProps) {
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              Run
+              {t('pack.plugins.install.run')}
             </Button>
           </div>
         ))}
@@ -158,6 +161,7 @@ interface EnvironmentStatusProps {
 }
 
 function EnvironmentStatus(_props: EnvironmentStatusProps) {
+  const { t } = useTranslation()
   // Mock status - in full implementation, this would be fetched from backend
   const status = {
     installed: true,
@@ -180,17 +184,17 @@ function EnvironmentStatus(_props: EnvironmentStatusProps) {
             )} />
           </div>
           <div>
-            <h3 className="font-medium text-text-primary">Environment Status</h3>
+            <h3 className="font-medium text-text-primary">{t('pack.plugins.install.envStatus')}</h3>
             <p className="text-sm text-text-muted">
               {status.running ? (
-                <span className="text-green-400">Running</span>
+                <span className="text-green-400">{t('pack.plugins.install.running')}</span>
               ) : status.installed ? (
-                <span className="text-text-muted">Stopped</span>
+                <span className="text-text-muted">{t('pack.plugins.install.stopped')}</span>
               ) : (
-                <span className="text-amber-400">Not installed</span>
+                <span className="text-amber-400">{t('pack.plugins.install.notInstalled')}</span>
               )}
               {status.version && (
-                <span className="ml-2">• v{status.version}</span>
+                <span className="ml-2">• {t('pack.plugins.install.version', { version: status.version })}</span>
               )}
             </p>
           </div>
@@ -200,17 +204,17 @@ function EnvironmentStatus(_props: EnvironmentStatusProps) {
           {status.running ? (
             <Button variant="secondary" size="sm">
               <Square className="w-4 h-4" />
-              Stop
+              {t('pack.plugins.install.stop')}
             </Button>
           ) : status.installed ? (
             <Button variant="primary" size="sm">
               <Play className="w-4 h-4" />
-              Start
+              {t('pack.plugins.install.start')}
             </Button>
           ) : (
             <Button variant="primary" size="sm">
               <Download className="w-4 h-4" />
-              Install
+              {t('pack.plugins.install.install')}
             </Button>
           )}
         </div>
@@ -224,6 +228,7 @@ function EnvironmentStatus(_props: EnvironmentStatusProps) {
 // =============================================================================
 
 function PrototypeNotice() {
+  const { t } = useTranslation()
   return (
     <Card className={clsx(
       'p-4 bg-amber-500/10 border-amber-500/30',
@@ -232,11 +237,9 @@ function PrototypeNotice() {
       <div className="flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
         <div>
-          <h3 className="font-medium text-amber-400">Install Pack (Prototype)</h3>
+          <h3 className="font-medium text-amber-400">{t('pack.plugins.install.protoTitle')}</h3>
           <p className="text-sm text-text-muted mt-1">
-            This is a prototype implementation. Full install pack functionality
-            (script execution, console output, environment management) will be
-            implemented in a future update.
+            {t('pack.plugins.install.protoDesc')}
           </p>
         </div>
       </div>
@@ -250,7 +253,7 @@ function PrototypeNotice() {
 
 export const InstallPlugin: PackPlugin = {
   id: 'install',
-  name: 'Install Pack',
+  get name() { return i18n.t('pack.plugins.install.title') },
   priority: 100, // Highest - most specific match
 
   appliesTo: (pack: PackDetail) => {
@@ -259,10 +262,10 @@ export const InstallPlugin: PackPlugin = {
   },
 
   getBadge: (): PluginBadge => ({
-    label: 'Install',
+    label: i18n.t('pack.plugins.install.install'),
     variant: 'warning',
     icon: 'Terminal',
-    tooltip: 'Installation pack for UI environment',
+    tooltip: i18n.t('pack.plugins.install.subtitle'),
   }),
 
   features: {
@@ -284,10 +287,10 @@ export const InstallPlugin: PackPlugin = {
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => context.toast.info('Console feature coming soon')}
+          onClick={() => context.toast.info(i18n.t('pack.plugins.install.consoleSoon'))}
         >
           <Terminal className="w-4 h-4" />
-          Console
+          {i18n.t('pack.plugins.install.console')}
         </Button>
       </>
     )
@@ -312,7 +315,7 @@ export const InstallPlugin: PackPlugin = {
     const errors: Record<string, string> = {}
 
     if (changes.description !== undefined && changes.description.length > 5000) {
-      errors.description = 'Description is too long'
+      errors.description = i18n.t('pack.plugins.install.descTooLong')
     }
 
     return {

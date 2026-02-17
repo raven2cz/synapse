@@ -13,6 +13,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Info, Edit3, Sliders, Maximize2, Minimize2, Sparkles, Settings2, ChevronDown, ChevronRight,
   Layers, Zap, Paintbrush, Grid3X3, Cpu, Box, Image, Bot,
@@ -55,78 +56,19 @@ const PARAM_CATEGORIES: Record<CategoryKey, string[]> = {
   custom: [],
 }
 
-const PARAM_LABELS: Record<string, string> = {
-  sampler: 'Sampler',
-  scheduler: 'Scheduler',
-  steps: 'Steps',
-  cfg_scale: 'CFG Scale',
-  clip_skip: 'Clip Skip',
-  denoise: 'Denoise',
-  seed: 'Seed',
-  strength: 'LoRA Strength',
-  strength_recommended: 'Recommended Strength',
-  eta: 'Eta',
-  width: 'Width',
-  height: 'Height',
-  aspect_ratio: 'Aspect Ratio',
-  hires_fix: 'HiRes Fix',
-  hires_upscaler: 'Upscaler',
-  hires_steps: 'HiRes Steps',
-  hires_denoise: 'HiRes Denoise',
-  hires_scale: 'HiRes Scale',
-  hires_width: 'HiRes Width',
-  hires_height: 'HiRes Height',
-  vae: 'VAE',
-  base_model: 'Base Model',
-  model_hash: 'Model Hash',
-  controlnet_enabled: 'ControlNet',
-  controlnet_strength: 'CN Strength',
-  controlnet_start: 'CN Start',
-  controlnet_end: 'CN End',
-  controlnet_model: 'CN Model',
-  control_mode: 'Control Mode',
-  inpaint_full_res: 'Full Res',
-  inpaint_full_res_padding: 'Padding',
-  mask_blur: 'Mask Blur',
-  inpainting_fill: 'Fill',
-  batch_size: 'Batch Size',
-  batch_count: 'Batch Count',
-  n_iter: 'Iterations',
-  s_noise: 'Sigma Noise',
-  s_churn: 'Sigma Churn',
-  s_tmin: 'Sigma Tmin',
-  s_tmax: 'Sigma Tmax',
-  noise_offset: 'Noise Offset',
-  tiling: 'Tiling',
-  ensd: 'ENSD',
-  refiner_checkpoint: 'Refiner',
-  refiner_switch: 'Refiner Switch',
-  aesthetic_score: 'Aesthetic Score',
-  negative_aesthetic_score: 'Neg Aesthetic',
-  freeu_enabled: 'FreeU',
-  freeu_b1: 'FreeU B1',
-  freeu_b2: 'FreeU B2',
-  freeu_s1: 'FreeU S1',
-  freeu_s2: 'FreeU S2',
-  ip_adapter_enabled: 'IP-Adapter',
-  ip_adapter_weight: 'IP Weight',
-  ip_adapter_noise: 'IP Noise',
-  ip_adapter_model: 'IP Model',
-}
-
-const CATEGORY_META: Record<CategoryKey, { label: string; icon: React.ElementType; color: string }> = {
-  generation: { label: 'Generation', icon: Sliders, color: 'text-synapse' },
-  resolution: { label: 'Resolution', icon: Maximize2, color: 'text-blue-400' },
-  hires: { label: 'HiRes Fix', icon: Sparkles, color: 'text-amber-400' },
-  model: { label: 'Model', icon: Layers, color: 'text-green-400' },
-  controlnet: { label: 'ControlNet', icon: Zap, color: 'text-cyan-400' },
-  inpainting: { label: 'Inpainting', icon: Paintbrush, color: 'text-pink-400' },
-  batch: { label: 'Batch', icon: Grid3X3, color: 'text-orange-400' },
-  advanced: { label: 'Advanced', icon: Cpu, color: 'text-red-400' },
-  sdxl: { label: 'SDXL', icon: Box, color: 'text-violet-400' },
-  freeu: { label: 'FreeU', icon: Image, color: 'text-teal-400' },
-  ipadapter: { label: 'IP-Adapter', icon: Image, color: 'text-indigo-400' },
-  custom: { label: 'Custom', icon: Settings2, color: 'text-purple-400' },
+const CATEGORY_META: Record<CategoryKey, { labelKey: string; icon: React.ElementType; color: string }> = {
+  generation: { labelKey: 'generation', icon: Sliders, color: 'text-synapse' },
+  resolution: { labelKey: 'resolution', icon: Maximize2, color: 'text-blue-400' },
+  hires: { labelKey: 'hires', icon: Sparkles, color: 'text-amber-400' },
+  model: { labelKey: 'model', icon: Layers, color: 'text-green-400' },
+  controlnet: { labelKey: 'controlnet', icon: Zap, color: 'text-cyan-400' },
+  inpainting: { labelKey: 'inpainting', icon: Paintbrush, color: 'text-pink-400' },
+  batch: { labelKey: 'batch', icon: Grid3X3, color: 'text-orange-400' },
+  advanced: { labelKey: 'advanced', icon: Cpu, color: 'text-red-400' },
+  sdxl: { labelKey: 'sdxl', icon: Box, color: 'text-violet-400' },
+  freeu: { labelKey: 'freeu', icon: Image, color: 'text-teal-400' },
+  ipadapter: { labelKey: 'ipadapter', icon: Image, color: 'text-indigo-400' },
+  custom: { labelKey: 'custom', icon: Settings2, color: 'text-purple-400' },
 }
 
 const HIGHLIGHT_PARAMS = new Set(['clip_skip', 'strength', 'strength_recommended'])
@@ -228,13 +170,13 @@ const AI_NOTES_LABELS: Record<string, string> = {
 // Utility Functions
 // =============================================================================
 
-function getParamLabel(key: string): string {
-  return PARAM_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+function getParamLabel(key: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  return t('pack.parameters.labels.' + key, { defaultValue: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) })
 }
 
-function formatParamValue(_key: string, value: unknown): string {
+function formatParamValue(_key: string, value: unknown, translate?: (key: string) => string): string {
   if (value === null || value === undefined) return ''
-  if (typeof value === 'boolean') return value ? 'Enabled' : 'Disabled'
+  if (typeof value === 'boolean') return value ? (translate?.('pack.parameters.enabled') ?? 'Enabled') : (translate?.('pack.parameters.disabled') ?? 'Disabled')
   if (typeof value === 'number') {
     if (Number.isInteger(value)) return value.toString()
     return value.toFixed(2).replace(/\.?0+$/, '')
@@ -331,6 +273,7 @@ function CategoryGroup({
   collapsible = false,
   defaultExpanded = true
 }: CategoryGroupProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
@@ -354,13 +297,13 @@ function CategoryGroup({
             <ChevronRight className="w-3 h-3" />
           )}
           <Icon className={clsx("w-3 h-3", meta.color)} />
-          <span>{meta.label}</span>
+          <span>{t('pack.parameters.categories.' + meta.labelKey)}</span>
           <span className="text-text-muted/60">({params.length})</span>
         </button>
       ) : (
         <div className="flex items-center gap-1.5 mb-2">
           <Icon className={clsx("w-3 h-3", meta.color)} />
-          <span className="text-xs text-text-muted">{meta.label}</span>
+          <span className="text-xs text-text-muted">{t('pack.parameters.categories.' + meta.labelKey)}</span>
         </div>
       )}
 
@@ -369,7 +312,7 @@ function CategoryGroup({
           {params.map(({ key, value, highlight }) => (
             <ParameterCard
               key={key}
-              label={getParamLabel(key)}
+              label={getParamLabel(key, t)}
               value={value}
               highlight={highlight}
               large={!['sampler', 'scheduler', 'hires_upscaler', 'vae', 'base_model'].includes(key)}
@@ -391,6 +334,7 @@ export function PackParametersSection({
   onEdit,
   animationDelay = 0,
 }: PackParametersSectionProps) {
+  const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   // Collect and categorize all parameters
@@ -414,7 +358,7 @@ export function PackParametersSection({
     if (modelInfo?.strength_recommended != null) {
       result.generation.push({
         key: 'strength_recommended',
-        value: formatParamValue('strength_recommended', modelInfo.strength_recommended),
+        value: formatParamValue('strength_recommended', modelInfo.strength_recommended, t),
         highlight: true,
       })
     }
@@ -446,7 +390,7 @@ export function PackParametersSection({
         // User-added custom fields (not in _ai_fields) go to Custom.
         if (isFromAi && category === 'custom') continue
 
-        const formatted = formatParamValue(key, value)
+        const formatted = formatParamValue(key, value, t)
 
         if (formatted) {
           result[category].push({
@@ -468,7 +412,7 @@ export function PackParametersSection({
     }
 
     return result
-  }, [parameters, modelInfo])
+  }, [parameters, modelInfo, t])
 
   // Helper to format AI note values nicely
   const formatNoteValue = useCallback((value: unknown): string => {
@@ -540,7 +484,7 @@ export function PackParametersSection({
         let label: string
         if (isRawField) {
           const fieldName = key.replace('_raw_', '')
-          label = (PARAM_LABELS[fieldName] || fieldName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) + ' (raw)'
+          label = getParamLabel(fieldName, t) + ` ${t('pack.parameters.raw')}`
         } else if (isUnknownFromAi) {
           // AI-extracted unknown field - nice label
           label = AI_NOTES_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
@@ -561,7 +505,7 @@ export function PackParametersSection({
     }
 
     return notes
-  }, [parameters, formatNoteValue])
+  }, [parameters, formatNoteValue, t])
 
   // Check if any parameters exist
   const hasParameters = Object.values(categorizedParams).some(arr => arr.length > 0)
@@ -583,7 +527,7 @@ export function PackParametersSection({
           <div className="flex items-center gap-3">
             <h3 className="text-sm font-semibold text-synapse flex items-center gap-2">
               <Sliders className="w-4 h-4" />
-              Generation Settings
+              {t('pack.parameters.generationSettings')}
             </h3>
             {/* Extracted by indicator */}
             {parameters?._extracted_by && (
@@ -603,17 +547,17 @@ export function PackParametersSection({
                 'bg-slate-mid/30 hover:bg-slate-mid/50',
                 'transition-colors duration-200'
               )}
-              title={isCollapsed ? 'Expand settings' : 'Collapse settings'}
+              title={isCollapsed ? t('pack.parameters.expandSettings') : t('pack.parameters.collapseSettings')}
             >
               {isCollapsed ? (
                 <>
                   <Maximize2 className="w-3.5 h-3.5" />
-                  Expand
+                  {t('pack.gallery.expand')}
                 </>
               ) : (
                 <>
                   <Minimize2 className="w-3.5 h-3.5" />
-                  Collapse
+                  {t('pack.gallery.collapse')}
                 </>
               )}
             </button>
@@ -627,7 +571,7 @@ export function PackParametersSection({
               )}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              Edit
+              {t('pack.parameters.edit')}
             </button>
           </div>
         </div>
@@ -638,7 +582,7 @@ export function PackParametersSection({
             'transition-[max-height] duration-300 ease-in-out overflow-hidden',
             isCollapsed
               ? 'max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
-              : 'max-h-[3000px]'
+              : 'max-h-[10000px]'
           )}
         >
         {/* Parameters - Categorized in flex grid */}
@@ -658,7 +602,7 @@ export function PackParametersSection({
           <div className="text-center py-6">
             <Info className="w-8 h-8 mx-auto mb-2 text-text-muted/50" />
             <p className="text-text-muted text-sm">
-              No generation parameters set. Click Edit to add some.
+              {t('pack.parameters.noParams')}
             </p>
           </div>
         )}
@@ -670,7 +614,7 @@ export function PackParametersSection({
               <div className="p-1.5 rounded-lg bg-gradient-to-br from-amber-500/20 to-orange-500/10">
                 <Lightbulb className="w-4 h-4 text-amber-400" />
               </div>
-              <span className="text-sm font-medium text-text-secondary">AI Insights</span>
+              <span className="text-sm font-medium text-text-secondary">{t('pack.parameters.aiInsights')}</span>
             </div>
 
             <div className="space-y-3">

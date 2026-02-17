@@ -17,6 +17,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import {
   Play,
   Pause,
@@ -83,6 +84,8 @@ export function VideoPlayer({
   onEnded,
   onError,
 }: VideoPlayerProps) {
+  const { t } = useTranslation()
+
   // State
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(initialMuted)
@@ -389,7 +392,7 @@ export function VideoPlayer({
       {hasError && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 gap-2">
           <AlertTriangle className="w-12 h-12 text-red-500" />
-          <span className="text-white/70">Failed to load video</span>
+          <span className="text-white/70">{t('media.videoLoadFailed')}</span>
         </div>
       )}
 

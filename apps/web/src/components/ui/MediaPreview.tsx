@@ -16,6 +16,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { clsx } from 'clsx'
 import { Volume2, VolumeX, EyeOff } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 // ============================================================================
@@ -197,6 +198,7 @@ export function MediaPreview({
 }: MediaPreviewProps) {
   // Handle alias: playOnHover is alias for playFullOnHover
   const playFullOnHover = playFullOnHoverProp ?? playOnHover ?? true
+  const { t } = useTranslation()
 
   // Use prop if provided, otherwise use selector for efficient re-renders
   const nsfwBlurEnabledStore = useSettingsStore((state) => state.nsfwBlurEnabled)
@@ -444,7 +446,7 @@ export function MediaPreview({
       {/* Error state */}
       {imageError && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-800 text-slate-500">
-          <span className="text-sm">Failed to load</span>
+          <span className="text-sm">{t('media.loadFailed')}</span>
         </div>
       )}
 
@@ -458,7 +460,7 @@ export function MediaPreview({
         >
           <div className="bg-slate-900/90 p-3 rounded-xl text-center shadow-lg">
             <EyeOff className="w-6 h-6 text-slate-400 mx-auto mb-1" />
-            <span className="text-xs text-slate-400">NSFW</span>
+            <span className="text-xs text-slate-400">{t('media.nsfw')}</span>
           </div>
         </div>
       )}
@@ -473,7 +475,7 @@ export function MediaPreview({
             'text-slate-400 hover:text-white',
             'transition-colors duration-200'
           )}
-          title="Hide content"
+          title={t('media.hideContent')}
         >
           <EyeOff className="w-4 h-4" />
         </button>
@@ -484,14 +486,14 @@ export function MediaPreview({
         <button
           onClick={handleRevealToggle}
           className="absolute inset-0 z-10 cursor-pointer"
-          title="Click to reveal"
+          title={t('media.clickToReveal')}
         />
       )}
 
       {/* NSFW Badge - shown when blur is disabled globally */}
       {nsfw && !nsfwBlurEnabled && (
         <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-red-500/80 text-white text-xs font-medium z-20">
-          NSFW
+          {t('media.nsfw')}
         </div>
       )}
 
@@ -509,7 +511,7 @@ export function MediaPreview({
       {/* Video indicator badge - bottom left */}
       {isVideo && !showVideo && !videoError && (
         <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded-md z-10">
-          VIDEO
+          {t('media.video')}
         </div>
       )}
 
@@ -518,7 +520,7 @@ export function MediaPreview({
         <button
           className="absolute bottom-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
           onClick={handleMuteToggle}
-          title={isMuted ? 'Unmute' : 'Mute'}
+          title={isMuted ? t('media.unmute') : t('media.mute')}
         >
           {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>

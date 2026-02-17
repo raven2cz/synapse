@@ -71,13 +71,13 @@ export interface CreatePackData {
 // Pack Type Options
 // =============================================================================
 
-const PACK_TYPES: { value: AssetType; labelKey: string }[] = [
-  { value: 'lora', labelKey: 'LoRA' },
-  { value: 'checkpoint', labelKey: 'Checkpoint' },
-  { value: 'vae', labelKey: 'VAE' },
-  { value: 'controlnet', labelKey: 'ControlNet' },
-  { value: 'embedding', labelKey: 'Embedding' },
-  { value: 'upscaler', labelKey: 'Upscaler' },
+const PACK_TYPES: { value: AssetType }[] = [
+  { value: 'lora' },
+  { value: 'checkpoint' },
+  { value: 'vae' },
+  { value: 'controlnet' },
+  { value: 'embedding' },
+  { value: 'upscaler' },
 ]
 
 // =============================================================================
@@ -319,7 +319,7 @@ export function CreatePackModal({
               {t('pack.modals.create.type')}
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {PACK_TYPES.map(({ value, labelKey }) => {
+              {PACK_TYPES.map(({ value }) => {
                 const icon = ASSET_TYPE_ICONS[value] || ASSET_TYPE_ICONS.other
                 return (
                   <button
@@ -335,7 +335,7 @@ export function CreatePackModal({
                     )}
                   >
                     <span className="text-lg">{icon}</span>
-                    <span className="font-medium">{labelKey}</span>
+                    <span className="font-medium">{t(`inventory.assetKind.${value}`)}</span>
                   </button>
                 )
               })}

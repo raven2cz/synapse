@@ -1,4 +1,5 @@
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import { ArrowDown, ArrowUp, Trash2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import type { PackBackupSummary } from '../inventory/types'
@@ -47,12 +48,13 @@ export function PackStorageActions({
   // OR if all are synced (we can still free local space)
   const canPushAndFree = backupEnabled && backupConnected && hasLocal
 
+  const { t } = useTranslation()
   const isLoading = isPulling || isPushing
 
   if (!backupEnabled) {
     return (
       <div className={clsx('text-sm text-text-muted italic', className)}>
-        Configure external backup in Settings to sync models
+        {t('packStorage.configureBackup')}
       </div>
     )
   }
@@ -60,7 +62,7 @@ export function PackStorageActions({
   if (!backupConnected) {
     return (
       <div className={clsx('text-sm text-amber-400 italic', className)}>
-        External backup storage offline
+        {t('packStorage.backupOffline')}
       </div>
     )
   }
@@ -77,14 +79,14 @@ export function PackStorageActions({
           'gap-1.5',
           canPull && 'bg-blue-600 hover:bg-blue-500'
         )}
-        title={canPull ? `Restore ${summary.backup_only} models from external backup` : 'All models already on local disk'}
+        title={canPull ? t('packStorage.restoreTitle', { count: summary.backup_only }) : t('packStorage.allLocal')}
       >
         {isPulling ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
           <ArrowDown className="w-4 h-4" />
         )}
-        Restore
+        {t('packStorage.restore')}
       </Button>
 
       {/* Backup to external storage button */}
@@ -97,14 +99,14 @@ export function PackStorageActions({
           'gap-1.5',
           canPush && 'bg-amber-600 hover:bg-amber-500'
         )}
-        title={canPush ? `Backup ${summary.local_only} models to external storage` : 'All models already backed up'}
+        title={canPush ? t('packStorage.backupTitle', { count: summary.local_only }) : t('packStorage.allBackedUp')}
       >
         {isPushing && !isPulling ? (
           <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
           <ArrowUp className="w-4 h-4" />
         )}
-        Backup
+        {t('packStorage.backup')}
       </Button>
 
       {/* Backup and free local space button */}
@@ -114,11 +116,11 @@ export function PackStorageActions({
         onClick={onPushAndFree}
         disabled={!canPushAndFree || isLoading}
         className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-        title="Backup models to external storage and delete local copies to free disk space"
+        title={t('packStorage.backupAndFreeTitle')}
       >
         <ArrowUp className="w-4 h-4" />
         <Trash2 className="w-3 h-3" />
-        Backup & Free
+        {t('packStorage.backupAndFree')}
       </Button>
     </div>
   )

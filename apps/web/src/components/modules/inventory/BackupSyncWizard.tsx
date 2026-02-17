@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -71,6 +72,7 @@ export function BackupSyncWizard({
   onExecuteBlob,
   onComplete,
 }: BackupSyncWizardProps) {
+  const { t } = useTranslation()
   const [step, setStep] = useState<WizardStep>('preview')
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [previewResult, setPreviewResult] = useState<SyncResult | null>(null)
@@ -227,12 +229,12 @@ export function BackupSyncWizard({
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-primary">
-                {isToBackup ? 'Backup to External Storage' : 'Restore from Backup'}
+                {isToBackup ? t('inventory.sync.backupTitle') : t('inventory.sync.restoreTitle')}
               </h2>
               <p className="text-sm text-text-muted">
                 {isToBackup
-                  ? 'Copy local-only blobs to backup storage'
-                  : 'Restore backup-only blobs to local storage'}
+                  ? t('inventory.sync.backupSubtitle')
+                  : t('inventory.sync.restoreSubtitle')}
               </p>
             </div>
           </div>
@@ -273,11 +275,11 @@ export function BackupSyncWizard({
               <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-green-500/20 flex items-center justify-center">
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
-              <h3 className="text-lg font-medium text-text-primary mb-2">Already Synced!</h3>
+              <h3 className="text-lg font-medium text-text-primary mb-2">{t('inventory.sync.alreadySynced')}</h3>
               <p className="text-text-muted">
                 {isToBackup
-                  ? 'All local blobs are already backed up.'
-                  : 'All backup blobs are already restored locally.'}
+                  ? t('inventory.sync.allBackedUp')
+                  : t('inventory.sync.allRestored')}
               </p>
             </div>
           )}
@@ -289,11 +291,11 @@ export function BackupSyncWizard({
               <div className="grid grid-cols-2 gap-4">
                 <Card padding="md" className="text-center">
                   <div className="text-3xl font-bold text-text-primary">{previewResult.blobs_to_sync}</div>
-                  <div className="text-sm text-text-muted mt-1">Blobs to {isToBackup ? 'backup' : 'restore'}</div>
+                  <div className="text-sm text-text-muted mt-1">{isToBackup ? t('inventory.sync.blobsToBackup') : t('inventory.sync.blobsToRestore')}</div>
                 </Card>
                 <Card padding="md" className="text-center">
                   <div className="text-3xl font-bold text-synapse">{formatBytes(previewResult.bytes_to_sync)}</div>
-                  <div className="text-sm text-text-muted mt-1">Total size</div>
+                  <div className="text-sm text-text-muted mt-1">{t('inventory.sync.totalSize')}</div>
                 </Card>
               </div>
 
@@ -301,7 +303,7 @@ export function BackupSyncWizard({
               <div className="flex items-center justify-center gap-4 py-4">
                 <div className="flex items-center gap-2">
                   <HardDrive className={clsx('w-6 h-6', isToBackup ? 'text-synapse' : 'text-text-muted')} />
-                  <span className="text-sm text-text-secondary">Local</span>
+                  <span className="text-sm text-text-secondary">{t('inventory.sync.local')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {isToBackup ? (
@@ -320,14 +322,14 @@ export function BackupSyncWizard({
                 </div>
                 <div className="flex items-center gap-2">
                   <Cloud className={clsx('w-6 h-6', isToBackup ? 'text-text-muted' : 'text-synapse')} />
-                  <span className="text-sm text-text-secondary">Backup</span>
+                  <span className="text-sm text-text-secondary">{t('inventory.sync.backup')}</span>
                 </div>
               </div>
 
               {/* Items list */}
               <div>
                 <h4 className="text-sm font-medium text-text-secondary mb-3">
-                  Items to sync ({previewResult.items.length})
+                  {t('inventory.sync.itemsToSync', { count: previewResult.items.length })}
                 </h4>
                 <div className="max-h-48 overflow-y-auto border border-slate-mid/30 rounded-xl">
                   {previewResult.items.map((item) => (
@@ -354,10 +356,10 @@ export function BackupSyncWizard({
                 <div className="flex justify-between text-sm">
                   <span className="text-text-secondary">
                     {isCompleted
-                      ? `${completedItems} ${isToBackup ? 'backed up' : 'restored'}`
+                      ? (isToBackup ? t('inventory.sync.backedUpCount', { count: completedItems }) : t('inventory.sync.restoredCount', { count: completedItems }))
                       : hasFailed
-                        ? `${completedItems} completed, ${failedItems} failed`
-                        : `${isToBackup ? 'Backing up' : 'Restoring'}...`}
+                        ? t('inventory.sync.completedAndFailed', { completed: completedItems, failed: failedItems })
+                        : (isToBackup ? t('inventory.sync.backingUp') : t('inventory.sync.restoring'))}
                   </span>
                   <span className="text-text-primary font-medium">{progressPercent.toFixed(0)}%</span>
                 </div>
@@ -381,10 +383,10 @@ export function BackupSyncWizard({
                   {isRunning && bytesPerSecond > 0 && (
                     <span>
                       {formatSpeed(bytesPerSecond)}
-                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${formatDuration(etaSeconds)} remaining`}
+                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${t('inventory.sync.remaining', { duration: formatDuration(etaSeconds) })}`}
                     </span>
                   )}
-                  {isCompleted && elapsedSeconds > 0 && <span>Completed in {formatDuration(elapsedSeconds)}</span>}
+                  {isCompleted && elapsedSeconds > 0 && <span>{t('inventory.sync.completedIn', { duration: formatDuration(elapsedSeconds) })}</span>}
                 </div>
               </div>
 
@@ -406,7 +408,7 @@ export function BackupSyncWizard({
               {/* Item counter */}
               {isRunning && (
                 <div className="text-sm text-text-muted text-center">
-                  Processing {completedItems + failedItems + 1} of {totalItems}...
+                  {t('inventory.sync.processing', { current: completedItems + failedItems + 1, total: totalItems })}
                 </div>
               )}
 
@@ -416,7 +418,7 @@ export function BackupSyncWizard({
                   <div className="flex items-center gap-3">
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                     <span className="text-sm text-red-400">
-                      {failedItems} file{failedItems !== 1 ? 's' : ''} failed
+                      {t('inventory.sync.filesFailed', { count: failedItems })}
                     </span>
                   </div>
                   {progress?.errors && progress.errors.length > 0 && (
@@ -427,7 +429,7 @@ export function BackupSyncWizard({
                         </div>
                       ))}
                       {progress.errors.length > 3 && (
-                        <div className="text-xs text-red-400/60">...and {progress.errors.length - 3} more</div>
+                        <div className="text-xs text-red-400/60">{t('inventory.sync.moreErrors', { count: progress.errors.length - 3 })}</div>
                       )}
                     </div>
                   )}
@@ -443,10 +445,10 @@ export function BackupSyncWizard({
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
               <h3 className="text-xl font-bold text-text-primary mb-2">
-                {isToBackup ? 'Backup Complete!' : 'Restore Complete!'}
+                {isToBackup ? t('inventory.sync.backupComplete') : t('inventory.sync.restoreComplete')}
               </h3>
               <p className="text-text-muted mb-6">
-                Successfully synced {completedItems} blob{completedItems !== 1 ? 's' : ''}
+                {t('inventory.sync.successfullySynced', { count: completedItems })}
               </p>
 
               <div className="inline-flex items-center gap-3 px-6 py-3 bg-green-500/10 border border-green-500/20 rounded-xl">
@@ -455,11 +457,11 @@ export function BackupSyncWizard({
                 ) : (
                   <HardDrive className="w-5 h-5 text-green-500" />
                 )}
-                <span className="text-lg font-medium text-green-400">{formatBytes(transferredBytes)} transferred</span>
+                <span className="text-lg font-medium text-green-400">{t('inventory.sync.transferred', { size: formatBytes(transferredBytes) })}</span>
               </div>
 
               {elapsedSeconds > 0 && (
-                <p className="text-sm text-text-muted mt-4">Completed in {formatDuration(elapsedSeconds)}</p>
+                <p className="text-sm text-text-muted mt-4">{t('inventory.sync.completedIn', { duration: formatDuration(elapsedSeconds) })}</p>
               )}
             </div>
           )}
@@ -468,14 +470,14 @@ export function BackupSyncWizard({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-mid/30">
           <div className="text-xs text-text-muted">
-            {step === 'syncing' || step === 'complete' ? `${completedItems}/${totalItems} files` : ''}
+            {step === 'syncing' || step === 'complete' ? t('inventory.sync.filesProgress', { completed: completedItems, total: totalItems }) : ''}
           </div>
 
           <div className="flex gap-2">
             {step === 'preview' && (
               <>
                 <Button variant="secondary" onClick={handleClose}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 {previewResult && previewResult.blobs_to_sync > 0 && (
                   <Button
@@ -483,7 +485,7 @@ export function BackupSyncWizard({
                     onClick={handleSync}
                     leftIcon={isToBackup ? <Upload className="w-4 h-4" /> : <Download className="w-4 h-4" />}
                   >
-                    {isToBackup ? 'Start Backup' : 'Start Restore'}
+                    {isToBackup ? t('inventory.sync.startBackup') : t('inventory.sync.startRestore')}
                   </Button>
                 )}
               </>
@@ -491,7 +493,7 @@ export function BackupSyncWizard({
 
             {step === 'syncing' && isRunning && (
               <Button variant="ghost" size="sm" onClick={cancel} leftIcon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
 
@@ -502,13 +504,13 @@ export function BackupSyncWizard({
                 onClick={handleRetry}
                 leftIcon={<RotateCcw className="w-4 h-4" />}
               >
-                Retry Failed ({failedItems})
+                {t('inventory.sync.retryFailed', { count: failedItems })}
               </Button>
             )}
 
             {(step === 'complete' || (step === 'syncing' && (isCompleted || (isFailed && !progress?.can_resume)))) && (
               <Button variant="primary" onClick={handleClose}>
-                Close
+                {t('common.close')}
               </Button>
             )}
           </div>

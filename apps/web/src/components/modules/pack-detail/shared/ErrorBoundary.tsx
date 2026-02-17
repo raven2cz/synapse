@@ -12,6 +12,7 @@
  */
 
 import { Component, type ReactNode, type ErrorInfo } from 'react'
+import { t } from 'i18next'
 import { AlertTriangle, RefreshCw, Home, ChevronDown, ChevronUp } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -131,11 +132,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
             {/* Error Message */}
             <h2 className="text-2xl font-bold text-text-primary mb-3">
-              Something went wrong
+              {t('pack.shared.errorBoundary.somethingWentWrong')}
             </h2>
             <p className="text-text-muted mb-6">
-              An unexpected error occurred while rendering this component.
-              Please try again or return to the home page.
+              {t('pack.shared.errorBoundary.unexpectedError')}{' '}
+              {t('pack.shared.errorBoundary.tryAgainHint')}
             </p>
 
             {/* Error Details (Dev Mode) */}
@@ -153,7 +154,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   ) : (
                     <ChevronDown className="w-4 h-4" />
                   )}
-                  {showStack ? 'Hide' : 'Show'} Error Details
+                  {showStack ? t('pack.shared.errorBoundary.hideErrors') : t('pack.shared.errorBoundary.showErrors')}
                 </button>
 
                 {showStack && (
@@ -184,7 +185,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 className="flex items-center gap-2"
               >
                 <Home className="w-4 h-4" />
-                Go Home
+                {t('pack.shared.errorBoundary.goHome')}
               </Button>
               <Button
                 variant="primary"
@@ -192,7 +193,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 className="flex items-center gap-2"
               >
                 <RefreshCw className="w-4 h-4" />
-                Try Again
+                {t('pack.shared.errorBoundary.tryAgain')}
               </Button>
             </div>
           </Card>
@@ -217,7 +218,7 @@ export function useErrorFallback(error: Error | null): ReactNode {
   return (
     <div className="flex flex-col items-center justify-center p-8 text-center">
       <AlertTriangle className="w-12 h-12 text-red-400 mb-4" />
-      <h3 className="text-lg font-bold text-text-primary mb-2">Error</h3>
+      <h3 className="text-lg font-bold text-text-primary mb-2">{t('pack.shared.errorBoundary.error')}</h3>
       <p className="text-text-muted text-sm">{error.message}</p>
     </div>
   )
@@ -287,10 +288,10 @@ export class SectionErrorBoundary extends Component<
         <Card className={clsx('p-6 text-center', ANIMATION_PRESETS.fadeIn)}>
           <div className="flex items-center justify-center gap-3 text-amber-400 mb-3">
             <AlertTriangle className="w-5 h-5" />
-            <span className="font-medium">Failed to load {sectionName}</span>
+            <span className="font-medium">{t('pack.shared.errorBoundary.failedToLoad', { section: sectionName })}</span>
           </div>
           <p className="text-text-muted text-sm mb-4">
-            This section encountered an error.
+            {t('pack.shared.errorBoundary.sectionError')}
           </p>
           {/* Show error message in dev mode */}
           {error && typeof window !== 'undefined' && window.location.hostname === 'localhost' && (
@@ -300,7 +301,7 @@ export class SectionErrorBoundary extends Component<
           )}
           <Button variant="secondary" size="sm" onClick={this.handleRetry}>
             <RefreshCw className="w-4 h-4" />
-            Retry
+            {t('pack.shared.errorBoundary.retry')}
           </Button>
         </Card>
       )

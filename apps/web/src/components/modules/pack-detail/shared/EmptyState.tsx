@@ -5,6 +5,7 @@
  * and optional action button.
  */
 
+import { useTranslation } from 'react-i18next'
 import {
   Image,
   Package,
@@ -33,38 +34,38 @@ export type EmptyStatePreset =
  */
 const presetConfig: Record<EmptyStatePreset, {
   icon: LucideIcon
-  title: string
-  description: string
-  actionLabel?: string
+  titleKey: string
+  descriptionKey: string
+  actionKey?: string
 }> = {
   gallery: {
     icon: Image,
-    title: 'No Previews',
-    description: 'Add preview images or videos to showcase this pack.',
-    actionLabel: 'Add Preview',
+    titleKey: 'pack.emptyState.gallery.title',
+    descriptionKey: 'pack.emptyState.gallery.description',
+    actionKey: 'pack.emptyState.gallery.action',
   },
   dependencies: {
     icon: Package,
-    title: 'No Dependencies',
-    description: 'Add models, LoRAs, or other assets to this pack.',
-    actionLabel: 'Add Dependency',
+    titleKey: 'pack.emptyState.dependencies.title',
+    descriptionKey: 'pack.emptyState.dependencies.description',
+    actionKey: 'pack.emptyState.dependencies.action',
   },
   workflows: {
     icon: GitBranch,
-    title: 'No Workflows',
-    description: 'Add ComfyUI workflows to enable generation.',
-    actionLabel: 'Add Workflow',
+    titleKey: 'pack.emptyState.workflows.title',
+    descriptionKey: 'pack.emptyState.workflows.description',
+    actionKey: 'pack.emptyState.workflows.action',
   },
   parameters: {
     icon: Sliders,
-    title: 'No Parameters',
-    description: 'Set recommended generation parameters for this pack.',
-    actionLabel: 'Set Parameters',
+    titleKey: 'pack.emptyState.parameters.title',
+    descriptionKey: 'pack.emptyState.parameters.description',
+    actionKey: 'pack.emptyState.parameters.action',
   },
   custom: {
     icon: FileJson,
-    title: 'No Data',
-    description: 'Nothing to display here.',
+    titleKey: 'pack.emptyState.custom.title',
+    descriptionKey: 'pack.emptyState.custom.description',
   },
 }
 
@@ -132,13 +133,14 @@ export function EmptyState({
   animate = true,
   className,
 }: EmptyStateProps) {
+  const { t } = useTranslation()
   const config = presetConfig[preset]
 
   // Resolve values (custom overrides preset)
   const Icon = customIcon ?? config.icon
-  const title = customTitle ?? config.title
-  const description = customDescription ?? config.description
-  const actionLabel = customActionLabel ?? config.actionLabel
+  const title = customTitle ?? t(config.titleKey)
+  const description = customDescription ?? t(config.descriptionKey)
+  const actionLabel = customActionLabel ?? (config.actionKey ? t(config.actionKey) : undefined)
 
   // Size classes
   const sizeClasses = {

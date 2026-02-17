@@ -16,6 +16,7 @@
  * - Staggered animation
  */
 
+import { useTranslation } from 'react-i18next'
 import { DownloadCloud } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
@@ -64,12 +65,13 @@ export interface PackStorageSectionProps {
 // =============================================================================
 
 function LoadingSkeleton() {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <DownloadCloud className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-semibold text-text-primary">Backup Storage</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{t('pack.storage.backupStorage')}</h3>
         </div>
         <div className="h-5 w-24 bg-slate-mid/50 rounded animate-pulse" />
       </div>
@@ -96,6 +98,8 @@ export function PackStorageSection({
   isPushing = false,
   animationDelay = 0,
 }: PackStorageSectionProps) {
+  const { t } = useTranslation()
+
   return (
     <div
       className={ANIMATION_PRESETS.sectionEnter}
@@ -112,7 +116,7 @@ export function PackStorageSection({
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <DownloadCloud className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-sm font-semibold text-text-primary">Backup Storage</h3>
+                  <h3 className="text-sm font-semibold text-text-primary">{t('pack.storage.backupStorage')}</h3>
                 </div>
                 <PackStorageStatus
                   summary={backupStatus.summary}
@@ -137,9 +141,9 @@ export function PackStorageSection({
             <>
               <div className="flex items-center gap-2">
                 <DownloadCloud className="w-4 h-4 text-blue-400" />
-                <h3 className="text-sm font-semibold text-text-primary">Backup Storage</h3>
+                <h3 className="text-sm font-semibold text-text-primary">{t('pack.storage.backupStorage')}</h3>
               </div>
-              <span className="text-sm text-red-400">Failed to load backup status</span>
+              <span className="text-sm text-red-400">{t('pack.storage.failedToLoad')}</span>
             </>
           )}
         </div>
@@ -158,7 +162,7 @@ export function PackStorageSection({
         {/* Empty state when no blobs */}
         {backupStatus && backupStatus.blobs.length === 0 && (
           <div className="text-center py-4 text-text-muted text-sm">
-            No blobs tracked for this pack
+            {t('pack.storage.noBlobs')}
           </div>
         )}
       </Card>

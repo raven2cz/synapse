@@ -15,6 +15,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 
 import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
@@ -71,6 +72,7 @@ import {
 function PackDetailPageContent() {
   const { packName: packNameParam } = useParams<{ packName: string }>()
   const navigate = useNavigate()
+  const { t } = useTranslation()
 
   // Decode pack name from URL
   const packName = packNameParam ? decodeURIComponent(packNameParam) : ''
@@ -255,7 +257,7 @@ function PackDetailPageContent() {
   if (packData.isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <BreathingOrb size="lg" text="Loading pack..." />
+        <BreathingOrb size="lg" text={t('packDetail.loading')} />
       </div>
     )
   }
@@ -265,12 +267,12 @@ function PackDetailPageContent() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="text-red-400 text-center">
-          <p className="text-lg font-medium">Failed to load pack</p>
+          <p className="text-lg font-medium">{t('packDetail.loadFailed')}</p>
           <p className="text-sm mt-2">{packData.error.message}</p>
         </div>
         <Button variant="secondary" onClick={() => navigate('/')}>
           <ArrowLeft className="w-4 h-4" />
-          Back to Packs
+          {t('packDetail.backToPacks')}
         </Button>
       </div>
     )
@@ -280,10 +282,10 @@ function PackDetailPageContent() {
   if (!packData.pack) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <p className="text-text-muted">Pack not found</p>
+        <p className="text-text-muted">{t('packDetail.notFound')}</p>
         <Button variant="secondary" onClick={() => navigate('/')}>
           <ArrowLeft className="w-4 h-4" />
-          Back to Packs
+          {t('packDetail.backToPacks')}
         </Button>
       </div>
     )
@@ -300,7 +302,7 @@ function PackDetailPageContent() {
         className="opacity-70 hover:opacity-100 transition-opacity"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back to Packs
+        {t('packDetail.backToPacks')}
       </Button>
 
       {/* Header Section */}

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   ArrowDown,
@@ -57,6 +58,8 @@ export function PullConfirmDialog({
   isLoading = false,
   restoreFn,
 }: PullConfirmDialogProps) {
+  const { t } = useTranslation()
+
   // Use the unified transfer operation hook
   const {
     progress,
@@ -143,7 +146,7 @@ export function PullConfirmDialog({
                 <ArrowDown className="w-6 h-6 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-text-primary">Pull Pack from Backup</h2>
+                <h2 className="text-lg font-bold text-text-primary">{t('pullDialog.title')}</h2>
                 <p className="text-sm text-text-muted">{packName}</p>
               </div>
             </div>
@@ -165,7 +168,7 @@ export function PullConfirmDialog({
             // Confirmation view
             <>
               <p className="text-text-secondary">
-                Restore <span className="font-bold text-blue-400">{blobsToRestore.length}</span> blob{blobsToRestore.length !== 1 ? 's' : ''} from backup:
+                {t('pullDialog.restoreBlobs', { count: blobsToRestore.length })}
               </p>
 
               {/* Blob list */}
@@ -187,7 +190,7 @@ export function PullConfirmDialog({
 
               {/* Total */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-mid">
-                <span className="text-text-muted">Total:</span>
+                <span className="text-text-muted">{t('pullDialog.total')}</span>
                 <span className="font-bold text-text-primary">{formatBytes(totalBytes)}</span>
               </div>
 
@@ -195,7 +198,7 @@ export function PullConfirmDialog({
               <div className="flex items-start gap-2 p-3 bg-blue-500/10 rounded-xl text-sm">
                 <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                 <span className="text-blue-300">
-                  Profile stays on global. Models will be available locally without activating work profile.
+                  {t('pullDialog.profileNote')}
                 </span>
               </div>
             </>
@@ -207,10 +210,10 @@ export function PullConfirmDialog({
                 <div className="flex justify-between text-sm">
                   <span className="text-text-secondary">
                     {isCompleted
-                      ? `${completedItems} restored`
+                      ? t('pullDialog.restored', { count: completedItems })
                       : isFailed
-                        ? `${completedItems} completed, ${failedItems} failed`
-                        : 'Restoring...'}
+                        ? t('pullDialog.completedAndFailed', { count: completedItems, count2: failedItems })
+                        : t('pullDialog.restoring')}
                   </span>
                   <span className="text-text-primary font-medium">{progressPercent.toFixed(0)}%</span>
                 </div>
@@ -234,10 +237,10 @@ export function PullConfirmDialog({
                   {isRunning && bytesPerSecond > 0 && (
                     <span>
                       {formatSpeed(bytesPerSecond)}
-                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${formatDuration(etaSeconds)} remaining`}
+                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${t('pullDialog.remaining', { duration: formatDuration(etaSeconds) })}`}
                     </span>
                   )}
-                  {isCompleted && elapsedSeconds > 0 && <span>Completed in {formatDuration(elapsedSeconds)}</span>}
+                  {isCompleted && elapsedSeconds > 0 && <span>{t('pullDialog.completedIn', { duration: formatDuration(elapsedSeconds) })}</span>}
                 </div>
               </div>
 
@@ -259,7 +262,7 @@ export function PullConfirmDialog({
               {/* Item counter during processing */}
               {isRunning && (
                 <div className="text-sm text-text-muted text-center">
-                  Processing {completedItems + failedItems + 1} of {totalItems}...
+                  {t('pullDialog.processing', { current: completedItems + failedItems + 1, total: totalItems })}
                 </div>
               )}
 
@@ -268,7 +271,7 @@ export function PullConfirmDialog({
                 <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                   <span className="text-sm text-green-400">
-                    Successfully restored {completedItems} file{completedItems !== 1 ? 's' : ''}
+                    {t('pullDialog.successRestore', { count: completedItems })}
                   </span>
                 </div>
               )}
@@ -279,7 +282,7 @@ export function PullConfirmDialog({
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                     <div className="flex-1">
                       <span className="text-sm text-red-400">
-                        {failedItems} file{failedItems !== 1 ? 's' : ''} failed
+                        {t('pullDialog.filesFailed', { count: failedItems })}
                       </span>
                     </div>
                   </div>
@@ -292,7 +295,7 @@ export function PullConfirmDialog({
                         </div>
                       ))}
                       {progress.errors.length > 5 && (
-                        <div className="text-xs text-red-400/60">...and {progress.errors.length - 5} more</div>
+                        <div className="text-xs text-red-400/60">{t('pullDialog.moreErrors', { count: progress.errors.length - 5 })}</div>
                       )}
                     </div>
                   )}
@@ -305,7 +308,7 @@ export function PullConfirmDialog({
         {/* Actions */}
         <div className="flex items-center justify-between px-4 py-4 border-t border-slate-mid bg-slate-mid/10">
           <div className="text-xs text-text-muted">
-            {showProgress ? `${completedItems}/${totalItems} files` : `${blobsToRestore.length} files · ${formatBytes(totalBytes)}`}
+            {showProgress ? t('pullDialog.filesProgress', { completed: completedItems, total: totalItems }) : t('pullDialog.filesInfo', { count: blobsToRestore.length, size: formatBytes(totalBytes) })}
           </div>
 
           <div className="flex gap-2">
@@ -316,7 +319,7 @@ export function PullConfirmDialog({
                   onClick={handleClose}
                   disabled={isLoading}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   onClick={handleConfirm}
@@ -326,12 +329,12 @@ export function PullConfirmDialog({
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Restoring...
+                      {t('pullDialog.restoring')}
                     </>
                   ) : (
                     <>
                       <ArrowDown className="w-4 h-4" />
-                      Restore from Backup
+                      {t('pullDialog.restoreFromBackup')}
                     </>
                   )}
                 </Button>
@@ -340,7 +343,7 @@ export function PullConfirmDialog({
 
             {showProgress && isRunning && (
               <Button variant="ghost" size="sm" onClick={cancel} leftIcon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
 
@@ -351,13 +354,13 @@ export function PullConfirmDialog({
                 onClick={() => retryFailed(restoreFn)}
                 leftIcon={<RotateCcw className="w-4 h-4" />}
               >
-                Retry Failed ({failedItems})
+                {t('pullDialog.retryFailed', { count: failedItems })}
               </Button>
             )}
 
             {showProgress && (isCompleted || (isFailed && !progress?.can_resume)) && (
               <Button variant="primary" size="sm" onClick={handleClose}>
-                Done
+                {t('pullDialog.done')}
               </Button>
             )}
           </div>

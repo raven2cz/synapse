@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X, Link as LinkIcon, FileJson, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +14,7 @@ interface ImportModalProps {
 type ImportTab = 'url' | 'workflow'
 
 export function ImportModal({ isOpen, onClose }: ImportModalProps) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<ImportTab>('url')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -127,7 +129,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
       <div className="relative w-full max-w-lg bg-slate-deep border border-slate-mid/50 rounded-2xl shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-mid/50">
-          <h2 className="text-lg font-semibold text-text-primary">Import Pack</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{t('importModal.title')}</h2>
           <button
             onClick={handleClose}
             className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-mid/50 transition-colors"
@@ -148,7 +150,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
             )}
           >
             <LinkIcon className="w-4 h-4 inline-block mr-2" />
-            Civitai URL
+            {t('importModal.tabUrl')}
           </button>
           <button
             onClick={() => setTab('workflow')}
@@ -160,7 +162,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
             )}
           >
             <FileJson className="w-4 h-4 inline-block mr-2" />
-            Workflow JSON
+            {t('importModal.tabWorkflow')}
           </button>
         </div>
         
@@ -169,17 +171,17 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
           {tab === 'url' && (
             <div>
               <label className="block text-sm text-text-secondary mb-2">
-                Civitai Model URL
+                {t('importModal.urlLabel')}
               </label>
               <input
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://civitai.com/models/..."
+                placeholder={t('importModal.urlPlaceholder')}
                 className="w-full px-4 py-2.5 bg-slate-mid/50 border border-slate-mid rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:border-synapse/50"
               />
               <p className="text-xs text-text-muted mt-2">
-                Paste a Civitai model URL to import the model with metadata and previews
+                {t('importModal.urlHint')}
               </p>
             </div>
           )}
@@ -187,7 +189,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
           {tab === 'workflow' && (
             <div>
               <label className="block text-sm text-text-secondary mb-2">
-                Workflow File
+                {t('importModal.workflowLabel')}
               </label>
               <div
                 className={clsx(
@@ -214,10 +216,10 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
                   <>
                     <Upload className="w-8 h-8 text-text-muted mx-auto mb-2" />
                     <p className="text-text-secondary">
-                      Click to select or drag & drop
+                      {t('importModal.dropHint')}
                     </p>
                     <p className="text-xs text-text-muted mt-1">
-                      ComfyUI workflow JSON file
+                      {t('importModal.dropDesc')}
                     </p>
                   </>
                 )}
@@ -242,11 +244,11 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
                 <div>
                   {result.success ? (
                     <p className="text-success font-medium">
-                      Pack "{result.packName}" imported successfully!
+                      {t('importModal.success', { name: result.packName })}
                     </p>
                   ) : (
                     <>
-                      <p className="text-error font-medium">Import failed</p>
+                      <p className="text-error font-medium">{t('importModal.failed')}</p>
                       {result.errors.map((err, i) => (
                         <p key={i} className="text-sm text-error/80 mt-1">{err}</p>
                       ))}
@@ -264,7 +266,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
         {/* Footer */}
         <div className="flex justify-end gap-3 p-4 border-t border-slate-mid/50">
           <Button variant="ghost" onClick={handleClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -275,7 +277,7 @@ export function ImportModal({ isOpen, onClose }: ImportModalProps) {
               (tab === 'workflow' && !file)
             }
           >
-            Import
+            {t('importModal.import')}
           </Button>
         </div>
       </div>

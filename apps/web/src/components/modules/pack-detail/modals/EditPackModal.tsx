@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Loader2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -68,6 +69,7 @@ interface TagChipProps {
 }
 
 function TagChip({ tag, onRemove }: TagChipProps) {
+  const { t } = useTranslation()
   const isNsfw = tag === 'nsfw-pack'
 
   return (
@@ -84,7 +86,7 @@ function TagChip({ tag, onRemove }: TagChipProps) {
       <button
         onClick={onRemove}
         className="hover:text-red-400 transition-colors"
-        aria-label={`Remove ${tag} tag`}
+        aria-label={t('pack.modals.edit.removeTag', { tag })}
       >
         <X className="w-3 h-3" />
       </button>
@@ -130,6 +132,7 @@ export function EditPackModal({
   onClose,
   isSaving = false,
 }: EditPackModalProps) {
+  const { t } = useTranslation()
   const [tags, setTags] = useState<string[]>(initialTags)
   const [newTag, setNewTag] = useState('')
 
@@ -184,7 +187,7 @@ export function EditPackModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text-primary">Edit Pack</h2>
+          <h2 className="text-xl font-bold text-text-primary">{t('pack.modals.edit.title')}</h2>
           <button
             onClick={onClose}
             className={clsx(
@@ -200,7 +203,7 @@ export function EditPackModal({
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-text-primary mb-3">
-              User Tags
+              {t('pack.modals.edit.userTags')}
             </label>
 
             {/* Current Tags */}
@@ -214,13 +217,13 @@ export function EditPackModal({
                   />
                 ))
               ) : (
-                <p className="text-text-muted text-sm italic">No tags yet</p>
+                <p className="text-text-muted text-sm italic">{t('pack.modals.edit.noTags')}</p>
               )}
             </div>
 
             {/* Suggested Tags */}
             <div className="mb-4">
-              <p className="text-xs text-text-muted mb-2">Suggested tags:</p>
+              <p className="text-xs text-text-muted mb-2">{t('pack.modals.edit.suggestedTags')}</p>
               <div className="flex flex-wrap gap-2">
                 {SUGGESTED_TAGS.map(suggested => (
                   <SuggestedTagButton
@@ -240,7 +243,7 @@ export function EditPackModal({
                 value={newTag}
                 onChange={(e) => setNewTag(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Add tag and press Enter"
+                placeholder={t('pack.modals.edit.addTagPlaceholder')}
                 className={clsx(
                   "flex-1 px-4 py-2.5 rounded-lg",
                   "bg-obsidian border border-slate-mid",
@@ -258,7 +261,7 @@ export function EditPackModal({
                 }}
                 disabled={!newTag.trim()}
               >
-                Add
+                {t('pack.modals.edit.addTag')}
               </Button>
             </div>
           </div>
@@ -271,7 +274,7 @@ export function EditPackModal({
             className="flex-1"
             onClick={onClose}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             className="flex-1"
@@ -281,7 +284,7 @@ export function EditPackModal({
             {isSaving ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              'Save Changes'
+              t('pack.modals.edit.saveChanges')
             )}
           </Button>
         </div>

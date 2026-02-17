@@ -6,6 +6,7 @@
  */
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -38,6 +39,8 @@ export function ImpactsDialog({
   isLoading = false,
   error = null,
 }: ImpactsDialogProps) {
+  const { t } = useTranslation()
+
   // Handle escape key
   useEffect(() => {
     if (!open) return
@@ -79,10 +82,10 @@ export function ImpactsDialog({
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-primary">
-                Impact Analysis
+                {t('inventory.impacts.title')}
               </h2>
               <p className="text-sm text-text-muted">
-                What would be affected by removing this blob
+                {t('inventory.impacts.subtitle')}
               </p>
             </div>
           </div>
@@ -157,7 +160,7 @@ export function ImpactsDialog({
                       analysis.can_delete_safely ? 'text-green-400' : 'text-amber-400'
                     )}
                   >
-                    {analysis.can_delete_safely ? 'Safe to delete' : 'Deletion may cause issues'}
+                    {analysis.can_delete_safely ? t('inventory.impacts.safeToDelete') : t('inventory.impacts.deletionMayCauseIssues')}
                   </div>
                   {analysis.warning && (
                     <div
@@ -177,7 +180,7 @@ export function ImpactsDialog({
                 <div>
                   <h4 className="flex items-center gap-2 text-sm font-medium text-text-secondary mb-3">
                     <Package className="w-4 h-4" />
-                    Used by {analysis.used_by_packs.length} pack(s)
+                    {t('inventory.impacts.usedByCount', { count: analysis.used_by_packs.length })}
                   </h4>
                   <div className="border border-slate-mid/30 rounded-xl divide-y divide-slate-mid/20">
                     {analysis.used_by_packs.map((pack) => (
@@ -198,7 +201,7 @@ export function ImpactsDialog({
                 <div>
                   <h4 className="flex items-center gap-2 text-sm font-medium text-text-secondary mb-3">
                     <Monitor className="w-4 h-4" />
-                    Active in {analysis.active_in_uis.length} UI(s)
+                    {t('inventory.impacts.activeInUis', { count: analysis.active_in_uis.length })}
                   </h4>
                   <div className="border border-slate-mid/30 rounded-xl divide-y divide-slate-mid/20">
                     {analysis.active_in_uis.map((ui) => (
@@ -217,7 +220,7 @@ export function ImpactsDialog({
               {/* No dependencies */}
               {analysis.used_by_packs.length === 0 && analysis.active_in_uis.length === 0 && (
                 <div className="text-center py-4 text-text-muted">
-                  <p>This blob has no dependencies.</p>
+                  <p>{t('inventory.impacts.noDependencies')}</p>
                 </div>
               )}
             </>
@@ -227,7 +230,7 @@ export function ImpactsDialog({
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-mid/30">
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
-            Close
+            {t('common.close')}
           </Button>
         </div>
       </div>

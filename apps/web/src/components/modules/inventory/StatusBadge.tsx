@@ -2,6 +2,7 @@
  * StatusBadge - Shows blob status with color coding
  */
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import {
   CheckCircle,
   CircleDashed,
@@ -12,27 +13,27 @@ import type { BlobStatus } from './types'
 
 const STATUS_CONFIG: Record<BlobStatus, {
   icon: typeof CheckCircle
-  label: string
+  labelKey: string
   className: string
 }> = {
   referenced: {
     icon: CheckCircle,
-    label: 'Referenced',
+    labelKey: 'inventory.statusBadge.referenced',
     className: 'bg-green-500/10 text-green-600 border-green-500/20',
   },
   orphan: {
     icon: CircleDashed,
-    label: 'Orphan',
+    labelKey: 'inventory.statusBadge.orphan',
     className: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
   },
   missing: {
     icon: AlertCircle,
-    label: 'Missing',
+    labelKey: 'inventory.statusBadge.missing',
     className: 'bg-red-500/10 text-red-500 border-red-500/20',
   },
   backup_only: {
     icon: Cloud,
-    label: 'Backup',
+    labelKey: 'inventory.statusBadge.backupOnly',
     className: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
   },
 }
@@ -43,6 +44,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
+  const { t } = useTranslation()
   const config = STATUS_CONFIG[status]
   const Icon = config.icon
 
@@ -55,7 +57,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
       )}
     >
       <Icon className={size === 'sm' ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-      {config.label}
+      {t(config.labelKey)}
     </span>
   )
 }

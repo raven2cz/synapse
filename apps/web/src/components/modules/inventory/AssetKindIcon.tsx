@@ -1,6 +1,7 @@
 /**
  * AssetKindIcon - Icon for different asset types
  */
+import { useTranslation } from 'react-i18next'
 import {
   Box,
   Layers,
@@ -10,52 +11,53 @@ import {
   Maximize2,
   FileQuestion,
 } from 'lucide-react'
+import i18n from '../../../i18n'
 import type { AssetKind } from './types'
 
 const KIND_CONFIG: Record<AssetKind, {
   icon: typeof Box
   color: string
-  label: string
+  key: string
 }> = {
   checkpoint: {
     icon: Box,
     color: 'text-purple-500',
-    label: 'Checkpoint',
+    key: 'checkpoint',
   },
   lora: {
     icon: Layers,
     color: 'text-blue-500',
-    label: 'LoRA',
+    key: 'lora',
   },
   vae: {
     icon: Cpu,
     color: 'text-green-500',
-    label: 'VAE',
+    key: 'vae',
   },
   embedding: {
     icon: Type,
     color: 'text-orange-500',
-    label: 'Embedding',
+    key: 'embedding',
   },
   controlnet: {
     icon: GitBranch,
     color: 'text-pink-500',
-    label: 'ControlNet',
+    key: 'controlnet',
   },
   upscaler: {
     icon: Maximize2,
     color: 'text-cyan-500',
-    label: 'Upscaler',
+    key: 'upscaler',
   },
   other: {
     icon: FileQuestion,
     color: 'text-gray-500',
-    label: 'Other',
+    key: 'other',
   },
   unknown: {
     icon: FileQuestion,
     color: 'text-gray-500',
-    label: 'Unknown',
+    key: 'unknown',
   },
 }
 
@@ -66,8 +68,10 @@ interface AssetKindIconProps {
 }
 
 export function AssetKindIcon({ kind, size = 'md', showLabel = false }: AssetKindIconProps) {
+  const { t } = useTranslation()
   const config = KIND_CONFIG[kind] || KIND_CONFIG.unknown
   const Icon = config.icon
+  const label = t(`inventory.assetKind.${config.key}`)
 
   const sizeClass = {
     sm: 'w-3 h-3',
@@ -76,15 +80,16 @@ export function AssetKindIcon({ kind, size = 'md', showLabel = false }: AssetKin
   }[size]
 
   return (
-    <div className="inline-flex items-center gap-1.5" title={config.label}>
+    <div className="inline-flex items-center gap-1.5" title={label}>
       <Icon className={`${sizeClass} ${config.color}`} />
       {showLabel && (
-        <span className="text-xs text-text-secondary">{config.label}</span>
+        <span className="text-xs text-text-secondary">{label}</span>
       )}
     </div>
   )
 }
 
 export function getKindLabel(kind: AssetKind): string {
-  return KIND_CONFIG[kind]?.label || 'Unknown'
+  const config = KIND_CONFIG[kind]
+  return config ? i18n.t(`inventory.assetKind.${config.key}`) : i18n.t('inventory.assetKind.unknown')
 }

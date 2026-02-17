@@ -12,6 +12,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   Loader2,
@@ -100,6 +101,7 @@ function PreviewItem({
   onDragOver,
   onDrop,
 }: PreviewItemProps) {
+  const { t } = useTranslation()
   const isVideo = preview.media_type === 'video'
 
   return (
@@ -136,7 +138,7 @@ function PreviewItem({
               </div>
             )}
             <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 text-xs text-white">
-              Video
+              {t('pack.modals.editPreviews.video')}
             </div>
           </div>
         ) : (
@@ -165,7 +167,7 @@ function PreviewItem({
           'flex items-center gap-1'
         )}>
           <Star className="w-3 h-3 fill-current" />
-          Cover
+          {t('pack.modals.editPreviews.cover')}
         </div>
       )}
 
@@ -187,7 +189,7 @@ function PreviewItem({
               'bg-synapse/80 text-white',
               'hover:bg-synapse transition-colors'
             )}
-            title="Set as cover"
+            title={t('pack.modals.editPreviews.setAsCover')}
           >
             <Star className="w-5 h-5" />
           </button>
@@ -202,7 +204,7 @@ function PreviewItem({
             'bg-red-500/80 text-white',
             'hover:bg-red-500 transition-colors'
           )}
-          title="Remove preview"
+          title={t('pack.modals.editPreviews.removePreview')}
         >
           <Trash2 className="w-5 h-5" />
         </button>
@@ -229,6 +231,7 @@ interface AddPreviewPanelProps {
 }
 
 function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'upload' | 'url'>('upload')
   const [urlInput, setUrlInput] = useState('')
   const [urlError, setUrlError] = useState<string | null>(null)
@@ -287,7 +290,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
 
   const handleUrlSubmit = () => {
     if (!urlInput.trim()) {
-      setUrlError('Please enter a URL')
+      setUrlError(t('pack.modals.editPreviews.invalidUrl'))
       return
     }
     try {
@@ -296,7 +299,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
       setUrlInput('')
       setUrlError(null)
     } catch {
-      setUrlError('Invalid URL format')
+      setUrlError(t('pack.modals.editPreviews.invalidUrlFormat'))
     }
   }
 
@@ -315,7 +318,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
           )}
         >
           <Upload className="w-4 h-4 inline-block mr-2" />
-          Upload
+          {t('pack.modals.editPreviews.upload')}
         </button>
         <button
           onClick={() => setMode('url')}
@@ -328,7 +331,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
           )}
         >
           <Link className="w-4 h-4 inline-block mr-2" />
-          URL
+          {t('pack.modals.editPreviews.url')}
         </button>
       </div>
 
@@ -351,10 +354,10 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
         >
           <Image className={clsx('w-8 h-8', isDragging ? 'text-synapse' : 'text-text-muted')} />
           <span className={clsx('text-sm', isDragging ? 'text-synapse font-medium' : 'text-text-secondary')}>
-            {isDragging ? 'Drop files here' : 'Click or drag files here'}
+            {isDragging ? t('pack.modals.editPreviews.dropFiles') : t('pack.modals.editPreviews.selectFiles')}
           </span>
           <span className="text-xs text-text-muted">
-            JPG, PNG, GIF, WEBP, MP4
+            {t('pack.modals.editPreviews.acceptedFormats')}
           </span>
           <input
             ref={fileInputRef}
@@ -376,7 +379,7 @@ function AddPreviewPanel({ onAddFile, onAddUrl }: AddPreviewPanelProps) {
                 setUrlError(null)
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleUrlSubmit()}
-              placeholder="https://example.com/image.jpg"
+              placeholder={t('pack.modals.editPreviews.urlPlaceholder')}
               className={clsx(
                 'flex-1 px-4 py-2 rounded-lg',
                 'bg-slate-dark border',
@@ -417,6 +420,7 @@ export function EditPreviewsModal({
   onClose,
   isSaving = false,
 }: EditPreviewsModalProps) {
+  const { t } = useTranslation()
   const [previews, setPreviews] = useState<PreviewInfo[]>(initialPreviews)
   const [coverUrl, setCoverUrl] = useState<string | undefined>(initialCoverUrl)
   const [addedFiles, setAddedFiles] = useState<File[]>([])
@@ -561,10 +565,10 @@ export function EditPreviewsModal({
         <div className="flex items-center justify-between p-6 border-b border-slate-mid/50">
           <div>
             <h3 className="text-lg font-semibold text-text-primary">
-              Edit Previews
+              {t('pack.modals.editPreviews.title')}
             </h3>
             <p className="text-sm text-text-muted mt-1">
-              Drag to reorder, click to set cover or remove
+              {t('pack.modals.editPreviews.dragHint')}
             </p>
           </div>
           <button
@@ -602,7 +606,7 @@ export function EditPreviewsModal({
           ) : (
             <div className="text-center py-12 text-text-muted mb-6">
               <Image className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No previews yet</p>
+              <p>{t('pack.modals.editPreviews.noPreviews')}</p>
             </div>
           )}
 
@@ -616,7 +620,7 @@ export function EditPreviewsModal({
         {/* Footer */}
         <div className="flex justify-end gap-3 p-6 border-t border-slate-mid/50">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -626,7 +630,7 @@ export function EditPreviewsModal({
             {isSaving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : null}
-            Save Changes
+            {t('pack.modals.editPreviews.saveChanges')}
           </Button>
         </div>
       </div>

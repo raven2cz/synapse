@@ -9,6 +9,7 @@
  */
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   Upload,
@@ -58,6 +59,7 @@ export function BlobsTable({
   onBulkAction,
   isLoading,
 }: BlobsTableProps) {
+  const { t } = useTranslation()
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set())
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: SortDirection }>({
     key: 'size_bytes',
@@ -143,7 +145,7 @@ export function BlobsTable({
   if (items.length === 0) {
     return (
       <Card padding="lg" className="text-center py-16">
-        <p className="text-text-muted">No blobs found matching your filters.</p>
+        <p className="text-text-muted">{t('inventory.table.noItemsFound')}</p>
       </Card>
     )
   }
@@ -155,7 +157,7 @@ export function BlobsTable({
         <Card padding="sm" className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span className="font-medium text-text-primary">
-              {selectedSummary.count} selected
+              {t('inventory.table.selected', { count: selectedSummary.count })}
             </span>
             <span className="text-text-muted">
               ({formatBytes(selectedSummary.totalBytes)})
@@ -170,7 +172,7 @@ export function BlobsTable({
                 onClick={() => onBulkAction([...selectedItems], 'backup')}
                 leftIcon={<Upload className="w-4 h-4" />}
               >
-                Backup {selectedSummary.canBackup}
+                {t('inventory.table.backupCount', { count: selectedSummary.canBackup })}
               </Button>
             )}
 
@@ -181,7 +183,7 @@ export function BlobsTable({
                 onClick={() => onBulkAction([...selectedItems], 'restore')}
                 leftIcon={<Download className="w-4 h-4" />}
               >
-                Restore {selectedSummary.canRestore}
+                {t('inventory.table.restoreCount', { count: selectedSummary.canRestore })}
               </Button>
             )}
 
@@ -192,7 +194,7 @@ export function BlobsTable({
                 onClick={() => onBulkAction([...selectedItems], 'delete_local')}
                 leftIcon={<Trash2 className="w-4 h-4" />}
               >
-                Delete {selectedSummary.canDelete} Orphans
+                {t('inventory.table.deleteOrphansCount', { count: selectedSummary.canDelete })}
               </Button>
             )}
 
@@ -204,9 +206,9 @@ export function BlobsTable({
                 onClick={() => onBulkAction([...selectedItems], 'delete_local')}
                 leftIcon={<Trash2 className="w-4 h-4" />}
                 className="text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
-                title={`Free ${formatBytes(selectedSummary.canFreeLocalBytes)} by removing local copies (backup preserved)`}
+                title={t('inventory.table.freeLocalTitle', { size: formatBytes(selectedSummary.canFreeLocalBytes) })}
               >
-                Free Local ({selectedSummary.canFreeLocal})
+                {t('inventory.table.freeLocal', { count: selectedSummary.canFreeLocal })}
               </Button>
             )}
 
@@ -215,7 +217,7 @@ export function BlobsTable({
               size="sm"
               onClick={() => setSelectedItems(new Set())}
             >
-              Clear
+              {t('inventory.table.clearSelection')}
             </Button>
           </div>
         </Card>
@@ -246,7 +248,7 @@ export function BlobsTable({
                 {/* Name */}
                 <th className="px-4 py-3 text-left">
                   <SortableHeader
-                    label="Name"
+                    label={t('inventory.table.name')}
                     sortKey="display_name"
                     currentSort={sortConfig}
                     onSort={handleSort}
@@ -256,7 +258,7 @@ export function BlobsTable({
                 {/* Type */}
                 <th className="w-[80px] px-4 py-3 text-left">
                   <SortableHeader
-                    label="Type"
+                    label={t('inventory.table.type')}
                     sortKey="kind"
                     currentSort={sortConfig}
                     onSort={handleSort}
@@ -266,7 +268,7 @@ export function BlobsTable({
                 {/* Size */}
                 <th className="w-[100px] px-4 py-3 text-right">
                   <SortableHeader
-                    label="Size"
+                    label={t('inventory.table.size')}
                     sortKey="size_bytes"
                     currentSort={sortConfig}
                     onSort={handleSort}
@@ -277,7 +279,7 @@ export function BlobsTable({
                 {/* Status */}
                 <th className="w-[110px] px-4 py-3 text-left">
                   <SortableHeader
-                    label="Status"
+                    label={t('inventory.table.status')}
                     sortKey="status"
                     currentSort={sortConfig}
                     onSort={handleSort}
@@ -287,7 +289,7 @@ export function BlobsTable({
                 {/* Location */}
                 <th className="w-[90px] px-4 py-3 text-left">
                   <SortableHeader
-                    label="Location"
+                    label={t('inventory.table.location')}
                     sortKey="location"
                     currentSort={sortConfig}
                     onSort={handleSort}
@@ -296,12 +298,12 @@ export function BlobsTable({
 
                 {/* Used By */}
                 <th className="w-[220px] px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  Used By
+                  {t('inventory.table.usedBy')}
                 </th>
 
                 {/* Actions - sticky */}
                 <th className="w-[130px] px-4 py-3 text-right text-xs font-medium text-text-muted uppercase sticky right-0 bg-slate-deep/95 backdrop-blur-sm shadow-[-8px_0_16px_-8px_rgba(0,0,0,0.3)]">
-                  Actions
+                  {t('inventory.table.actions')}
                 </th>
               </tr>
             </thead>
@@ -329,10 +331,10 @@ export function BlobsTable({
 
       {/* Footer */}
       <div className="flex items-center justify-between text-sm text-text-muted">
-        <span>Showing {items.length} items</span>
+        <span>{t('inventory.table.showingItems', { count: items.length })}</span>
         {selectedItems.size > 0 && (
           <span>
-            Selected: {selectedItems.size} items ({formatBytes(selectedSummary.totalBytes)})
+            {t('inventory.table.selectedSummary', { count: selectedItems.size, size: formatBytes(selectedSummary.totalBytes) })}
           </span>
         )}
       </div>
@@ -403,6 +405,7 @@ function BlobRow({
   isMenuOpen: boolean
   onMenuToggle: (open: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [copiedSha, setCopiedSha] = useState(false)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
@@ -452,7 +455,7 @@ function BlobRow({
   const quickAction = useMemo(() => {
     if (item.location === 'local_only' && backupEnabled && backupConnected) {
       return {
-        label: 'Backup',
+        label: t('inventory.table.backup'),
         icon: <Upload className="w-3 h-3" />,
         className: 'text-amber-500 border-amber-500/30 hover:bg-amber-500/10',
         action: () => onBackup(item.sha256),
@@ -460,7 +463,7 @@ function BlobRow({
     }
     if (item.location === 'backup_only' && backupConnected) {
       return {
-        label: 'Restore',
+        label: t('inventory.table.restore'),
         icon: <Download className="w-3 h-3" />,
         className: 'text-blue-500 border-blue-500/30 hover:bg-blue-500/10',
         action: () => onRestore(item.sha256),
@@ -468,7 +471,7 @@ function BlobRow({
     }
     if (item.status === 'orphan' && item.on_local) {
       return {
-        label: 'Delete',
+        label: t('inventory.table.delete'),
         icon: <Trash2 className="w-3 h-3" />,
         className: 'text-red-500 border-red-500/30 hover:bg-red-500/10',
         action: () => onDelete(item.sha256, 'local'),
@@ -640,7 +643,7 @@ function BlobRow({
                   ) : (
                     <Copy className="w-4 h-4" />
                   )}
-                  {copiedSha ? 'Copied!' : 'Copy SHA256'}
+                  {copiedSha ? t('inventory.table.copied') : t('inventory.table.copySha256')}
                 </button>
 
                 {/* Show Impacts */}
@@ -653,7 +656,7 @@ function BlobRow({
                     }}
                   >
                     <Info className="w-4 h-4" />
-                    Show Impacts
+                    {t('inventory.table.showImpacts')}
                   </button>
                 )}
 
@@ -668,7 +671,7 @@ function BlobRow({
                         onClick={() => handleAction(() => onBackup(item.sha256))}
                       >
                         <Upload className="w-4 h-4" />
-                        Backup to External
+                        {t('inventory.table.backupToExternal')}
                       </button>
                     )}
 
@@ -678,7 +681,7 @@ function BlobRow({
                         onClick={() => handleAction(() => onRestore(item.sha256))}
                       >
                         <Download className="w-4 h-4" />
-                        Restore from Backup
+                        {t('inventory.table.restoreFromBackup')}
                       </button>
                     )}
                   </>
@@ -692,7 +695,7 @@ function BlobRow({
                     onClick={() => handleDelete('local')}
                   >
                     <Trash2 className="w-4 h-4" />
-                    Delete from Local
+                    {t('inventory.table.deleteFromLocal')}
                   </button>
                 )}
 
@@ -702,7 +705,7 @@ function BlobRow({
                     onClick={() => handleDelete('backup')}
                   >
                     <Trash2 className="w-4 h-4" />
-                    Delete from Backup
+                    {t('inventory.table.deleteFromBackup')}
                   </button>
                 )}
 
@@ -712,7 +715,7 @@ function BlobRow({
                     onClick={() => handleDelete('both')}
                   >
                     <AlertTriangle className="w-4 h-4" />
-                    Delete Everywhere
+                    {t('inventory.table.deleteEverywhere')}
                   </button>
                 )}
 
@@ -723,7 +726,7 @@ function BlobRow({
                     onClick={() => onMenuToggle(false)}
                   >
                     <RefreshCw className="w-4 h-4" />
-                    Re-download from {item.origin.provider}
+                    {t('inventory.table.redownloadFrom', { provider: item.origin.provider })}
                   </button>
                 )}
               </div>

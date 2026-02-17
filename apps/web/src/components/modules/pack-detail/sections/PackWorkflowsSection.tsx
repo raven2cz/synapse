@@ -20,6 +20,7 @@
  * - Staggered animace
  */
 
+import { useTranslation } from 'react-i18next'
 import { FileJson, Check, AlertTriangle, FolderOpen, X, Download, Trash2, Loader2, Play, Upload } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
@@ -95,6 +96,7 @@ function WorkflowCard({
   isRemoveSymlinkPending,
   isDeletePending,
 }: WorkflowCardProps) {
+  const { t } = useTranslation()
   const hasSymlink = workflow.has_symlink || false
   const symlinkValid = workflow.symlink_valid || false
 
@@ -121,19 +123,19 @@ function WorkflowCard({
             <span className="font-mono truncate max-w-[200px]">{workflow.filename}</span>
             {workflow.is_default && (
               <span className="px-1.5 py-0.5 bg-synapse/20 text-synapse rounded text-xs">
-                default
+                {t('pack.workflows.default')}
               </span>
             )}
             {hasSymlink && symlinkValid && (
               <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded flex items-center gap-1">
                 <Check className="w-3 h-3" />
-                In ComfyUI
+                {t('pack.workflows.status.linked')}
               </span>
             )}
             {hasSymlink && !symlinkValid && (
               <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
-                Broken link
+                {t('pack.workflows.status.broken')}
               </span>
             )}
           </div>
@@ -155,7 +157,7 @@ function WorkflowCard({
         {hasSymlink ? (
           <button
             onClick={() => {
-              if (confirm('Remove workflow from ComfyUI?')) {
+              if (confirm(t('pack.workflows.confirmUnlink'))) {
                 onRemoveSymlink(workflow.filename)
               }
             }}
@@ -166,14 +168,14 @@ function WorkflowCard({
               "hover:bg-slate-mid transition-all duration-200",
               "flex items-center gap-1.5"
             )}
-            title="Remove from ComfyUI"
+            title={t('pack.workflows.unlink')}
           >
             {isRemoveSymlinkPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <X className="w-4 h-4" />
             )}
-            Unlink
+            {t('pack.workflows.unlink')}
           </button>
         ) : (
           <button
@@ -185,14 +187,14 @@ function WorkflowCard({
               "hover:bg-synapse/30 transition-all duration-200",
               "flex items-center gap-1.5"
             )}
-            title="Add to ComfyUI workflows"
+            title={t('pack.workflows.link')}
           >
             {isCreateSymlinkPending ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <FolderOpen className="w-4 h-4" />
             )}
-            Link to ComfyUI
+            {t('pack.workflows.link')}
           </button>
         )}
 
@@ -207,7 +209,7 @@ function WorkflowCard({
             "hover:bg-slate-mid hover:text-synapse",
             "transition-all duration-200"
           )}
-          title="Download workflow JSON"
+          title={t('pack.workflows.downloadJson')}
         >
           <Download className="w-4 h-4" />
         </button>
@@ -215,7 +217,7 @@ function WorkflowCard({
         {/* Delete workflow */}
         <button
           onClick={() => {
-            if (confirm(`Delete workflow "${workflow.name}"?`)) {
+            if (confirm(t('pack.workflows.confirmDelete', { name: workflow.name }))) {
               onDeleteWorkflow(workflow.filename)
             }
           }}
@@ -226,7 +228,7 @@ function WorkflowCard({
             "hover:bg-red-500/30",
             "transition-all duration-200"
           )}
-          title="Delete workflow"
+          title={t('pack.workflows.deleteWorkflow')}
         >
           {isDeletePending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -258,6 +260,8 @@ export function PackWorkflowsSection({
   isGeneratePending,
   animationDelay = 0,
 }: PackWorkflowsSectionProps) {
+  const { t } = useTranslation()
+
   return (
     <div
       className={ANIMATION_PRESETS.sectionEnter}
@@ -268,7 +272,7 @@ export function PackWorkflowsSection({
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
           <FileJson className="w-4 h-4 text-synapse" />
-          ComfyUI Workflows
+          {t('pack.workflows.comfyuiWorkflows')}
           <span className="text-text-muted font-normal">({workflows?.length || 0})</span>
         </h3>
 
@@ -281,7 +285,7 @@ export function PackWorkflowsSection({
             className="transition-all duration-200 hover:scale-105"
           >
             <Upload className="w-4 h-4" />
-            Upload
+            {t('pack.workflows.upload')}
           </Button>
 
           {/* Generate Default button */}
@@ -302,7 +306,7 @@ export function PackWorkflowsSection({
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              Generate Default
+              {t('pack.workflows.generate')}
             </Button>
             {needsBaseModel && (
               <div className={clsx(
@@ -314,7 +318,7 @@ export function PackWorkflowsSection({
                 "transition-opacity pointer-events-none",
                 "z-10"
               )}>
-                ⚠️ Resolve all models before generating workflow
+                {t('pack.workflows.resolveFirst')}
               </div>
             )}
           </div>
@@ -341,10 +345,9 @@ export function PackWorkflowsSection({
       ) : (
         <div className="text-center py-8 text-text-muted">
           <FileJson className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p className="text-sm">No workflows yet</p>
+          <p className="text-sm">{t('pack.workflows.noWorkflows')}</p>
           <p className="text-xs mt-1">
-            Click "Generate Default" to create one based on pack configuration,
-            <br />or "Upload" to add an existing workflow.
+            {t('pack.workflows.emptyHint')}
           </p>
         </div>
       )}

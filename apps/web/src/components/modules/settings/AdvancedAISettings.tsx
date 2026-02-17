@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp, Settings2, Timer, Database, Shield, FileText, Minus, Plus } from 'lucide-react'
 import clsx from 'clsx'
 import type { AIServicesSettings } from '../../../lib/ai/types'
@@ -295,6 +296,7 @@ interface AdvancedAISettingsProps {
 }
 
 export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
 
   const handleChange = <K extends keyof AIServicesSettings>(
@@ -307,10 +309,10 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
   }
 
   const LOG_LEVEL_OPTIONS: SelectOption[] = [
-    { value: 'DEBUG', label: 'Debug', description: 'Verbose output for development' },
-    { value: 'INFO', label: 'Info', description: 'Standard operational messages' },
-    { value: 'WARNING', label: 'Warning', description: 'Only warnings and errors' },
-    { value: 'ERROR', label: 'Error', description: 'Only error messages' },
+    { value: 'DEBUG', label: t('settingsAi.advanced.logLevels.debug'), description: t('settingsAi.advanced.logLevels.debugDesc') },
+    { value: 'INFO', label: t('settingsAi.advanced.logLevels.info'), description: t('settingsAi.advanced.logLevels.infoDesc') },
+    { value: 'WARNING', label: t('settingsAi.advanced.logLevels.warning'), description: t('settingsAi.advanced.logLevels.warningDesc') },
+    { value: 'ERROR', label: t('settingsAi.advanced.logLevels.error'), description: t('settingsAi.advanced.logLevels.errorDesc') },
   ]
 
   // Use snake_case field names matching API
@@ -338,7 +340,7 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
         >
           <Settings2 className="w-4 h-4 text-synapse" />
         </div>
-        <span className="text-sm font-semibold text-text-primary">Advanced Settings</span>
+        <span className="text-sm font-semibold text-text-primary">{t('settingsAi.advanced.title')}</span>
         <div
           className={clsx(
             'ml-auto w-6 h-6 rounded-lg flex items-center justify-center',
@@ -359,10 +361,10 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
         <div className="mt-4 space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
           {/* Timeouts & Retries */}
           <section className="p-4 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-            <SectionHeader icon={Timer} title="Timeouts & Retries" color="synapse" />
+            <SectionHeader icon={Timer} title={t('settingsAi.advanced.timeoutsRetries')} color="synapse" />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <NumberInput
-                label="CLI Timeout"
+                label={t('settingsAi.advanced.cliTimeout')}
                 value={settings?.cli_timeout_seconds ?? 60}
                 onChange={(v) => handleChange('cli_timeout_seconds', v)}
                 min={10}
@@ -371,7 +373,7 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
                 disabled={!onChange}
               />
               <NumberInput
-                label="Max Retries"
+                label={t('settingsAi.advanced.maxRetries')}
                 value={settings?.max_retries ?? 2}
                 onChange={(v) => handleChange('max_retries', v)}
                 min={0}
@@ -379,7 +381,7 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
                 disabled={!onChange}
               />
               <NumberInput
-                label="Retry Delay"
+                label={t('settingsAi.advanced.retryDelay')}
                 value={settings?.retry_delay_seconds ?? 1}
                 onChange={(v) => handleChange('retry_delay_seconds', v)}
                 min={0}
@@ -392,19 +394,19 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
 
           {/* Caching */}
           <section className="p-4 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-            <SectionHeader icon={Database} title="Caching" color="neural" />
+            <SectionHeader icon={Database} title={t('settingsAi.advanced.caching')} color="neural" />
             <div className="space-y-4">
               <ToggleSwitch
                 checked={cacheEnabled}
                 onChange={(v) => handleChange('cache_enabled', v)}
                 disabled={!onChange}
-                label="Cache AI Results"
-                description="Store extraction results to speed up repeated requests"
+                label={t('settingsAi.advanced.cacheResults')}
+                description={t('settingsAi.advanced.cacheResultsDesc')}
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-2">
                 <NumberInput
-                  label="Cache TTL"
+                  label={t('settingsAi.advanced.cacheTtl')}
                   value={settings?.cache_ttl_days ?? 30}
                   onChange={(v) => handleChange('cache_ttl_days', v)}
                   min={1}
@@ -416,7 +418,7 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
 
               {settings?.cache_directory && (
                 <div className="mt-3 p-3 rounded-lg bg-slate-mid/30 border border-slate-light/10">
-                  <span className="text-xs text-text-muted">Cache location:</span>
+                  <span className="text-xs text-text-muted">{t('settingsAi.advanced.cacheLocation')}</span>
                   <code className="ml-2 text-xs font-mono text-neural">
                     {settings.cache_directory}
                   </code>
@@ -427,40 +429,40 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
 
           {/* Fallback Behavior */}
           <section className="p-4 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-            <SectionHeader icon={Shield} title="Fallback Behavior" color="success" />
+            <SectionHeader icon={Shield} title={t('settingsAi.advanced.fallbackBehavior')} color="success" />
             <div className="space-y-1">
               <ToggleSwitch
                 checked={settings?.always_fallback_to_rule_based ?? true}
                 onChange={(v) => handleChange('always_fallback_to_rule_based', v)}
                 disabled={!onChange}
-                label="Always Fallback to Rule-based"
-                description="Use regex extraction when AI providers fail"
+                label={t('settingsAi.advanced.alwaysFallback')}
+                description={t('settingsAi.advanced.alwaysFallbackDesc')}
               />
               <ToggleSwitch
                 checked={settings?.show_provider_in_results ?? true}
                 onChange={(v) => handleChange('show_provider_in_results', v)}
                 disabled={!onChange}
-                label="Show Provider in Results"
-                description="Display which AI provider extracted the parameters"
+                label={t('settingsAi.advanced.showProvider')}
+                description={t('settingsAi.advanced.showProviderDesc')}
               />
             </div>
           </section>
 
           {/* Logging */}
           <section className="p-4 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-            <SectionHeader icon={FileText} title="Logging" color="warning" />
+            <SectionHeader icon={FileText} title={t('settingsAi.advanced.logging')} color="warning" />
             <div className="space-y-4">
               <ToggleSwitch
                 checked={settings?.log_requests ?? true}
                 onChange={(v) => handleChange('log_requests', v)}
                 disabled={!onChange}
-                label="Log AI Requests"
-                description="Record requests to AI providers for debugging"
+                label={t('settingsAi.advanced.logRequests')}
+                description={t('settingsAi.advanced.logRequestsDesc')}
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-2">
                 <SelectDropdown
-                  label="Log Level"
+                  label={t('settingsAi.advanced.logLevel')}
                   value={settings?.log_level ?? 'INFO'}
                   onChange={(v) => handleChange('log_level', v as AIServicesSettings['log_level'])}
                   options={LOG_LEVEL_OPTIONS}
@@ -469,21 +471,21 @@ export function AdvancedAISettings({ settings, onChange }: AdvancedAISettingsPro
               </div>
 
               <div className="border-t border-slate-light/20 pt-4 mt-4">
-                <p className="text-xs text-text-muted mb-3">Debug Options (verbose)</p>
+                <p className="text-xs text-text-muted mb-3">{t('settingsAi.advanced.debugOptions')}</p>
                 <div className="space-y-1">
                   <ToggleSwitch
                     checked={settings?.log_prompts ?? false}
                     onChange={(v) => handleChange('log_prompts', v)}
                     disabled={!onChange}
-                    label="Log Full Prompts"
-                    description="Include complete prompts in logs"
+                    label={t('settingsAi.advanced.logFullPrompts')}
+                    description={t('settingsAi.advanced.logFullPromptsDesc')}
                   />
                   <ToggleSwitch
                     checked={settings?.log_responses ?? false}
                     onChange={(v) => handleChange('log_responses', v)}
                     disabled={!onChange}
-                    label="Log Raw Responses"
-                    description="Include complete AI responses in logs"
+                    label={t('settingsAi.advanced.logRawResponses')}
+                    description={t('settingsAi.advanced.logRawResponsesDesc')}
                   />
                 </div>
               </div>

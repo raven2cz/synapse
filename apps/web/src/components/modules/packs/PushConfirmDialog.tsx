@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   ArrowUp,
@@ -63,6 +64,7 @@ export function PushConfirmDialog({
   backupFn,
   deleteFn,
 }: PushConfirmDialogProps) {
+  const { t } = useTranslation()
   const [cleanup, setCleanup] = useState(initialCleanup)
   const [cleanupPhase, setCleanupPhase] = useState(false)
   // R2: Use ref to prevent double-triggering cleanup phase due to stale closure
@@ -191,8 +193,8 @@ export function PushConfirmDialog({
   }
 
   // Get current phase label
-  const phaseLabel = cleanupPhase ? 'Freeing space' : 'Backing up'
-  const completedLabel = cleanupPhase ? 'freed' : 'backed up'
+  const phaseLabel = cleanupPhase ? t('pushDialog.freeingSpace') : t('pushDialog.backingUp')
+  const completedLabel = cleanupPhase ? t('pushDialog.freed', { count: completedItems }) : t('pushDialog.backedUp', { count: completedItems })
 
   return (
     <div
@@ -218,11 +220,11 @@ export function PushConfirmDialog({
                 <h2 className="text-lg font-bold text-text-primary">
                   {showProgress
                     ? cleanupPhase
-                      ? 'Freeing Local Space'
-                      : 'Backing Up Pack'
+                      ? t('pushDialog.titleFreeingRunning')
+                      : t('pushDialog.titleBackingUpRunning')
                     : isFreeOnly
-                      ? 'Free Local Space'
-                      : 'Push Pack to Backup'}
+                      ? t('pushDialog.titleFree')
+                      : t('pushDialog.titlePush')}
                 </h2>
                 <p className="text-sm text-text-muted">{packName}</p>
               </div>
@@ -248,7 +250,7 @@ export function PushConfirmDialog({
               {blobsToBackup.length > 0 ? (
                 <>
                   <p className="text-text-secondary">
-                    Backup <span className="font-bold text-amber-400">{blobsToBackup.length}</span> blob{blobsToBackup.length !== 1 ? 's' : ''} to external storage:
+                    {t('pushDialog.backupBlobs', { count: blobsToBackup.length })}
                   </p>
 
                   {/* Blob list */}
@@ -270,13 +272,13 @@ export function PushConfirmDialog({
 
                   {/* Total */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-mid">
-                    <span className="text-text-muted">Total to backup:</span>
+                    <span className="text-text-muted">{t('pushDialog.totalToBackup')}</span>
                     <span className="font-bold text-text-primary">{formatBytes(totalBytesToBackup)}</span>
                   </div>
                 </>
               ) : (
                 <p className="text-text-muted text-sm italic">
-                  All blobs already backed up. You can free local disk space.
+                  {t('pushDialog.allBackedUp')}
                 </p>
               )}
 
@@ -292,15 +294,15 @@ export function PushConfirmDialog({
                 <div className="flex-1">
                   <div className="flex items-center gap-2 text-red-400 font-medium">
                     <Trash2 className="w-4 h-4" />
-                    Delete local copies after backup
+                    {t('pushDialog.deleteLocal')}
                   </div>
                   {cleanup && localBlobs.length > 0 && (
                     <p className="text-sm text-red-300 mt-1">
-                      This will free <span className="font-bold">{formatBytes(totalBytesToFree)}</span> of local disk space
+                      {t('pushDialog.freeSize', { size: formatBytes(totalBytesToFree) })}
                     </p>
                   )}
                   {localBlobs.length === 0 && (
-                    <p className="text-sm text-text-muted mt-1">No local copies to delete</p>
+                    <p className="text-sm text-text-muted mt-1">{t('pushDialog.noLocalCopies')}</p>
                   )}
                 </div>
               </label>
@@ -310,7 +312,7 @@ export function PushConfirmDialog({
                 <div className="flex items-start gap-2 p-3 bg-amber-500/10 rounded-xl text-sm">
                   <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                   <span className="text-amber-300">
-                    You will need to run <code className="bg-slate-dark px-1 rounded">Pull</code> to restore these models before using them.
+                    {t('pushDialog.pullWarning')} <code className="bg-slate-dark px-1 rounded">{t('pushDialog.pullLabel')}</code> {t('pushDialog.pullWarningEnd')}
                   </span>
                 </div>
               )}
@@ -321,12 +323,12 @@ export function PushConfirmDialog({
               {/* Phase indicator */}
               {cleanup && !cleanupPhase && blobsToBackup.length > 0 && (
                 <div className="text-xs text-text-muted mb-2">
-                  Step 1 of 2: Backing up to external storage
+                  {t('pushDialog.step1')}
                 </div>
               )}
               {cleanupPhase && (
                 <div className="text-xs text-text-muted mb-2">
-                  Step 2 of 2: Freeing local disk space
+                  {t('pushDialog.step2')}
                 </div>
               )}
 
@@ -335,9 +337,9 @@ export function PushConfirmDialog({
                 <div className="flex justify-between text-sm">
                   <span className="text-text-secondary">
                     {isCompleted
-                      ? `${completedItems} ${completedLabel}`
+                      ? completedLabel
                       : isFailed
-                        ? `${completedItems} completed, ${failedItems} failed`
+                        ? t('pushDialog.completedAndFailed', { count: completedItems, count2: failedItems })
                         : `${phaseLabel}...`}
                   </span>
                   <span className="text-text-primary font-medium">{progressPercent.toFixed(0)}%</span>
@@ -363,10 +365,10 @@ export function PushConfirmDialog({
                   {isRunning && bytesPerSecond > 0 && (
                     <span>
                       {formatSpeed(bytesPerSecond)}
-                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${formatDuration(etaSeconds)} remaining`}
+                      {etaSeconds !== undefined && etaSeconds > 0 && ` · ${t('pushDialog.remaining', { duration: formatDuration(etaSeconds) })}`}
                     </span>
                   )}
-                  {isCompleted && elapsedSeconds > 0 && <span>Completed in {formatDuration(elapsedSeconds)}</span>}
+                  {isCompleted && elapsedSeconds > 0 && <span>{t('pushDialog.completedIn', { duration: formatDuration(elapsedSeconds) })}</span>}
                 </div>
               </div>
 
@@ -391,7 +393,7 @@ export function PushConfirmDialog({
               {/* Item counter during processing */}
               {isRunning && (
                 <div className="text-sm text-text-muted text-center">
-                  Processing {completedItems + failedItems + 1} of {totalItems}...
+                  {t('pushDialog.processing', { current: completedItems + failedItems + 1, total: totalItems })}
                 </div>
               )}
 
@@ -400,7 +402,7 @@ export function PushConfirmDialog({
                 <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
                   <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
                   <span className="text-sm text-green-400">
-                    Successfully backed up {completedItems} file{completedItems !== 1 ? 's' : ''}
+                    {t('pushDialog.successBackup', { count: completedItems })}
                   </span>
                 </div>
               )}
@@ -411,8 +413,8 @@ export function PushConfirmDialog({
                   <span className="text-sm text-green-400">
                     {/* Use progress.total_bytes which reflects actual items processed */}
                     {(progress?.total_bytes || 0) > 0
-                      ? `Successfully freed ${formatBytes(progress?.total_bytes || 0)} of local space`
-                      : 'Local space already freed'}
+                      ? t('pushDialog.successFree', { size: formatBytes(progress?.total_bytes || 0) })
+                      : t('pushDialog.alreadyFreed')}
                   </span>
                 </div>
               )}
@@ -423,7 +425,7 @@ export function PushConfirmDialog({
                     <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                     <div className="flex-1">
                       <span className="text-sm text-red-400">
-                        {failedItems} file{failedItems !== 1 ? 's' : ''} failed
+                        {t('pushDialog.filesFailed', { count: failedItems })}
                       </span>
                     </div>
                   </div>
@@ -436,7 +438,7 @@ export function PushConfirmDialog({
                         </div>
                       ))}
                       {progress.errors.length > 5 && (
-                        <div className="text-xs text-red-400/60">...and {progress.errors.length - 5} more</div>
+                        <div className="text-xs text-red-400/60">{t('pushDialog.moreErrors', { count: progress.errors.length - 5 })}</div>
                       )}
                     </div>
                   )}
@@ -450,12 +452,12 @@ export function PushConfirmDialog({
         <div className="flex items-center justify-between px-4 py-4 border-t border-slate-mid bg-slate-mid/10">
           <div className="text-xs text-text-muted">
             {showProgress
-              ? `${completedItems}/${totalItems} files`
+              ? t('pushDialog.filesProgress', { completed: completedItems, total: totalItems })
               : blobsToBackup.length > 0
-                ? `${blobsToBackup.length} files · ${formatBytes(totalBytesToBackup)}`
+                ? t('pushDialog.filesInfo', { count: blobsToBackup.length, size: formatBytes(totalBytesToBackup) })
                 : cleanup && localBlobs.length > 0
-                  ? `${localBlobs.length} files to free`
-                  : 'No files'}
+                  ? t('pushDialog.filesToFree', { count: localBlobs.length })
+                  : t('pushDialog.noFiles')}
           </div>
 
           <div className="flex gap-2">
@@ -466,7 +468,7 @@ export function PushConfirmDialog({
                   onClick={handleClose}
                   disabled={isLoading}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <Button
                   onClick={handleConfirm}
@@ -476,23 +478,23 @@ export function PushConfirmDialog({
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      {isFreeOnly ? 'Freeing space...' : cleanup ? 'Backing up & cleaning...' : 'Backing up...'}
+                      {isFreeOnly ? t('pushDialog.freeingLoading') : cleanup ? t('pushDialog.backupAndCleanLoading') : t('pushDialog.backupLoading')}
                     </>
                   ) : isFreeOnly ? (
                     <>
                       <Trash2 className="w-4 h-4" />
-                      Free Local Space
+                      {t('pushDialog.freeLocalSpace')}
                     </>
                   ) : cleanup ? (
                     <>
                       <ArrowUp className="w-4 h-4" />
                       <Trash2 className="w-3 h-3" />
-                      Backup & Free Space
+                      {t('pushDialog.backupAndFree')}
                     </>
                   ) : (
                     <>
                       <ArrowUp className="w-4 h-4" />
-                      Backup Now
+                      {t('pushDialog.backupNow')}
                     </>
                   )}
                 </Button>
@@ -501,7 +503,7 @@ export function PushConfirmDialog({
 
             {showProgress && isRunning && (
               <Button variant="ghost" size="sm" onClick={cancel} leftIcon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
 
@@ -515,13 +517,13 @@ export function PushConfirmDialog({
                 }}
                 leftIcon={<RotateCcw className="w-4 h-4" />}
               >
-                Retry Failed ({failedItems})
+                {t('pushDialog.retryFailed', { count: failedItems })}
               </Button>
             )}
 
             {showProgress && (isCompleted || (isFailed && !progress?.can_resume)) && (
               <Button variant="primary" size="sm" onClick={handleClose}>
-                Done
+                {t('pushDialog.done')}
               </Button>
             )}
           </div>

@@ -10,6 +10,7 @@
  */
 
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Save, Trash2, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -84,8 +85,9 @@ export function UnsavedChangesDialog({
   onDiscard,
   onCancel,
   isSaving = false,
-  message = 'You have unsaved changes that will be lost if you leave.',
+  message,
 }: UnsavedChangesDialogProps) {
+  const { t } = useTranslation()
   // Handle escape key
   useEffect(() => {
     if (!isOpen) return
@@ -132,10 +134,10 @@ export function UnsavedChangesDialog({
           </div>
           <div>
             <h3 className="text-lg font-semibold text-text-primary">
-              Unsaved Changes
+              {t('pack.unsavedChanges.title')}
             </h3>
             <p className="text-sm text-text-muted">
-              What would you like to do?
+              {t('pack.unsavedChanges.whatToDo')}
             </p>
           </div>
 
@@ -153,7 +155,7 @@ export function UnsavedChangesDialog({
 
         {/* Message */}
         <p className="text-text-secondary mb-6">
-          {message}
+          {message || t('pack.unsavedChanges.defaultMessage')}
         </p>
 
         {/* Action Buttons */}
@@ -166,7 +168,7 @@ export function UnsavedChangesDialog({
             className="flex-1"
           >
             <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving ? t('pack.unsavedChanges.saving') : t('pack.unsavedChanges.saveChanges')}
           </Button>
 
           {/* Discard Button - Destructive */}
@@ -180,13 +182,13 @@ export function UnsavedChangesDialog({
             )}
           >
             <Trash2 className="w-4 h-4" />
-            Discard
+            {t('pack.unsavedChanges.discard')}
           </Button>
         </div>
 
         {/* Cancel hint */}
         <p className="text-center text-xs text-text-muted mt-4">
-          Press <kbd className="px-1.5 py-0.5 rounded bg-slate-mid text-text-secondary">Esc</kbd> to cancel
+          {t('pack.unsavedChanges.escHint', { key: 'Esc' })}
         </p>
       </div>
     </div>

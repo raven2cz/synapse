@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   ChevronDown, 
@@ -24,6 +25,7 @@ interface ProfilesStatus {
 }
 
 export function ProfileDropdown() {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
@@ -44,7 +46,7 @@ export function ProfileDropdown() {
     queryKey: ['profiles-status'],
     queryFn: async () => {
       const res = await fetch('/api/profiles/status')
-      if (!res.ok) throw new Error('Failed to fetch profiles status')
+      if (!res.ok) throw new Error(t('profiles.dropdown.failedToFetch'))
       return res.json()
     },
     refetchInterval: 5000,
@@ -58,7 +60,7 @@ export function ProfileDropdown() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sync: true }),
       })
-      if (!res.ok) throw new Error('Failed to go back')
+      if (!res.ok) throw new Error(t('profiles.dropdown.failedToGoBack'))
       return res.json()
     },
     onSuccess: (data) => {
@@ -67,7 +69,7 @@ export function ProfileDropdown() {
       toast.success(`Switched to: ${data?.new_profile || 'previous profile'}`)
     },
     onError: (error: Error) => {
-      toast.error(`Back failed: ${error.message}`)
+      toast.error(t('profiles.toast.backFailed', { error: error.message }))
     },
   })
 
@@ -79,16 +81,16 @@ export function ProfileDropdown() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sync: true }),
       })
-      if (!res.ok) throw new Error('Failed to reset')
+      if (!res.ok) throw new Error(t('profiles.dropdown.failedToReset'))
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['profiles-status'] })
       setIsOpen(false)
-      toast.success('Reset to global profile')
+      toast.success(t('profiles.toast.resetSuccess'))
     },
     onError: (error: Error) => {
-      toast.error(`Reset failed: ${error.message}`)
+      toast.error(t('profiles.toast.resetFailed', { error: error.message }))
     },
   })
 
@@ -102,7 +104,7 @@ export function ProfileDropdown() {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg">
         <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
-        <span className="text-sm text-slate-400">Loading...</span>
+        <span className="text-sm text-slate-400">{t('common.loading')}</span>
       </div>
     )
   }
@@ -136,15 +138,15 @@ export function ProfileDropdown() {
         <div className="absolute right-0 mt-2 w-72 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
           {/* Header */}
           <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/80">
-            <p className="text-sm font-medium text-slate-200">Profile Stack</p>
+            <p className="text-sm font-medium text-slate-200">{t('profiles.dropdown.title')}</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              {status?.ui_statuses?.length || 0} UI(s) configured
+              {t('profiles.dropdown.uisConfigured', { count: status?.ui_statuses?.length || 0 })}
             </p>
           </div>
 
           {/* Stack Visualization */}
           <div className="px-4 py-3 border-b border-slate-700">
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Current Stack</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">{t('profiles.dropdown.currentStack')}</p>
             <div className="space-y-1">
               {primaryStatus?.stack.map((profile, index) => (
                 <div
@@ -186,7 +188,7 @@ export function ProfileDropdown() {
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Previous</span>
+              <span>{t('profiles.dropdown.backToPrevious')}</span>
               {backMutation.isPending && <RefreshCw className="w-3 h-3 animate-spin ml-auto" />}
             </button>
             
@@ -196,7 +198,7 @@ export function ProfileDropdown() {
               className="w-full flex items-center gap-3 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Home className="w-4 h-4" />
-              <span>Reset to Global</span>
+              <span>{t('profiles.dropdown.resetToGlobal')}</span>
               {resetMutation.isPending && <RefreshCw className="w-3 h-3 animate-spin ml-auto" />}
             </button>
           </div>
@@ -208,7 +210,7 @@ export function ProfileDropdown() {
               className="text-xs text-indigo-400 hover:text-indigo-300"
               onClick={() => setIsOpen(false)}
             >
-              Manage all profiles →
+              {t('profiles.dropdown.manageAll')} →
             </a>
           </div>
         </div>

@@ -12,6 +12,7 @@
  */
 
 import { useState, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   Loader2,
@@ -279,60 +280,62 @@ interface MarkdownToolbarProps {
 }
 
 function MarkdownToolbar({ onInsert }: MarkdownToolbarProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <ToolbarButton
         icon={<Bold className="w-4 h-4" />}
-        title="Bold (Ctrl+B)"
-        onClick={() => onInsert('**', '**', 'bold text')}
+        title={t('pack.modals.description.bold')}
+        onClick={() => onInsert('**', '**', t('pack.modals.description.boldText'))}
       />
       <ToolbarButton
         icon={<Italic className="w-4 h-4" />}
-        title="Italic (Ctrl+I)"
-        onClick={() => onInsert('*', '*', 'italic text')}
+        title={t('pack.modals.description.italic')}
+        onClick={() => onInsert('*', '*', t('pack.modals.description.italicText'))}
       />
       <div className="w-px h-6 bg-slate-mid mx-1" />
       <ToolbarButton
         icon={<Heading1 className="w-4 h-4" />}
-        title="Heading 1"
-        onClick={() => onInsert('# ', '', 'Heading')}
+        title={t('pack.modals.description.heading1')}
+        onClick={() => onInsert('# ', '', t('pack.modals.description.heading'))}
       />
       <ToolbarButton
         icon={<Heading2 className="w-4 h-4" />}
-        title="Heading 2"
-        onClick={() => onInsert('## ', '', 'Heading')}
+        title={t('pack.modals.description.heading2')}
+        onClick={() => onInsert('## ', '', t('pack.modals.description.heading'))}
       />
       <div className="w-px h-6 bg-slate-mid mx-1" />
       <ToolbarButton
         icon={<List className="w-4 h-4" />}
-        title="Unordered List"
-        onClick={() => onInsert('- ', '', 'list item')}
+        title={t('pack.modals.description.unorderedList')}
+        onClick={() => onInsert('- ', '', t('pack.modals.description.listItem'))}
       />
       <ToolbarButton
         icon={<ListOrdered className="w-4 h-4" />}
-        title="Ordered List"
-        onClick={() => onInsert('1. ', '', 'list item')}
+        title={t('pack.modals.description.orderedList')}
+        onClick={() => onInsert('1. ', '', t('pack.modals.description.listItem'))}
       />
       <div className="w-px h-6 bg-slate-mid mx-1" />
       <ToolbarButton
         icon={<Link className="w-4 h-4" />}
-        title="Link"
-        onClick={() => onInsert('[', '](url)', 'link text')}
+        title={t('pack.modals.description.link')}
+        onClick={() => onInsert('[', '](url)', t('pack.modals.description.linkText'))}
       />
       <ToolbarButton
         icon={<Image className="w-4 h-4" />}
-        title="Image"
-        onClick={() => onInsert('![', '](url)', 'alt text')}
+        title={t('pack.modals.description.image')}
+        onClick={() => onInsert('![', '](url)', t('pack.modals.description.altText'))}
       />
       <ToolbarButton
         icon={<Code className="w-4 h-4" />}
-        title="Inline Code"
-        onClick={() => onInsert('`', '`', 'code')}
+        title={t('pack.modals.description.inlineCode')}
+        onClick={() => onInsert('`', '`', t('pack.modals.description.code'))}
       />
       <ToolbarButton
         icon={<Quote className="w-4 h-4" />}
-        title="Blockquote"
-        onClick={() => onInsert('> ', '', 'quote')}
+        title={t('pack.modals.description.blockquote')}
+        onClick={() => onInsert('> ', '', t('pack.modals.description.quote'))}
       />
     </div>
   )
@@ -348,21 +351,23 @@ interface HtmlToolbarProps {
 }
 
 function HtmlToolbar({ onFormat, onMinify }: HtmlToolbarProps) {
+  const { t } = useTranslation()
+
   return (
     <div className="flex items-center gap-1 flex-wrap">
       <ToolbarButton
         icon={<Code className="w-4 h-4" />}
-        title="Format HTML (prettify)"
+        title={t('pack.modals.description.formatHtml')}
         onClick={onFormat}
       />
       <ToolbarButton
         icon={<Minimize2 className="w-4 h-4" />}
-        title="Minify HTML"
+        title={t('pack.modals.description.minifyHtml')}
         onClick={onMinify}
       />
       <div className="w-px h-6 bg-slate-mid mx-2" />
       <span className="text-xs text-text-muted">
-        Format: Add indentation | Minify: Remove whitespace
+        {t('pack.modals.description.formatHint')}
       </span>
     </div>
   )
@@ -380,6 +385,7 @@ export function DescriptionEditorModal({
   isSaving = false,
   forcedFormat,
 }: DescriptionEditorModalProps) {
+  const { t } = useTranslation()
   const [content, setContent] = useState(initialContent)
   const [format, setFormat] = useState<ContentFormat>(
     forcedFormat || detectFormat(initialContent)
@@ -445,7 +451,7 @@ export function DescriptionEditorModal({
         <div className="flex items-center justify-between p-4 border-b border-slate-mid/50">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-text-primary">
-              Edit Description
+              {t('pack.modals.description.title')}
             </h3>
 
             {/* Format toggle */}
@@ -460,7 +466,7 @@ export function DescriptionEditorModal({
                 )}
               >
                 <FileText className="w-4 h-4 inline-block mr-1" />
-                Markdown
+                {t('pack.modals.description.markdown')}
               </button>
               <button
                 onClick={() => setFormat('html')}
@@ -472,14 +478,14 @@ export function DescriptionEditorModal({
                 )}
               >
                 <Code2 className="w-4 h-4 inline-block mr-1" />
-                HTML
+                {t('pack.modals.description.html')}
               </button>
             </div>
 
             {/* Detected format indicator */}
             {detectedFormat !== format && (
               <span className="text-xs text-amber-400">
-                (Detected: {detectedFormat})
+                ({t('pack.modals.description.detected', { format: detectedFormat })})
               </span>
             )}
           </div>
@@ -495,7 +501,7 @@ export function DescriptionEditorModal({
                     ? 'bg-synapse/20 text-synapse'
                     : 'text-text-muted hover:text-text-secondary'
                 )}
-                title="Edit only"
+                title={t('pack.modals.description.editOnly')}
               >
                 <Edit3 className="w-4 h-4" />
               </button>
@@ -507,7 +513,7 @@ export function DescriptionEditorModal({
                     ? 'bg-synapse/20 text-synapse'
                     : 'text-text-muted hover:text-text-secondary'
                 )}
-                title="Split view"
+                title={t('pack.modals.description.splitView')}
               >
                 <div className="w-4 h-4 flex">
                   <div className="w-2 h-4 border-r border-current" />
@@ -522,7 +528,7 @@ export function DescriptionEditorModal({
                     ? 'bg-synapse/20 text-synapse'
                     : 'text-text-muted hover:text-text-secondary'
                 )}
-                title="Preview only"
+                title={t('pack.modals.description.previewOnly')}
               >
                 <Eye className="w-4 h-4" />
               </button>
@@ -532,7 +538,7 @@ export function DescriptionEditorModal({
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
               className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-slate-mid transition-colors"
-              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              title={isFullscreen ? t('pack.modals.description.exitFullscreen') : t('pack.modals.description.fullscreen')}
             >
               {isFullscreen ? (
                 <Minimize2 className="w-5 h-5" />
@@ -578,7 +584,7 @@ export function DescriptionEditorModal({
                   value={content}
                   onChange={setContent}
                   language={format === 'markdown' ? 'markdown' : 'html'}
-                  placeholder={format === 'markdown' ? 'Write your description in Markdown...' : 'Write or paste HTML...'}
+                  placeholder={format === 'markdown' ? t('pack.modals.description.placeholderMarkdown') : t('pack.modals.description.placeholderHtml')}
                   lineWrapping={true}
                   minHeight="200px"
                   maxHeight="100%"
@@ -596,7 +602,7 @@ export function DescriptionEditorModal({
               'bg-slate-dark/30'
             )}>
               <div className="text-xs text-text-muted mb-2 uppercase tracking-wider">
-                Preview
+                {t('pack.modals.description.preview')}
               </div>
               <div
                 className="prose prose-invert prose-sm max-w-none"
@@ -609,11 +615,11 @@ export function DescriptionEditorModal({
         {/* Footer */}
         <div className="flex items-center justify-between p-4 border-t border-slate-mid/50">
           <div className="text-sm text-text-muted">
-            {content.length} characters
+            {content.length} {t('pack.modals.description.characters')}
           </div>
           <div className="flex gap-3">
             <Button variant="secondary" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               variant="primary"
@@ -623,7 +629,7 @@ export function DescriptionEditorModal({
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : null}
-              Save Description
+              {t('pack.modals.description.saveDescription')}
             </Button>
           </div>
         </div>

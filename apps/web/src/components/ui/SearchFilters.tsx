@@ -13,6 +13,7 @@
  */
 
 import { useState, useEffect, useRef, createContext, useContext, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   Zap,
   Globe,
@@ -78,7 +79,7 @@ interface SearchFiltersProps {
 
 interface FilterTypeConfig {
   key: FilterType
-  label: string
+  labelKey: string
   icon: React.ReactNode
   multiSelect: boolean
   options: readonly { value: string; label: string }[]
@@ -87,28 +88,28 @@ interface FilterTypeConfig {
 const FILTER_TYPE_CONFIGS: FilterTypeConfig[] = [
   {
     key: 'baseModel',
-    label: 'Base Model',
+    labelKey: 'filterBaseModel',
     icon: <Filter className="w-4 h-4" />,
     multiSelect: false,
     options: BASE_MODEL_OPTIONS,
   },
   {
     key: 'modelTypes',
-    label: 'Model Type',
+    labelKey: 'filterModelType',
     icon: <Filter className="w-4 h-4" />,
     multiSelect: true,
     options: MODEL_TYPE_OPTIONS,
   },
   {
     key: 'fileFormat',
-    label: 'File Format',
+    labelKey: 'filterFileFormat',
     icon: <Filter className="w-4 h-4" />,
     multiSelect: false,
     options: FILE_FORMAT_OPTIONS,
   },
   {
     key: 'category',
-    label: 'Category',
+    labelKey: 'filterCategory',
     icon: <Filter className="w-4 h-4" />,
     multiSelect: false,
     options: CATEGORY_OPTIONS,
@@ -374,6 +375,7 @@ interface StatusBadgeProps {
 }
 
 function StatusBadge({ provider, isLoading, isError }: StatusBadgeProps) {
+  const { t } = useTranslation()
   const colors = PROVIDER_COLORS[provider]
   const config = PROVIDER_CONFIGS[provider]
 
@@ -381,7 +383,7 @@ function StatusBadge({ provider, isLoading, isError }: StatusBadgeProps) {
     return (
       <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/15 border border-red-400/40">
         <AlertTriangle className="w-3 h-3 text-red-400" />
-        <span className="text-xs text-red-400 font-semibold uppercase tracking-wide">Offline</span>
+        <span className="text-xs text-red-400 font-semibold uppercase tracking-wide">{t('searchFilters.offline')}</span>
       </div>
     )
   }
@@ -390,7 +392,7 @@ function StatusBadge({ provider, isLoading, isError }: StatusBadgeProps) {
     return (
       <div className={clsx('flex items-center gap-2 px-3 py-1.5 rounded-full border', colors.status)}>
         <Loader2 className="w-3 h-3 animate-spin" />
-        <span className="text-xs font-semibold uppercase tracking-wide">Fetching</span>
+        <span className="text-xs font-semibold uppercase tracking-wide">{t('searchFilters.fetching')}</span>
       </div>
     )
   }
@@ -426,6 +428,7 @@ function FilterValueSelector({
   onChange,
   onClose,
 }: FilterValueSelectorProps) {
+  const { t } = useTranslation()
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -471,9 +474,9 @@ function FilterValueSelector({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-mid/30 mb-1">
-        <span className="text-sm font-medium text-text-primary">{filterType.label}</span>
+        <span className="text-sm font-medium text-text-primary">{t('searchFilters.' + filterType.labelKey)}</span>
         {filterType.multiSelect && selectedValues.length > 0 && (
-          <span className="text-xs text-synapse">{selectedValues.length} selected</span>
+          <span className="text-xs text-synapse">{t('searchFilters.selected', { count: selectedValues.length })}</span>
         )}
       </div>
 
@@ -482,7 +485,7 @@ function FilterValueSelector({
         <div className="px-2 pb-2">
           <input
             type="text"
-            placeholder={`Search ${filterType.label.toLowerCase()}...`}
+            placeholder={t('searchFilters.search', { label: t('searchFilters.' + filterType.labelKey).toLowerCase() })}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={clsx(
@@ -499,7 +502,7 @@ function FilterValueSelector({
       {/* Options */}
       <div className="max-h-[300px] overflow-y-auto">
         {filteredOptions.length === 0 ? (
-          <div className="px-3 py-4 text-sm text-text-muted text-center">No options found</div>
+          <div className="px-3 py-4 text-sm text-text-muted text-center">{t('searchFilters.noOptions')}</div>
         ) : (
           filteredOptions.map((opt) =>
             filterType.multiSelect ? (
@@ -537,7 +540,7 @@ function FilterValueSelector({
               'hover:bg-synapse/30 transition-colors'
             )}
           >
-            Done
+            {t('searchFilters.done')}
           </button>
         </div>
       )}
@@ -560,6 +563,7 @@ function AddFilterButton({
   getSelectedValues,
   onValuesChange,
 }: AddFilterButtonProps) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const [selectedFilterType, setSelectedFilterType] = useState<FilterTypeConfig | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -596,7 +600,7 @@ function AddFilterButton({
     <div className="relative" ref={containerRef}>
       <Chip variant="add" onClick={() => setIsOpen(!isOpen)}>
         <Plus className="w-4 h-4" />
-        <span>Add filter</span>
+        <span>{t('searchFilters.addFilter')}</span>
       </Chip>
 
       {/* Step 1: Filter Type Selection */}
@@ -611,7 +615,7 @@ function AddFilterButton({
             'z-[9999]'
           )}
         >
-          <DropdownLabel>Select filter type</DropdownLabel>
+          <DropdownLabel>{t('searchFilters.selectFilterType')}</DropdownLabel>
           {availableFilters.map((config) => (
             <button
               key={config.key}
@@ -623,10 +627,10 @@ function AddFilterButton({
               )}
             >
               {config.icon}
-              <span className="flex-1">{config.label}</span>
+              <span className="flex-1">{t('searchFilters.' + config.labelKey)}</span>
               {config.multiSelect && (
                 <span className="text-xs text-text-muted bg-slate-mid/30 px-1.5 py-0.5 rounded">
-                  Multi
+                  {t('searchFilters.multi')}
                 </span>
               )}
               <ChevronRight className="w-4 h-4 opacity-50" />
@@ -673,6 +677,7 @@ export function SearchFilters({
   isError,
   disabled,
 }: SearchFiltersProps) {
+  const { t } = useTranslation()
   const config = PROVIDER_CONFIGS[provider]
   const colors = PROVIDER_COLORS[provider]
   const trpcAvailable = isProviderAvailable('trpc')
@@ -807,16 +812,16 @@ export function SearchFilters({
           onClick={() => trpcAvailable && onProviderChange('trpc')}
         >
           <Zap className="w-4 h-4 text-violet-400" />
-          <span>Internal tRPC</span>
-          {!trpcAvailable && <span className="ml-auto text-xs text-red-400">Offline</span>}
+          <span>{t('searchFilters.providerTrpc')}</span>
+          {!trpcAvailable && <span className="ml-auto text-xs text-red-400">{t('searchFilters.offline')}</span>}
         </DropdownItem>
         <DropdownItem selected={provider === 'rest'} onClick={() => onProviderChange('rest')}>
           <Globe className="w-4 h-4 text-blue-400" />
-          <span>REST API</span>
+          <span>{t('searchFilters.providerRest')}</span>
         </DropdownItem>
         <DropdownItem selected={provider === 'archive'} onClick={() => onProviderChange('archive')}>
           <Archive className="w-4 h-4 text-amber-400" />
-          <span>CivArchive</span>
+          <span>{t('searchFilters.providerArchive')}</span>
         </DropdownItem>
       </Dropdown>
 
@@ -833,7 +838,7 @@ export function SearchFilters({
         <Dropdown
           trigger={
             <Chip variant="filter">
-              <span>Most Downloaded</span>
+              <span>{t('searchFilters.defaultSort')}</span>
               <ChevronDown className="w-4 h-4 opacity-50" />
             </Chip>
           }
@@ -860,7 +865,7 @@ export function SearchFilters({
         <Dropdown
           trigger={
             <Chip variant="filter">
-              <span>All Time</span>
+              <span>{t('searchFilters.defaultPeriod')}</span>
               <ChevronDown className="w-4 h-4 opacity-50" />
             </Chip>
           }
@@ -922,7 +927,7 @@ export function SearchFilters({
       {activeFilterCount >= 2 && (
         <Chip variant="clear" onClick={handleClearAll}>
           <Trash2 className="w-4 h-4" />
-          <span>Clear all</span>
+          <span>{t('searchFilters.clearAll')}</span>
         </Chip>
       )}
 

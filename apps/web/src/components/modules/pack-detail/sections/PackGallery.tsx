@@ -18,6 +18,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ZoomIn, ZoomOut, Play, Image as ImageIcon, Edit3, Minimize2, Maximize2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { MediaPreview } from '@/components/ui/MediaPreview'
@@ -67,6 +68,7 @@ export function PackGallery({
   initialSize = 'sm',
   animationDelay = 0,
 }: PackGalleryProps) {
+  const { t } = useTranslation()
   const [cardSize, setCardSize] = useState<CardSize>(initialSize)
   const [isCollapsed, setIsCollapsed] = useState(false)
 
@@ -99,9 +101,9 @@ export function PackGallery({
         style={{ animationDelay: `${animationDelay}ms`, animationFillMode: 'both' }}
       >
         <ImageIcon className="w-12 h-12 text-text-muted/50 mb-3" />
-        <p className="text-text-muted text-sm">No previews available</p>
+        <p className="text-text-muted text-sm">{t('pack.gallery.noPreviewsAvailable')}</p>
         <p className="text-text-muted/60 text-xs mt-1">
-          Import from Civitai or add previews manually
+          {t('pack.gallery.importHint')}
         </p>
       </div>
     )
@@ -116,7 +118,7 @@ export function PackGallery({
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-synapse animate-pulse" />
-          Previews
+          {t('pack.gallery.previews')}
           <span className="text-text-muted font-normal">({previews.length})</span>
         </h3>
 
@@ -130,17 +132,17 @@ export function PackGallery({
               'bg-slate-mid/30 hover:bg-slate-mid/50',
               'transition-colors duration-200'
             )}
-            title={isCollapsed ? 'Expand previews' : 'Collapse previews'}
+            title={isCollapsed ? t('pack.gallery.expandPreviews') : t('pack.gallery.collapsePreviews')}
           >
             {isCollapsed ? (
               <>
                 <Maximize2 className="w-3.5 h-3.5" />
-                Expand
+                {t('pack.gallery.expand')}
               </>
             ) : (
               <>
                 <Minimize2 className="w-3.5 h-3.5" />
-                Collapse
+                {t('pack.gallery.collapse')}
               </>
             )}
           </button>
@@ -157,7 +159,7 @@ export function PackGallery({
               )}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              Edit
+              {t('pack.gallery.edit')}
             </button>
           )}
 
@@ -176,7 +178,7 @@ export function PackGallery({
               'hover:bg-slate-mid hover:text-synapse',
               'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent'
             )}
-            title="Zoom out"
+            title={t('pack.gallery.zoomOut')}
           >
             <ZoomOut className="w-4 h-4" />
           </button>
@@ -189,7 +191,7 @@ export function PackGallery({
               'hover:bg-slate-mid hover:text-synapse',
               'disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent'
             )}
-            title="Zoom in"
+            title={t('pack.gallery.zoomIn')}
           >
             <ZoomIn className="w-4 h-4" />
           </button>
@@ -203,7 +205,7 @@ export function PackGallery({
           'transition-[max-height] duration-300 ease-in-out overflow-hidden',
           isCollapsed
             ? 'max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
-            : 'max-h-[5000px]'
+            : 'max-h-[10000px]'
         )}
       >
         {/* Grid - uses constants for responsive sizing */}
@@ -258,7 +260,7 @@ export function PackGallery({
                 'group-hover/card:scale-105'
               )}>
                 <Play className="w-3 h-3" fill="currentColor" />
-                Video
+                {t('pack.gallery.video')}
               </div>
             )}
 

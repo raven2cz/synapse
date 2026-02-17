@@ -647,7 +647,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                             <button
                                                 onClick={() => setIsEditingName(true)}
                                                 className="p-2 rounded-lg hover:bg-white/10 text-text-muted hover:text-synapse transition-colors"
-                                                title="Edit pack name"
+                                                title={t('importModal.editPackName')}
                                             >
                                                 <Pencil className="w-4 h-4" />
                                             </button>
@@ -811,7 +811,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                         // Refresh - recalculate (already reactive via useMemo)
                                     }}
                                     className="p-1.5 rounded-lg hover:bg-white/10 text-text-muted hover:text-synapse transition-colors"
-                                    title="Refresh preview"
+                                    title={t('importModal.refreshPreview')}
                                 >
                                     <RefreshCw className="w-4 h-4" />
                                 </button>

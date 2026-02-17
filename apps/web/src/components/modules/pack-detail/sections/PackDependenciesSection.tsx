@@ -36,6 +36,7 @@
  * - ETA
  */
 
+import { useTranslation } from 'react-i18next'
 import { Loader2, Download, Check, Cloud, AlertTriangle, Package,
   DownloadCloud, ArrowLeftRight, RotateCcw, Trash2, HardDrive,
   Gauge, Timer, FolderOpen, Globe } from 'lucide-react'
@@ -108,6 +109,7 @@ interface StatusIconProps {
 }
 
 function StatusIcon({ isDownloading, isInstalled, isBackupOnly, needsResolve }: StatusIconProps) {
+  const { t } = useTranslation()
   if (isDownloading) {
     return (
       <div className="w-8 h-8 rounded-full bg-synapse/30 flex items-center justify-center flex-shrink-0">
@@ -124,7 +126,7 @@ function StatusIcon({ isDownloading, isInstalled, isBackupOnly, needsResolve }: 
   }
   if (isBackupOnly) {
     return (
-      <div className="w-8 h-8 rounded-full bg-sky-500/30 flex items-center justify-center flex-shrink-0" title="Available on backup storage">
+      <div className="w-8 h-8 rounded-full bg-sky-500/30 flex items-center justify-center flex-shrink-0" title={t('pack.dependencies.availableOnBackup')}>
         <Cloud className="w-5 h-5 text-sky-400" />
       </div>
     )
@@ -148,6 +150,7 @@ interface DownloadProgressDisplayProps {
 }
 
 function DownloadProgressDisplay({ download }: DownloadProgressDisplayProps) {
+  const { t } = useTranslation()
   return (
     <div className="mt-3 space-y-2">
       <ProgressBar progress={download.progress} showLabel={true} />
@@ -164,7 +167,7 @@ function DownloadProgressDisplay({ download }: DownloadProgressDisplayProps) {
         </div>
         <span className="flex items-center gap-1">
           <Timer className="w-3 h-3" />
-          ETA: {formatEta(download.eta_seconds)}
+          {t('pack.dependencies.eta')} {formatEta(download.eta_seconds)}
         </span>
       </div>
     </div>
@@ -179,12 +182,13 @@ interface AssetDetailsProps {
 }
 
 function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: AssetDetailsProps) {
+  const { t } = useTranslation()
   return (
     <div className="mt-3 pt-3 border-t border-white/10 text-xs space-y-1.5">
       {/* File name */}
       {asset.filename && (
         <div className="flex items-center gap-2 text-text-muted">
-          <span className="font-medium text-text-secondary w-16">File:</span>
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.file')}</span>
           <code className="bg-slate-mid/50 px-2 py-0.5 rounded flex-1 truncate">{asset.filename}</code>
         </div>
       )}
@@ -192,7 +196,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {/* Version */}
       {asset.version_name && (
         <div className="flex items-center gap-2 text-text-muted">
-          <span className="font-medium text-text-secondary w-16">Version:</span>
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.version')}</span>
           <span className="text-synapse">{asset.version_name}</span>
         </div>
       )}
@@ -202,7 +206,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
         <>
           {asset.source_info.model_name && (
             <div className="flex items-center gap-2 text-text-muted">
-              <span className="font-medium text-text-secondary w-16">Model:</span>
+              <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.model')}</span>
               <span>{asset.source_info.model_name}</span>
               {asset.source_info.model_id && (
                 <span className="text-text-muted/60">(#{asset.source_info.model_id})</span>
@@ -211,13 +215,13 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
           )}
           {asset.source_info.creator && (
             <div className="flex items-center gap-2 text-text-muted">
-              <span className="font-medium text-text-secondary w-16">Creator:</span>
+              <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.creator')}</span>
               <span className="text-blue-400">{asset.source_info.creator}</span>
             </div>
           )}
           {asset.source_info.repo_id && (
             <div className="flex items-center gap-2 text-text-muted">
-              <span className="font-medium text-text-secondary w-16">Repo:</span>
+              <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.repo')}</span>
               <span>{asset.source_info.repo_id}</span>
             </div>
           )}
@@ -227,7 +231,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {/* Size */}
       {asset.size && (
         <div className="flex items-center gap-2 text-text-muted">
-          <span className="font-medium text-text-secondary w-16">Size:</span>
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.size')}</span>
           <span>{formatBytes(asset.size)}</span>
         </div>
       )}
@@ -235,7 +239,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {/* SHA256 */}
       {asset.sha256 && (
         <div className="flex items-center gap-2 text-text-muted">
-          <span className="font-medium text-text-secondary w-16">SHA256:</span>
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.sha256')}</span>
           <code className="truncate flex-1 text-green-400/70" title={asset.sha256}>
             {asset.sha256.substring(0, 16)}...
           </code>
@@ -245,7 +249,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {/* Download URL */}
       {asset.url && !isInstalled && (
         <div className="flex items-center gap-2 text-text-muted">
-          <span className="font-medium text-text-secondary w-16">URL:</span>
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.url')}</span>
           <a
             href={asset.url}
             target="_blank"
@@ -262,7 +266,7 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {asset.local_path && (
         <div className="flex items-center gap-2 text-text-muted">
           <FolderOpen className="w-3 h-3 text-text-secondary" />
-          <span className="font-medium text-text-secondary">Path:</span>
+          <span className="font-medium text-text-secondary">{t('pack.dependencies.detail.path')}</span>
           <code className="truncate flex-1" title={asset.local_path}>{asset.local_path}</code>
         </div>
       )}
@@ -271,13 +275,13 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
       {!asset.local_path && isBackupOnly && (
         <div className="flex items-center gap-2 text-sky-400">
           <Cloud className="w-3 h-3" />
-          <span>Available on backup - click cloud to restore</span>
+          <span>{t('pack.dependencies.backupRestore')}</span>
         </div>
       )}
       {!asset.local_path && asset.url && !isDownloading && !isBackupOnly && (
         <div className="flex items-center gap-2 text-text-muted">
           <Globe className="w-3 h-3" />
-          <span className="truncate flex-1" title={asset.url}>Ready to download</span>
+          <span className="truncate flex-1" title={asset.url}>{t('pack.dependencies.readyToDownload')}</span>
         </div>
       )}
     </div>
@@ -304,6 +308,7 @@ export function PackDependenciesSection({
   isDeletePending = false,
   animationDelay = 0,
 }: PackDependenciesSectionProps) {
+  const { t } = useTranslation()
 
   // Check if any asset can be downloaded
   const hasDownloadableAssets = assets?.some(a => a.url && !a.installed && !a.local_path)
@@ -318,7 +323,7 @@ export function PackDependenciesSection({
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
           <Package className="w-4 h-4 text-blue-400" />
-          Dependencies
+          {t('pack.dependencies.title')}
           <span className="text-text-muted font-normal">({assets?.length || 0})</span>
         </h3>
 
@@ -336,7 +341,7 @@ export function PackDependenciesSection({
               ) : (
                 <DownloadCloud className="w-4 h-4" />
               )}
-              Download All
+              {t('pack.dependencies.downloadAll')}
             </Button>
           )}
         </div>
@@ -441,7 +446,7 @@ export function PackDependenciesSection({
                       <button
                         onClick={() => onRestoreFromBackup(asset)}
                         className="p-2 bg-sky-500 text-white rounded-lg hover:bg-sky-400 transition-all duration-200 hover:scale-105"
-                        title="Restore from Backup Storage"
+                        title={t('pack.dependencies.restoreFromBackup')}
                       >
                         <Cloud className="w-4 h-4" />
                       </button>
@@ -452,7 +457,7 @@ export function PackDependenciesSection({
                       <button
                         onClick={() => onDownloadAsset(asset)}
                         className="p-2 bg-synapse text-white rounded-lg hover:bg-synapse/80 transition-all duration-200 hover:scale-105"
-                        title="Download"
+                        title={t('pack.dependencies.downloadAsset')}
                       >
                         <Download className="w-4 h-4" />
                       </button>
@@ -469,7 +474,7 @@ export function PackDependenciesSection({
                         onClick={onOpenBaseModelResolver}
                         className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
                       >
-                        Select Model
+                        {t('pack.dependencies.selectModel')}
                       </button>
                     )}
 
@@ -478,9 +483,9 @@ export function PackDependenciesSection({
                       <button
                         onClick={onResolvePack}
                         className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
-                        title="Re-resolve dependency to get download URL"
+                        title={t('pack.dependencies.reResolve')}
                       >
-                        Resolve
+                        {t('pack.dependencies.resolve')}
                       </button>
                     )}
                     {!isBaseModel && needsResolve && isResolvePending && (
@@ -492,7 +497,7 @@ export function PackDependenciesSection({
                       <button
                         onClick={onOpenBaseModelResolver}
                         className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-amber-400 hover:bg-slate-mid/80 transition-all duration-200"
-                        title="Change base model"
+                        title={t('pack.dependencies.changeBaseModel')}
                       >
                         <ArrowLeftRight className="w-4 h-4" />
                       </button>
@@ -502,12 +507,12 @@ export function PackDependenciesSection({
                     {isInstalled && (
                       <button
                         onClick={() => {
-                          if (confirm(`Re-download ${asset.filename || asset.name}? This will replace the existing file.`)) {
+                          if (confirm(t('pack.dependencies.confirmRedownload', { name: asset.filename || asset.name }))) {
                             onDownloadAsset(asset)
                           }
                         }}
                         className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-synapse hover:bg-slate-mid/80 transition-all duration-200"
-                        title="Re-download"
+                        title={t('pack.dependencies.reDownloadTitle')}
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
@@ -517,19 +522,14 @@ export function PackDependenciesSection({
                     {isInstalled && (
                       <button
                         onClick={() => {
-                          const deleteChoice = confirm(
-                            `Delete downloaded file for "${asset.filename || asset.name}"?\n\n` +
-                            `This will remove the file from blob store.\n\n` +
-                            `Press OK to delete file only.\n` +
-                            `The dependency will remain in pack.json for re-download.`
-                          )
+                          const deleteChoice = confirm(t('pack.dependencies.confirmDelete', { name: asset.filename || asset.name }))
                           if (deleteChoice) {
                             onDeleteResource(asset.name)
                           }
                         }}
                         disabled={isDeletePending}
                         className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all duration-200"
-                        title="Delete downloaded file"
+                        title={t('pack.dependencies.deleteFile')}
                       >
                         {isDeletePending ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -560,7 +560,7 @@ export function PackDependenciesSection({
       ) : (
         <div className="text-center py-8">
           <Package className="w-12 h-12 mx-auto mb-3 text-text-muted/50" />
-          <p className="text-text-muted text-sm">No dependencies</p>
+          <p className="text-text-muted text-sm">{t('pack.dependencies.empty')}</p>
         </div>
       )}
     </Card>

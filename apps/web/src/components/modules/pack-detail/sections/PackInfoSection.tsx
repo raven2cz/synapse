@@ -17,6 +17,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Copy, Check, Download, Star, Info, Sparkles, Wand2, Edit3, Minimize2, Maximize2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Card } from '@/components/ui/Card'
@@ -55,12 +56,13 @@ interface TriggerWordChipProps {
 }
 
 function TriggerWordChip({ word }: TriggerWordChipProps) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
     navigator.clipboard.writeText(word)
     setCopied(true)
-    toast.success(`Copied: ${word}`)
+    toast.success(t('pack.info.copied', { text: word }))
     setTimeout(() => setCopied(false), 2000)
   }
 
@@ -93,6 +95,7 @@ interface TriggerWordsCardProps {
 }
 
 function TriggerWordsCard({ triggerWords, animationDelay }: TriggerWordsCardProps) {
+  const { t } = useTranslation()
   if (!triggerWords?.length) return null
 
   return (
@@ -103,7 +106,7 @@ function TriggerWordsCard({ triggerWords, animationDelay }: TriggerWordsCardProp
       <Card className="p-4">
         <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
           <Wand2 className="w-4 h-4 text-synapse" />
-          Trigger Words
+          {t('pack.info.triggerWords')}
         </h3>
         <div className="flex flex-wrap gap-2">
           {triggerWords.map((word, idx) => (
@@ -121,6 +124,7 @@ interface ModelInfoCardProps {
 }
 
 function ModelInfoCard({ modelInfo, animationDelay }: ModelInfoCardProps) {
+  const { t } = useTranslation()
   const hasContent = modelInfo.model_type ||
     modelInfo.base_model ||
     (modelInfo.download_count != null && modelInfo.download_count > 0) ||
@@ -137,7 +141,7 @@ function ModelInfoCard({ modelInfo, animationDelay }: ModelInfoCardProps) {
       <Card className="p-4">
         <h3 className="text-sm font-semibold text-text-primary mb-3 flex items-center gap-2">
         <Info className="w-4 h-4 text-pulse" />
-        Model Info
+        {t('pack.info.modelInfo')}
       </h3>
 
       <div className="space-y-3">
@@ -161,7 +165,7 @@ function ModelInfoCard({ modelInfo, animationDelay }: ModelInfoCardProps) {
               'bg-pulse/20 text-pulse border border-pulse/30',
               'transition-transform duration-200 hover:scale-105'
             )}>
-              Base: {modelInfo.base_model}
+              {t('pack.info.base', { model: modelInfo.base_model })}
             </span>
           )}
 
@@ -209,6 +213,7 @@ interface DescriptionCardProps {
 }
 
 function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCardProps) {
+  const { t } = useTranslation()
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   if (!description) return null
@@ -220,7 +225,7 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
     >
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text-primary">Description</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{t('pack.info.description')}</h3>
           <div className="flex items-center gap-2">
             {/* Collapse/Expand button */}
             <button
@@ -231,17 +236,17 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
                 'bg-slate-mid/30 hover:bg-slate-mid/50',
                 'transition-colors duration-200'
               )}
-              title={isCollapsed ? 'Expand description' : 'Collapse description'}
+              title={isCollapsed ? t('pack.info.expandDescription') : t('pack.info.collapseDescription')}
             >
               {isCollapsed ? (
                 <>
                   <Maximize2 className="w-3.5 h-3.5" />
-                  Expand
+                  {t('pack.info.expand')}
                 </>
               ) : (
                 <>
                   <Minimize2 className="w-3.5 h-3.5" />
-                  Collapse
+                  {t('pack.info.collapse')}
                 </>
               )}
             </button>
@@ -256,7 +261,7 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
                 )}
               >
                 <Edit3 className="w-3.5 h-3.5" />
-                Edit
+                {t('common.edit')}
               </button>
             )}
           </div>
@@ -275,10 +280,10 @@ function DescriptionCard({ description, animationDelay, onEdit }: DescriptionCar
             'prose-strong:text-text-primary',
             'prose-headings:text-text-primary',
             // Animated collapse/expand
-            'transition-[max-height] duration-300 ease-in-out',
+            'transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden',
             isCollapsed
               ? 'max-h-64 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
-              : 'max-h-[2000px]' // Large enough for any description
+              : 'max-h-[10000px]'
           )}
           dangerouslySetInnerHTML={{ __html: description }}
         />

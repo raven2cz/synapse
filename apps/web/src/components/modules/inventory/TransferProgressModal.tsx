@@ -6,6 +6,7 @@
  */
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -25,52 +26,40 @@ import { formatBytes } from './utils'
 import { useTransferOperation, type TransferOperationItem } from './useTransferOperation'
 import type { TransferOperation } from './types'
 
-// Operation configs
+// Operation configs (visual only - text is translated via i18n)
 const OPERATION_CONFIGS: Record<
   TransferOperation | 'sync',
-  { icon: React.ReactNode; color: string; bgColor: string; verb: string; verbPast: string }
+  { icon: React.ReactNode; color: string; bgColor: string }
 > = {
   backup: {
     icon: <Upload className="w-5 h-5" />,
     color: 'text-synapse',
     bgColor: 'bg-synapse/20',
-    verb: 'Backing up',
-    verbPast: 'backed up',
   },
   restore: {
     icon: <Download className="w-5 h-5" />,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/20',
-    verb: 'Restoring',
-    verbPast: 'restored',
   },
   download: {
     icon: <Download className="w-5 h-5" />,
     color: 'text-green-400',
     bgColor: 'bg-green-500/20',
-    verb: 'Downloading',
-    verbPast: 'downloaded',
   },
   cleanup: {
     icon: <Trash2 className="w-5 h-5" />,
     color: 'text-amber-400',
     bgColor: 'bg-amber-500/20',
-    verb: 'Cleaning up',
-    verbPast: 'cleaned up',
   },
   verify: {
     icon: <Shield className="w-5 h-5" />,
     color: 'text-purple-400',
     bgColor: 'bg-purple-500/20',
-    verb: 'Verifying',
-    verbPast: 'verified',
   },
   sync: {
     icon: <ArrowUpDown className="w-5 h-5" />,
     color: 'text-cyan-400',
     bgColor: 'bg-cyan-500/20',
-    verb: 'Syncing',
-    verbPast: 'synced',
   },
 }
 
@@ -111,6 +100,7 @@ export function TransferProgressModal({
   executeFn,
   onComplete,
 }: TransferProgressModalProps) {
+  const { t } = useTranslation()
   const { progress, isRunning, isCompleted, isFailed, hasFailed, start, cancel, retryFailed, reset } =
     useTransferOperation({
       operation: operation === 'sync' ? 'backup' : operation,
@@ -186,7 +176,7 @@ export function TransferProgressModal({
             <div>
               <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
               <p className="text-sm text-text-muted">
-                {totalItems} file{totalItems !== 1 ? 's' : ''} &middot; {formatBytes(totalBytes)}
+                {t('inventory.transfer.filesCount', { count: totalItems })} &middot; {formatBytes(totalBytes)}
               </p>
             </div>
           </div>
@@ -208,10 +198,10 @@ export function TransferProgressModal({
             <div className="flex justify-between text-sm">
               <span className="text-text-secondary">
                 {isCompleted
-                  ? `${completedItems} ${config.verbPast}`
+                  ? t(`inventory.transfer.completed.${operation}`, { count: completedItems })
                   : isFailed
-                    ? `${completedItems} completed, ${failedItems} failed`
-                    : `${config.verb}...`}
+                    ? t('inventory.transfer.completedAndFailed', { completed: completedItems, failed: failedItems })
+                    : t(`inventory.transfer.running.${operation}`)}
               </span>
               <span className="text-text-primary font-medium">{progressPercent.toFixed(0)}%</span>
             </div>
@@ -235,10 +225,10 @@ export function TransferProgressModal({
               {isRunning && bytesPerSecond > 0 && (
                 <span>
                   {formatSpeed(bytesPerSecond)}
-                  {etaSeconds !== undefined && etaSeconds > 0 && ` · ${formatDuration(etaSeconds)} remaining`}
+                  {etaSeconds !== undefined && etaSeconds > 0 && ` · ${t('inventory.transfer.remaining', { duration: formatDuration(etaSeconds) })}`}
                 </span>
               )}
-              {isCompleted && elapsedSeconds > 0 && <span>Completed in {formatDuration(elapsedSeconds)}</span>}
+              {isCompleted && elapsedSeconds > 0 && <span>{t('inventory.transfer.completedIn', { duration: formatDuration(elapsedSeconds) })}</span>}
             </div>
           </div>
 
@@ -260,7 +250,7 @@ export function TransferProgressModal({
           {/* Item counter during processing */}
           {isRunning && (
             <div className="text-sm text-text-muted text-center">
-              Processing {completedItems + failedItems + 1} of {totalItems}...
+              {t('inventory.transfer.processing', { current: completedItems + failedItems + 1, total: totalItems })}
             </div>
           )}
 
@@ -269,7 +259,7 @@ export function TransferProgressModal({
             <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
               <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
               <span className="text-sm text-green-400">
-                Successfully {config.verbPast} {completedItems} file{completedItems !== 1 ? 's' : ''}
+                {t(`inventory.transfer.success.${operation}`, { count: completedItems })}
               </span>
             </div>
           )}
@@ -280,7 +270,7 @@ export function TransferProgressModal({
                 <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                 <div className="flex-1">
                   <span className="text-sm text-red-400">
-                    {failedItems} file{failedItems !== 1 ? 's' : ''} failed
+                    {t('inventory.transfer.filesFailed', { count: failedItems })}
                   </span>
                 </div>
               </div>
@@ -293,7 +283,7 @@ export function TransferProgressModal({
                     </div>
                   ))}
                   {progress.errors.length > 5 && (
-                    <div className="text-xs text-red-400/60">...and {progress.errors.length - 5} more</div>
+                    <div className="text-xs text-red-400/60">{t('inventory.sync.moreErrors', { count: progress.errors.length - 5 })}</div>
                   )}
                 </div>
               )}
@@ -305,7 +295,7 @@ export function TransferProgressModal({
             <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
               <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
               <span className="text-sm text-amber-400">
-                Not enough space on target. Free up space and try again.
+                {t('inventory.transfer.notEnoughSpace')}
               </span>
             </div>
           )}
@@ -314,13 +304,13 @@ export function TransferProgressModal({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-mid/30 bg-slate-mid/10">
           <div className="text-xs text-text-muted">
-            {completedItems}/{totalItems} files
+            {t('inventory.transfer.filesProgress', { completed: completedItems, total: totalItems })}
           </div>
 
           <div className="flex gap-2">
             {isRunning && (
               <Button variant="ghost" size="sm" onClick={cancel} leftIcon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
 
@@ -331,13 +321,13 @@ export function TransferProgressModal({
                 onClick={() => retryFailed(executeFn)}
                 leftIcon={<RotateCcw className="w-4 h-4" />}
               >
-                Retry Failed ({failedItems})
+                {t('inventory.transfer.retryFailed', { count: failedItems })}
               </Button>
             )}
 
             {(isCompleted || (isFailed && !progress?.can_resume)) && (
               <Button variant="primary" size="sm" onClick={onClose}>
-                Done
+                {t('inventory.transfer.done')}
               </Button>
             )}
           </div>

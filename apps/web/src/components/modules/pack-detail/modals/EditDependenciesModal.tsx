@@ -12,6 +12,7 @@
  */
 
 import { useState, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   Loader2,
@@ -90,11 +91,12 @@ function DependencyItem({
   onRemove,
   onRestore,
 }: DependencyItemProps) {
+  const { t } = useTranslation()
   const icon = ASSET_TYPE_ICONS[dependency.asset_type as keyof typeof ASSET_TYPE_ICONS] || ASSET_TYPE_ICONS.other
 
   // Format size
   const formatSize = (bytes?: number) => {
-    if (!bytes) return 'Unknown size'
+    if (!bytes) return t('pack.modals.editDeps.unknownSize')
     if (bytes >= 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
     if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
     return `${(bytes / 1024).toFixed(1)} KB`
@@ -154,7 +156,7 @@ function DependencyItem({
               }}
               className="text-synapse hover:bg-synapse/20"
             >
-              Restore
+              {t('pack.dependencies.restore')}
             </Button>
           ) : (
             <button
@@ -167,7 +169,7 @@ function DependencyItem({
                 'text-red-400 hover:bg-red-500/20',
                 'transition-colors duration-200'
               )}
-              title="Remove dependency"
+              title={t('pack.modals.editDeps.removeDep')}
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -188,19 +190,19 @@ function DependencyItem({
           <div className="grid grid-cols-2 gap-4 text-sm">
             {dependency.version_name && (
               <div>
-                <span className="text-text-muted">Version:</span>
+                <span className="text-text-muted">{t('pack.dependencies.detail.version')}</span>
                 <span className="text-text-secondary ml-2">{dependency.version_name}</span>
               </div>
             )}
             {dependency.filename && (
               <div>
-                <span className="text-text-muted">Filename:</span>
+                <span className="text-text-muted">{t('pack.dependencies.detail.file')}</span>
                 <span className="text-text-secondary ml-2 font-mono text-xs">{dependency.filename}</span>
               </div>
             )}
             {dependency.sha256 && (
               <div className="col-span-2">
-                <span className="text-text-muted">SHA256:</span>
+                <span className="text-text-muted">{t('pack.dependencies.detail.sha256')}</span>
                 <span className="text-text-secondary ml-2 font-mono text-xs">{dependency.sha256.slice(0, 16)}...</span>
               </div>
             )}
@@ -208,13 +210,13 @@ function DependencyItem({
               <>
                 {dependency.source_info.model_name && (
                   <div>
-                    <span className="text-text-muted">Model:</span>
+                    <span className="text-text-muted">{t('pack.dependencies.detail.model')}</span>
                     <span className="text-text-secondary ml-2">{dependency.source_info.model_name}</span>
                   </div>
                 )}
                 {dependency.source_info.creator && (
                   <div>
-                    <span className="text-text-muted">Creator:</span>
+                    <span className="text-text-muted">{t('pack.dependencies.detail.creator')}</span>
                     <span className="text-text-secondary ml-2">{dependency.source_info.creator}</span>
                   </div>
                 )}
@@ -229,7 +231,7 @@ function DependencyItem({
                   className="inline-flex items-center gap-1 text-synapse hover:underline"
                 >
                   <ExternalLink className="w-3 h-3" />
-                  View Source
+                  {t('pack.modals.editDeps.viewSource')}
                 </a>
               </div>
             )}
@@ -250,6 +252,7 @@ interface AddDependencyPanelProps {
 }
 
 function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
+  const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSource, setSearchSource] = useState<'civitai' | 'huggingface' | 'local'>('civitai')
   const [isSearching, setIsSearching] = useState(false)
@@ -276,7 +279,7 @@ function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
   return (
     <div className="border border-dashed border-slate-mid rounded-xl p-4">
       <h4 className="text-sm font-medium text-text-primary mb-3">
-        Add Dependency
+        {t('pack.modals.editDeps.addDep')}
       </h4>
 
       {/* Source tabs */}
@@ -307,7 +310,7 @@ function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder={`Search ${searchSource}...`}
+            placeholder={t('pack.modals.editDeps.searchPlaceholder', { provider: searchSource })}
             className={clsx(
               'w-full pl-9 pr-3 py-2 rounded-lg',
               'bg-slate-dark border border-slate-mid',
@@ -337,7 +340,7 @@ function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
           {isSearching ? (
             <div className="flex items-center justify-center py-8 text-text-muted">
               <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              Searching...
+              {t('pack.modals.editDeps.searching')}
             </div>
           ) : searchResults.length > 0 ? (
             <div className="space-y-2">
@@ -373,7 +376,7 @@ function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
             </div>
           ) : (
             <div className="text-center py-8 text-text-muted">
-              No results found
+              {t('pack.modals.editDeps.noResults')}
             </div>
           )}
         </div>
@@ -381,7 +384,7 @@ function AddDependencyPanel({ onAdd, onSearch }: AddDependencyPanelProps) {
 
       {!onSearch && (
         <p className="text-xs text-text-muted mt-2">
-          Search functionality not available in this context
+          {t('pack.modals.editDeps.notAvailable')}
         </p>
       )}
     </div>
@@ -400,6 +403,7 @@ export function EditDependenciesModal({
   onSearch,
   isSaving = false,
 }: EditDependenciesModalProps) {
+  const { t } = useTranslation()
   const [dependencies, setDependencies] = useState<AssetInfo[]>(initialDependencies)
   const [removedNames, setRemovedNames] = useState<Set<string>>(new Set())
   const [addedDependencies, setAddedDependencies] = useState<AssetInfo[]>([])
@@ -495,10 +499,10 @@ export function EditDependenciesModal({
         <div className="flex items-center justify-between p-6 border-b border-slate-mid/50">
           <div>
             <h3 className="text-lg font-semibold text-text-primary">
-              Edit Dependencies
+              {t('pack.modals.editDeps.title')}
             </h3>
             <p className="text-sm text-text-muted mt-1">
-              {dependencies.length} dependencies • {removedNames.size} marked for removal
+              {dependencies.length} {t('pack.modals.editDeps.depsCount')} • {removedNames.size} {t('pack.modals.editDeps.markedForRemoval')}
             </p>
           </div>
           <button
@@ -521,7 +525,7 @@ export function EditDependenciesModal({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter dependencies..."
+              placeholder={t('pack.modals.editDeps.filterPlaceholder')}
               className={clsx(
                 'w-full pl-9 pr-3 py-1.5 rounded-lg text-sm',
                 'bg-slate-dark border border-slate-mid',
@@ -545,7 +549,7 @@ export function EditDependenciesModal({
                 'focus:outline-none focus:border-synapse'
               )}
             >
-              <option value="all">All Types</option>
+              <option value="all">{t('pack.modals.editDeps.allTypes')}</option>
               {availableTypes.map((type) => (
                 <option key={type} value={type}>
                   {type}
@@ -575,8 +579,8 @@ export function EditDependenciesModal({
           ) : (
             <div className="text-center py-8 text-text-muted mb-6">
               {searchQuery || filterType !== 'all'
-                ? 'No dependencies match your filters'
-                : 'No dependencies'}
+                ? t('pack.modals.editDeps.noMatch')
+                : t('pack.modals.editDeps.noDeps')}
             </div>
           )}
 
@@ -587,7 +591,7 @@ export function EditDependenciesModal({
         {/* Footer */}
         <div className="flex justify-end gap-3 p-6 border-t border-slate-mid/50">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -597,7 +601,7 @@ export function EditDependenciesModal({
             {isSaving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : null}
-            Save Changes
+            {t('pack.modals.editDeps.saveChanges')}
           </Button>
         </div>
       </div>

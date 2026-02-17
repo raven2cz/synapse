@@ -350,9 +350,10 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 |------|--------|------|
 | Phase 4 | `plans/PLAN-Phase-4.md` | ✅ DOKONČENO |
 | Phase 5 | `plans/PLAN-Internal-Search-trpc.md` | ✅ DOKONČENO |
-| Phase 6 | `plans/PLAN-Phase-6-Store-UI.md` | ✅ DOKONČENO |
+| Phase 6 | `plans/PLAN-Phase-6-Store-UI.md` | ✅ DOKONČENO (Část B → PLAN-Model-Inventory) |
 | **Model Inventory** | `plans/PLAN-Model-Inventory.md` | ✅ DOKONČENO |
 | **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | ✅ DOKONČENO (v2.2.0) |
+| **i18n** | `plans/PLAN-i18n.md` | ✅ DOKONČENO (v1.0.0) |
 
 ---
 
@@ -389,6 +390,25 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 - ❌ Neměnit existující API kontrakty bez migrace
 - ❌ NEPRACOVAT na Phase 4, 5, 6 - ty jsou DOKONČENY!
 - ❌ NEPŘESKAKOVAT iterace Model Inventory - musí jít po sobě!
+
+---
+
+## 🐛 Known Issues & Lessons Learned
+
+### CSS overflow u collapsible sekcí (2026-02-17)
+**Problém:** Pack detail sekce s `transition-[max-height]` a `max-h-[Npx]` BEZ `overflow-hidden`
+způsobí, že obsah přesahující max-height přeteče vizuálně přes další sekce. Card má poloprůhledné
+pozadí (`bg-slate-deep/50`), takže přetečený obsah (obrázky z Civitai HTML description) prosvítá.
+
+**Pravidlo:** Každý collapsible wrapper MUSÍ mít:
+- `overflow-hidden` jako base class (vždy, nejen v collapsed stavu)
+- Dostatečně velký `max-h` pro expanded stav (`max-h-[10000px]`)
+- `overflow-y-auto` pouze v collapsed stavu pro scrollování
+
+**Dotčené soubory:**
+- `PackInfoSection.tsx` (DescriptionCard) - opraveno
+- `PackGallery.tsx` - bylo OK (`overflow-hidden` bylo)
+- `PackParametersSection.tsx` - bylo OK (`overflow-hidden` bylo)
 
 ---
 

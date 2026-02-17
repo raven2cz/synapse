@@ -14,6 +14,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Pencil, Check, X, AlertCircle } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -96,7 +97,7 @@ export function EditableText({
   value,
   onChange,
   editable = true,
-  placeholder = 'Click to edit...',
+  placeholder,
   multiline = false,
   rows = 3,
   maxLength,
@@ -107,6 +108,8 @@ export function EditableText({
   required = false,
   label,
 }: EditableTextProps) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('pack.shared.editableText.placeholder')
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
   const [localError, setLocalError] = useState<string | null>(null)
@@ -131,16 +134,16 @@ export function EditableText({
   // Validate value
   const validateValue = useCallback((val: string): string | null => {
     if (required && !val.trim()) {
-      return 'This field is required'
+      return t('pack.shared.editableText.required')
     }
     if (maxLength && val.length > maxLength) {
-      return `Maximum ${maxLength} characters`
+      return t('pack.shared.editableText.tooLong', { max: maxLength })
     }
     if (validate) {
       return validate(val)
     }
     return null
-  }, [required, maxLength, validate])
+  }, [required, maxLength, validate, t])
 
   // Handle click to edit
   const handleClick = () => {
@@ -233,7 +236,7 @@ export function EditableText({
                 : 'border-synapse focus:ring-synapse/30',
               variantStyles[variant]
             )}
-            placeholder={placeholder}
+            placeholder={resolvedPlaceholder}
             aria-label={label}
           />
 
@@ -250,7 +253,7 @@ export function EditableText({
                 'bg-synapse/20 text-synapse',
                 'hover:bg-synapse/30 transition-colors'
               )}
-              title="Save (Enter)"
+              title={t('pack.shared.editableText.saveHint')}
             >
               <Check className="w-4 h-4" />
             </button>
@@ -265,7 +268,7 @@ export function EditableText({
                 'bg-slate-mid/50 text-text-muted',
                 'hover:bg-slate-mid hover:text-text-primary transition-colors'
               )}
-              title="Cancel (Esc)"
+              title={t('pack.shared.editableText.cancelHint')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -310,7 +313,7 @@ export function EditableText({
           handleClick()
         }
       }}
-      aria-label={label ? `${label}: ${value || placeholder}. ${editable ? 'Click to edit.' : ''}` : undefined}
+      aria-label={label ? `${label}: ${value || resolvedPlaceholder}. ${editable ? 'Click to edit.' : ''}` : undefined}
     >
       {label && (
         <label className="block text-xs text-text-muted mb-1">
@@ -333,7 +336,7 @@ export function EditableText({
           variantStyles[variant],
           isEmpty && 'text-text-muted italic'
         )}>
-          {isEmpty ? placeholder : value}
+          {isEmpty ? resolvedPlaceholder : value}
         </span>
 
         {/* Edit indicator */}

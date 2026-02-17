@@ -1,4 +1,5 @@
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import { HardDrive, Cloud, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { formatBytes } from '@/lib/utils/format'
 import type { PackBlobStatus, BlobLocation } from '../inventory/types'
@@ -9,25 +10,26 @@ interface PackBlobsTableProps {
 }
 
 function LocationBadge({ location }: { location: BlobLocation }) {
+  const { t } = useTranslation()
   const config = {
     both: {
       icon: CheckCircle2,
-      label: 'BOTH',
+      label: t('packBlobs.both'),
       color: 'text-green-400 bg-green-500/20',
     },
     local_only: {
       icon: HardDrive,
-      label: 'LOCAL',
+      label: t('packBlobs.local'),
       color: 'text-amber-400 bg-amber-500/20',
     },
     backup_only: {
       icon: Cloud,
-      label: 'BACKUP',
+      label: t('packBlobs.backup'),
       color: 'text-blue-400 bg-blue-500/20',
     },
     nowhere: {
       icon: AlertTriangle,
-      label: 'MISSING',
+      label: t('packBlobs.missing'),
       color: 'text-red-400 bg-red-500/20',
     },
   }[location]
@@ -57,10 +59,12 @@ function KindBadge({ kind }: { kind: string }) {
  * Mini table showing blobs in a pack with their storage status.
  */
 export function PackBlobsTable({ blobs, className }: PackBlobsTableProps) {
+  const { t } = useTranslation()
+
   if (blobs.length === 0) {
     return (
       <div className={clsx('text-sm text-text-muted italic text-center py-4', className)}>
-        No blobs in this pack
+        {t('packBlobs.noBlobs')}
       </div>
     )
   }
@@ -70,10 +74,10 @@ export function PackBlobsTable({ blobs, className }: PackBlobsTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-text-muted border-b border-slate-mid">
-            <th className="pb-2 pr-4 font-medium">Name</th>
-            <th className="pb-2 pr-4 font-medium text-right">Size</th>
-            <th className="pb-2 pr-4 font-medium">Location</th>
-            <th className="pb-2 font-medium">Kind</th>
+            <th className="pb-2 pr-4 font-medium">{t('packBlobs.name')}</th>
+            <th className="pb-2 pr-4 font-medium text-right">{t('packBlobs.size')}</th>
+            <th className="pb-2 pr-4 font-medium">{t('packBlobs.location')}</th>
+            <th className="pb-2 font-medium">{t('packBlobs.kind')}</th>
           </tr>
         </thead>
         <tbody>

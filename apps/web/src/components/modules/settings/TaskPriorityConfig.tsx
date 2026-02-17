@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { GripVertical, RotateCcw, ChevronDown, ChevronUp, ListOrdered, Sparkles, Check } from 'lucide-react'
 import clsx from 'clsx'
 import type {
@@ -51,31 +52,32 @@ const PROVIDER_COLORS = {
 
 /**
  * Task display configuration
+ * name/description keys map to settingsAi.tasks.* translations
  */
-const TASK_INFO: Record<string, { name: string; description: string; defaultOrder: string[] }> = {
+const TASK_INFO: Record<string, { nameKey: string; descKey: string; defaultOrder: string[] }> = {
   parameter_extraction: {
-    name: 'Parameter Extraction',
-    description: 'Extract generation parameters from model descriptions',
+    nameKey: 'settingsAi.tasks.extraction',
+    descKey: 'settingsAi.tasks.extractionDesc',
     defaultOrder: ['ollama', 'gemini', 'claude'],
   },
   description_translation: {
-    name: 'Description Translation',
-    description: 'Translate descriptions from other languages to English',
+    nameKey: 'settingsAi.tasks.translation',
+    descKey: 'settingsAi.tasks.translationDesc',
     defaultOrder: ['ollama', 'gemini'],
   },
   auto_tagging: {
-    name: 'Auto-Tagging',
-    description: 'Automatically tag models based on description',
+    nameKey: 'settingsAi.tasks.tagging',
+    descKey: 'settingsAi.tasks.taggingDesc',
     defaultOrder: ['ollama', 'gemini'],
   },
   workflow_generation: {
-    name: 'Workflow Generation',
-    description: 'Generate ComfyUI workflows from parameters',
+    nameKey: 'settingsAi.tasks.workflow',
+    descKey: 'settingsAi.tasks.workflowDesc',
     defaultOrder: ['gemini', 'claude', 'ollama'],
   },
   model_compatibility: {
-    name: 'Model Compatibility',
-    description: 'Analyze LoRA and checkpoint compatibility',
+    nameKey: 'settingsAi.tasks.compatibility',
+    descKey: 'settingsAi.tasks.compatibilityDesc',
     defaultOrder: ['ollama', 'gemini', 'claude'],
   },
 }
@@ -134,12 +136,13 @@ function TaskPriorityEditor({
   providers,
   onChange,
 }: TaskPriorityConfigProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(taskType === 'parameter_extraction')
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
 
   const taskInfo = TASK_INFO[taskType] || {
-    name: taskType,
-    description: '',
+    nameKey: taskType,
+    descKey: '',
     defaultOrder: ['ollama', 'gemini', 'claude'],
   }
 
@@ -243,9 +246,9 @@ function TaskPriorityEditor({
             <Sparkles className="w-4 h-4 text-synapse" />
           </div>
           <div>
-            <div className="font-semibold text-sm text-text-primary">{taskInfo.name}</div>
-            {taskInfo.description && (
-              <div className="text-xs text-text-muted mt-0.5">{taskInfo.description}</div>
+            <div className="font-semibold text-sm text-text-primary">{t(taskInfo.nameKey)}</div>
+            {taskInfo.descKey && (
+              <div className="text-xs text-text-muted mt-0.5">{t(taskInfo.descKey)}</div>
             )}
           </div>
         </div>
@@ -265,7 +268,7 @@ function TaskPriorityEditor({
               )}
             >
               <RotateCcw className="w-3 h-3" />
-              Reset
+              {t('settingsAi.tasks.reset')}
             </button>
           )}
           <div
@@ -289,7 +292,7 @@ function TaskPriorityEditor({
         <div className="border-t border-slate-light/20 p-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="text-xs text-text-muted mb-3 flex items-center gap-2">
             <GripVertical className="w-3 h-3" />
-            Drag to reorder priority. Unchecked providers are skipped.
+            {t('settingsAi.tasks.dragHint')}
           </div>
 
           {orderedItems.map((item, index) => {
@@ -340,7 +343,7 @@ function TaskPriorityEditor({
                           'bg-red-500/10 text-red-400 border border-red-500/30'
                         )}
                       >
-                        Not installed
+                        {t('settingsAi.tasks.notInstalled')}
                       </span>
                     )}
                   </div>
@@ -372,9 +375,9 @@ function TaskPriorityEditor({
             </div>
             <span className="text-xl">{PROVIDER_INFO.rule_based?.icon}</span>
             <div className="flex-1">
-              <span className="text-sm font-medium text-text-muted">Rule-based</span>
+              <span className="text-sm font-medium text-text-muted">{t('settingsAi.tasks.ruleBased')}</span>
             </div>
-            <div className="text-xs text-text-muted italic">Always fallback</div>
+            <div className="text-xs text-text-muted italic">{t('settingsAi.tasks.alwaysFallback')}</div>
           </div>
         </div>
       )}
@@ -399,6 +402,7 @@ export function TaskPriorityConfigPanel({
   onChange,
   onResetAll,
 }: TaskPriorityConfigPanelProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(false)
 
   // For Phase 1, we only show parameter_extraction
@@ -427,7 +431,7 @@ export function TaskPriorityConfigPanel({
         >
           <ListOrdered className="w-4 h-4 text-pulse" />
         </div>
-        <span className="text-sm font-semibold text-text-primary">Task Priorities</span>
+        <span className="text-sm font-semibold text-text-primary">{t('settingsAi.tasks.title')}</span>
         <div
           className={clsx(
             'ml-auto w-6 h-6 rounded-lg flex items-center justify-center',
@@ -447,8 +451,7 @@ export function TaskPriorityConfigPanel({
       {isExpanded && (
         <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
           <p className="text-xs text-text-muted px-1">
-            Configure which providers to use for each task type.
-            Drag to reorder priority. Unchecked providers are skipped.
+            {t('settingsAi.tasks.description')}
           </p>
 
           {activeTasks.map((taskType) => (
@@ -474,7 +477,7 @@ export function TaskPriorityConfigPanel({
                 )}
               >
                 <RotateCcw className="w-4 h-4" />
-                Use Recommended Defaults
+                {t('settingsAi.tasks.useDefaults')}
               </button>
             </div>
           )}

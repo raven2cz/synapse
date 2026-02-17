@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import { Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 interface ImagePreviewProps {
@@ -21,6 +22,7 @@ export function ImagePreview({
   onClick,
 }: ImagePreviewProps) {
   const { nsfwBlurEnabled } = useSettingsStore()
+  const { t } = useTranslation()
   const [isRevealed, setIsRevealed] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -81,7 +83,7 @@ export function ImagePreview({
         >
           <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
             <EyeOff className="w-6 h-6 text-text-muted mx-auto mb-1" />
-            <span className="text-xs text-text-muted">NSFW</span>
+            <span className="text-xs text-text-muted">{t('media.nsfw')}</span>
           </div>
         </div>
       )}
@@ -108,7 +110,7 @@ export function ImagePreview({
       {/* NSFW badge */}
       {nsfw && !nsfwBlurEnabled && (
         <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-error/80 text-white text-xs font-medium">
-          NSFW
+          {t('media.nsfw')}
         </div>
       )}
     </div>

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { Download, CheckCircle2, XCircle, Clock, Trash2, RefreshCw, HardDrive, Gauge, Timer } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -58,6 +59,7 @@ function formatEta(seconds: number | null): string {
 }
 
 export function DownloadsPage() {
+  const { t } = useTranslation()
   const { data: downloads, isLoading, refetch } = useQuery<DownloadInfo[]>({
     queryKey: ['downloads-active'],
     queryFn: async () => {
@@ -124,15 +126,15 @@ export function DownloadsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-3">
-            Downloads
+            {t('downloads.title')}
             {activeCount > 0 && (
               <span className="px-2 py-0.5 bg-synapse/20 text-synapse text-sm rounded-full">
-                {activeCount} active
+                {t('downloads.active', { count: activeCount })}
               </span>
             )}
           </h1>
           <p className="text-text-secondary mt-1">
-            Track your asset downloads
+            {t('downloads.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -142,7 +144,7 @@ export function DownloadsPage() {
             onClick={() => refetch()}
           >
             <RefreshCw className="w-4 h-4" />
-            Refresh
+            {t('downloads.refresh')}
           </Button>
           {downloads && downloads.some(d => ['completed', 'failed', 'cancelled'].includes(d.status)) && (
             <Button
@@ -151,7 +153,7 @@ export function DownloadsPage() {
               onClick={clearCompleted}
             >
               <Trash2 className="w-4 h-4" />
-              Clear All
+              {t('downloads.clearAll')}
             </Button>
           )}
         </div>
@@ -171,10 +173,10 @@ export function DownloadsPage() {
         <Card className="p-12 text-center">
           <Download className="w-12 h-12 text-text-muted mx-auto mb-4" />
           <h3 className="text-lg font-medium text-text-primary mb-2">
-            No downloads
+            {t('downloads.empty')}
           </h3>
           <p className="text-text-secondary">
-            Install a pack to start downloading assets
+            {t('downloads.emptyHint')}
           </p>
         </Card>
       )}
@@ -207,10 +209,10 @@ export function DownloadsPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className={clsx(
-                    'text-sm font-medium capitalize',
+                    'text-sm font-medium',
                     getStatusColor(download.status)
                   )}>
-                    {download.status}
+                    {t(`downloads.status.${download.status}`)}
                   </span>
                   {['completed', 'failed', 'cancelled'].includes(download.status) && (
                     <Button
@@ -218,7 +220,7 @@ export function DownloadsPage() {
                       size="sm"
                       onClick={() => dismissDownload(download.download_id)}
                       className="text-text-muted hover:text-text-primary"
-                      title="Dismiss"
+                      title={t('downloads.dismiss')}
                     >
                       <XCircle className="w-4 h-4" />
                     </Button>
@@ -246,7 +248,7 @@ export function DownloadsPage() {
                     </div>
                     <span className="flex items-center gap-1">
                       <Timer className="w-3 h-3" />
-                      ETA: {formatEta(download.eta_seconds)}
+                      {t('downloads.eta', { eta: formatEta(download.eta_seconds) })}
                     </span>
                   </div>
                 </div>
@@ -256,7 +258,7 @@ export function DownloadsPage() {
               {download.status === 'pending' && (
                 <div className="flex items-center gap-2 text-sm text-amber-400">
                   <Clock className="w-4 h-4 animate-pulse" />
-                  <span>Waiting to start...</span>
+                  <span>{t('downloads.waiting')}</span>
                 </div>
               )}
               
@@ -266,7 +268,7 @@ export function DownloadsPage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-green-400 flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4" />
-                      Download complete
+                      {t('downloads.complete')}
                     </span>
                     <span className="text-text-muted">
                       {formatBytes(download.total_bytes)}
@@ -274,7 +276,7 @@ export function DownloadsPage() {
                   </div>
                   {download.target_path && (
                     <div className="text-xs text-text-muted truncate" title={download.target_path}>
-                      Saved to: {download.target_path}
+                      {t('downloads.savedTo', { path: download.target_path })}
                     </div>
                   )}
                 </div>
@@ -289,9 +291,9 @@ export function DownloadsPage() {
               
               {/* Timestamps */}
               <div className="text-xs text-text-muted pt-2 border-t border-white/5">
-                Started: {new Date(download.started_at).toLocaleString()}
+                {t('downloads.started', { time: new Date(download.started_at).toLocaleString() })}
                 {download.completed_at && (
-                  <> • Completed: {new Date(download.completed_at).toLocaleString()}</>
+                  <> • {t('downloads.completed', { time: new Date(download.completed_at).toLocaleString() })}</>
                 )}
               </div>
             </Card>

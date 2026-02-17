@@ -15,6 +15,7 @@
 
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import { clsx } from 'clsx'
+import { useTranslation } from 'react-i18next'
 import {
   Download,
   Heart,
@@ -93,6 +94,7 @@ export const ModelCard = memo(function ModelCard({
   onCopyLink,
 }: ModelCardProps) {
   const { nsfwBlurEnabled } = useSettingsStore()
+  const { t } = useTranslation()
 
   // ---------------------------------------------------------------------------
   // State
@@ -229,7 +231,7 @@ export const ModelCard = memo(function ModelCard({
         {/* Fallback for no thumbnail */}
         {!thumbnailUrl && imageLoaded && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-mid">
-            <span className="text-text-muted text-sm">No preview</span>
+            <span className="text-text-muted text-sm">{t('media.noPreview')}</span>
           </div>
         )}
 
@@ -303,7 +305,7 @@ export const ModelCard = memo(function ModelCard({
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className="bg-slate-deep/80 backdrop-blur-sm p-3 rounded-xl text-center">
               <EyeOff className="w-6 h-6 text-text-muted mx-auto mb-1" />
-              <span className="text-xs text-text-muted">NSFW</span>
+              <span className="text-xs text-text-muted">{t('media.nsfw')}</span>
             </div>
           </div>
         )}

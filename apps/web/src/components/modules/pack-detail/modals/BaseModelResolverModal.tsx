@@ -20,6 +20,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   X,
   Loader2,
@@ -214,6 +215,8 @@ interface RemoteModelCardProps {
 }
 
 function RemoteModelCard({ model, isSelected, onSelect }: RemoteModelCardProps) {
+  const { t } = useTranslation()
+
   return (
     <button
       onClick={onSelect}
@@ -232,7 +235,7 @@ function RemoteModelCard({ model, isSelected, onSelect }: RemoteModelCardProps) 
             <p className="text-sm text-synapse">{model.version_name}</p>
           )}
           {model.creator && (
-            <p className="text-xs text-text-muted">by {model.creator}</p>
+            <p className="text-xs text-text-muted">{t('pack.modals.baseModel.byAuthor', { author: model.creator })}</p>
           )}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
             {model.base_model && (
@@ -246,7 +249,7 @@ function RemoteModelCard({ model, isSelected, onSelect }: RemoteModelCardProps) 
               </span>
             )}
             <span className="text-xs text-text-muted">
-              {model.download_count.toLocaleString()} downloads
+              {t('pack.modals.baseModel.downloadCount', { count: model.download_count })}
             </span>
           </div>
           <p className="text-xs text-text-muted mt-1 font-mono truncate">
@@ -282,6 +285,8 @@ function HuggingFaceModelCard({
   onToggleExpand,
   onSelectFile,
 }: HuggingFaceModelCardProps) {
+  const { t } = useTranslation()
+
   return (
     <div
       className={clsx(
@@ -300,11 +305,11 @@ function HuggingFaceModelCard({
         <div className="min-w-0 flex-1">
           <p className="text-text-primary font-medium">{model.model_name}</p>
           {model.creator && (
-            <p className="text-xs text-text-muted">by {model.creator}</p>
+            <p className="text-xs text-text-muted">{t('pack.modals.baseModel.byAuthor', { author: model.creator })}</p>
           )}
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs text-text-muted">
-              {model.download_count.toLocaleString()} downloads
+              {t('pack.modals.baseModel.downloadCount', { count: model.download_count })}
             </span>
           </div>
         </div>
@@ -324,7 +329,7 @@ function HuggingFaceModelCard({
             </div>
           ) : files.length === 0 ? (
             <p className="text-sm text-text-muted text-center py-4">
-              No compatible files found
+              {t('pack.modals.baseModel.noCompatibleFiles')}
             </p>
           ) : (
             files.map((file) => (
@@ -348,7 +353,7 @@ function HuggingFaceModelCard({
                 </div>
                 {file.is_recommended && (
                   <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">
-                    recommended
+                    {t('pack.modals.baseModel.recommended')}
                   </span>
                 )}
                 {selectedFile?.filename === file.filename && (
@@ -380,6 +385,8 @@ export function BaseModelResolverModal({
   onClose,
   isResolving = false,
 }: BaseModelResolverModalProps) {
+  const { t } = useTranslation()
+
   // Tab state
   const [tab, setTab] = useState<ResolverTab>('local')
 
@@ -533,9 +540,9 @@ export function BaseModelResolverModal({
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-6 h-6 text-amber-400" />
               <div>
-                <h2 className="text-lg font-bold text-text-primary">Resolve Base Model</h2>
+                <h2 className="text-lg font-bold text-text-primary">{t('pack.modals.baseModel.title')}</h2>
                 <p className="text-sm text-text-muted">
-                  Select or download the base checkpoint for this pack
+                  {t('pack.modals.baseModel.subtitle')}
                 </p>
               </div>
             </div>
@@ -551,7 +558,7 @@ export function BaseModelResolverModal({
           {baseModelHint && (
             <div className="mt-3 p-3 bg-slate-dark/50 rounded-xl">
               <p className="text-sm text-text-muted">
-                <span className="text-amber-400 font-medium">Detected base model:</span>{' '}
+                <span className="text-amber-400 font-medium">{t('pack.modals.baseModel.detected')}</span>{' '}
                 <span className="text-text-primary font-mono">{baseModelHint}</span>
               </p>
             </div>
@@ -565,21 +572,21 @@ export function BaseModelResolverModal({
             currentTab={tab}
             onClick={() => setTab('local')}
             icon={<HardDrive className="w-4 h-4" />}
-            label="Local Models"
+            label={t('pack.modals.baseModel.tabs.local')}
           />
           <TabButton
             tab="civitai"
             currentTab={tab}
             onClick={() => setTab('civitai')}
             icon={<Globe className="w-4 h-4" />}
-            label="Civitai"
+            label={t('pack.modals.baseModel.tabs.civitai')}
           />
           <TabButton
             tab="huggingface"
             currentTab={tab}
             onClick={() => setTab('huggingface')}
             icon={<Database className="w-4 h-4" />}
-            label="Hugging Face"
+            label={t('pack.modals.baseModel.tabs.huggingface')}
           />
         </div>
 
@@ -599,10 +606,10 @@ export function BaseModelResolverModal({
                 }}
                 placeholder={
                   tab === 'local'
-                    ? 'Filter local models...'
+                    ? t('pack.modals.baseModel.filterLocal')
                     : tab === 'civitai'
-                      ? 'Search checkpoints (e.g. Illustrious, Pony, SDXL)...'
-                      : 'Search models (e.g. stable-diffusion, sdxl, flux)...'
+                      ? t('pack.modals.baseModel.searchCivitai')
+                      : t('pack.modals.baseModel.searchHuggingface')
                 }
                 className={clsx(
                   "w-full pl-12 pr-4 py-3 rounded-xl",
@@ -629,8 +636,8 @@ export function BaseModelResolverModal({
           </div>
           {searchResponse?.search_method && (
             <p className="text-xs text-text-muted mt-2">
-              Search method: {searchResponse.search_method}
-              {searchResponse.total_found > 0 && ` - Found ${searchResponse.total_found} models`}
+              {t('pack.modals.baseModel.searchMethod')} {searchResponse.search_method}
+              {searchResponse.total_found > 0 && ` - ${t('pack.modals.baseModel.foundModels', { count: searchResponse.total_found })}`}
             </p>
           )}
         </div>
@@ -646,7 +653,7 @@ export function BaseModelResolverModal({
                 </div>
               ) : filteredLocalModels.length === 0 ? (
                 <p className="text-center text-text-muted py-12">
-                  {searchQuery ? 'No models match your filter' : 'No local models found'}
+                  {searchQuery ? t('pack.modals.baseModel.noMatchFilter') : t('pack.modals.baseModel.noLocalModels')}
                 </p>
               ) : (
                 filteredLocalModels.map((model) => (
@@ -666,7 +673,7 @@ export function BaseModelResolverModal({
             <div className="space-y-2">
               {!searchTrigger ? (
                 <p className="text-center text-text-muted py-12">
-                  Enter a search term and click Search to find models
+                  {t('pack.modals.baseModel.searchHint')}
                 </p>
               ) : isSearching ? (
                 <div className="flex items-center justify-center py-12">
@@ -674,7 +681,7 @@ export function BaseModelResolverModal({
                 </div>
               ) : !searchResponse?.results?.length ? (
                 <p className="text-center text-text-muted py-12">
-                  No results found for "{searchTrigger}"
+                  {t('pack.modals.baseModel.noResultsFor', { query: searchTrigger })}
                 </p>
               ) : (
                 searchResponse.results.map((model) => (
@@ -694,7 +701,7 @@ export function BaseModelResolverModal({
             <div className="space-y-2">
               {!searchTrigger ? (
                 <p className="text-center text-text-muted py-12">
-                  Enter a search term and click Search to find models
+                  {t('pack.modals.baseModel.searchHint')}
                 </p>
               ) : isSearching ? (
                 <div className="flex items-center justify-center py-12">
@@ -702,7 +709,7 @@ export function BaseModelResolverModal({
                 </div>
               ) : !searchResponse?.results?.length ? (
                 <p className="text-center text-text-muted py-12">
-                  No results found for "{searchTrigger}"
+                  {t('pack.modals.baseModel.noResultsFor', { query: searchTrigger })}
                 </p>
               ) : (
                 searchResponse.results.map((model) => (
@@ -733,7 +740,7 @@ export function BaseModelResolverModal({
             onClick={onClose}
             className="flex-1"
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleResolve}
@@ -745,7 +752,7 @@ export function BaseModelResolverModal({
             ) : (
               <>
                 <Check className="w-5 h-5" />
-                Save Selection
+                {t('pack.modals.baseModel.saveSelection')}
               </>
             )}
           </Button>

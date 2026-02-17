@@ -300,6 +300,11 @@ Pack Detail
 
 - **PLAN-Pack-Edit.md** - Původní CustomPlugin s pack dependencies stub
 - **PLAN-Workflow-Wizard.md** - Workflows mohou záviset na packách
+- **🔗 PLAN-Updates.md** - **Úzce provázáno!** Update packu může ovlivnit pack dependencies ostatních packů. Při updatu verze modelu je potřeba:
+  - Zkontrolovat, zda jiné packy nemají `version_constraint` na starší verzi
+  - Upozornit uživatele, pokud update rozbije závislost jiného packu
+  - Nabídnout kaskádový update (updatovat i závislé packy)
+  - Řešit společně s PLAN-Updates Phase 1-3
 
 ---
 
@@ -311,8 +316,10 @@ Pack Detail
 | Verze constraint syntax (semver vs custom)? | Open |
 | Automatické instalace závislostí? | Open |
 | Dependency locking (lock file)? | Open |
+| Co když update packu rozbije dependency jiného packu? | Open - řešit s PLAN-Updates |
+| Kaskádový update závislých packů? | Open - řešit s PLAN-Updates |
 
 ---
 
 *Created: 2026-02-03*
-*Last Updated: 2026-02-03*
+*Last Updated: 2026-02-17 - Přidáno prolinkování s PLAN-Updates (společné řešení update + dependency impact)*

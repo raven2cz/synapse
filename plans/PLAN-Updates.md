@@ -1,10 +1,10 @@
 # PLAN: Synapse Updates System
 
-**Status:** 📋 PLANNED (partially implemented)
-**Priority:** Medium-High
+**Status:** 🚧 AKTIVNÍ - základ implementován, UI vylepšení čekají
+**Priority:** 🔴 HIGH - klíčová feature celého balíčkovacího systému
 **Depends on:** Pack Edit (✅ done), Downloads infrastructure
 **Created:** 2026-01-31
-**Updated:** 2026-01-31
+**Updated:** 2026-02-17
 
 ---
 
@@ -767,6 +767,11 @@ interface ApplyBatchResponse {
 ### Plans
 - `plans/PLAN-Pack-Edit.md` - Pack editing features (✅ done)
 - `plans/PLAN-Model-Inventory.md` - Blob/backup management (✅ done)
+- **🔗 `plans/PLAN-Dependencies.md`** - **Úzce provázáno!** Update packu může ovlivnit pack dependencies ostatních packů. Je potřeba řešit společně:
+  - Dependency impact analysis při updatu (které packy se rozbijí?)
+  - Kaskádový update (updatovat i závislé packy)
+  - Version constraint validace před apply
+  - Upozornění uživatele na breaking changes v závislostech
 
 ---
 
@@ -779,4 +784,4 @@ interface ApplyBatchResponse {
 
 ---
 
-*Last updated: 2026-01-31*
+*Last updated: 2026-02-17 - Zvýšena priorita na HIGH, základ funguje, UI fáze čekají na implementaci*

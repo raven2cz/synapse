@@ -1,8 +1,8 @@
 # Phase 6: Store UI & Infrastructure
 
-**Status:** 🚧 AKTIVNÍ
+**Status:** ✅ DOKONČENO
 **Vytvořeno:** 2026-01-24
-**Poslední aktualizace:** 2026-01-24 (Phase 6.A kompletní + CLI refactor)
+**Poslední aktualizace:** 2026-02-17 (PLÁN UZAVŘEN)
 
 ---
 
@@ -559,18 +559,18 @@ Přidáno do `test_e2e.py` - třída `TestCompleteUserWorkflow`:
 
 # ČÁST B: Store UI (Inventory Tab)
 
-**Status:** ⏳ ČEKÁ NA DOKONČENÍ ČÁSTI A
+**Status:** ✅ DOKONČENO (realizováno v PLAN-Model-Inventory.md)
 
-*Bude doplněno po dokončení Části A*
+Část B byla kompletně realizována v rámci `PLAN-Model-Inventory.md` (✅ DOKONČENO 2026-01-24):
 
 ## B.1 Plánované funkce
 
-- [ ] Nový tab "Inventory" nebo "Store"
-- [ ] Přehled nainstalovaných blobů
-- [ ] Disk usage statistiky
-- [ ] Orphan blob cleanup
-- [ ] UI attach status s vizuálním feedbackem
-- [ ] Profile management UI
+- [x] Nový tab "Inventory" → `InventoryPage.tsx` na route `/inventory`
+- [x] Přehled nainstalovaných blobů → `BlobsTable.tsx` (sorting, filtering, bulk actions)
+- [x] Disk usage statistiky → `InventoryStats.tsx` (Local Disk, Backup, Status, Quick Actions)
+- [x] ~~Orphan blob cleanup~~ → Backend hotový (`inventory_service.py`), UI wizard odložen
+- [x] UI attach status → Integrováno v `SettingsPage.tsx`
+- [x] Profile management UI → `ProfilesPage.tsx` + `ProfileDropdown.tsx`
 
 ---
 
@@ -656,4 +656,4 @@ CLI testy:     17 passed
 
 ---
 
-*Poslední aktualizace: 2026-01-24 - Část A kompletní + CLI refaktor s Rich library + race condition fixes + DeleteResult model*
+*Poslední aktualizace: 2026-02-17 - PLÁN UZAVŘEN. Část A kompletní (2026-01-24). Část B realizována v PLAN-Model-Inventory.md.*

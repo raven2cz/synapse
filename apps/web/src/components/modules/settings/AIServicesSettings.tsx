@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useTranslation } from 'react-i18next'
 import { RefreshCw, Trash2, Sparkles, Database, Power, Zap, ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react'
 import clsx from 'clsx'
 import { ProviderCard } from './ProviderCard'
@@ -85,6 +86,8 @@ export interface AIServicesSettingsHandle {
 // =============================================================================
 
 export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function AIServicesSettings(_props, ref) {
+  const { t } = useTranslation()
+
   // Local state for uncommitted changes
   const [localSettings, setLocalSettings] = useState<Partial<AISettingsType> | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
@@ -108,9 +111,9 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
       setLocalSettings(null)
       setHasChanges(false)
       setSaveSuccess(true)
-      toast.success('AI settings saved')
+      toast.success(t('settingsAi.toastSaved'))
     } catch {
-      toast.error('Failed to save AI settings')
+      toast.error(t('settingsAi.toastSaveFailed'))
       throw new Error('Failed to save AI settings')
     }
   }, [localSettings, updateSettingsMutation])
@@ -184,29 +187,29 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
   const handleRefreshProviders = async () => {
     try {
       await refreshProvidersMutation.mutateAsync()
-      toast.success('Providers refreshed')
+      toast.success(t('settingsAi.toastProvidersRefreshed'))
     } catch {
-      toast.error('Failed to refresh providers')
+      toast.error(t('settingsAi.toastProvidersRefreshFailed'))
     }
   }
 
   const handleClearCache = async () => {
     try {
       const result = await clearCacheMutation.mutateAsync()
-      toast.success(`Cleared ${result.cleared} cache entries`)
+      toast.success(t('settingsAi.toastCacheCleared', { count: result.cleared }))
       refetchCacheStats()
     } catch {
-      toast.error('Failed to clear cache')
+      toast.error(t('settingsAi.toastCacheClearFailed'))
     }
   }
 
   const handleCleanupCache = async () => {
     try {
       const result = await cleanupCacheMutation.mutateAsync()
-      toast.success(`Cleaned ${result.cleaned} expired entries`)
+      toast.success(t('settingsAi.toastCacheCleanup', { count: result.cleaned }))
       refetchCacheStats()
     } catch {
-      toast.error('Failed to cleanup cache')
+      toast.error(t('settingsAi.toastCacheCleanupFailed'))
     }
   }
 
@@ -241,9 +244,9 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
               <Sparkles className="w-6 h-6 text-synapse" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-text-primary">AI Services</h2>
+              <h2 className="text-xl font-bold text-text-primary">{t('settingsAi.title')}</h2>
               <p className="text-sm text-text-muted mt-0.5">
-                Configure AI providers for intelligent automation
+                {t('settingsAi.subtitle')}
               </p>
             </div>
           </div>
@@ -278,7 +281,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
           >
             <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
             <span className="text-sm text-success font-medium">
-              AI settings saved successfully!
+              {t('settingsAi.savedSuccess')}
             </span>
           </div>
         )}
@@ -294,7 +297,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
             <AlertCircle className="w-5 h-5 text-warning flex-shrink-0" />
             <div className="flex-1">
               <span className="text-sm text-warning">
-                You have unsaved AI settings changes. Save them using the main Save button below.
+                {t('settingsAi.unsavedWarning')}
               </span>
             </div>
             <button
@@ -307,7 +310,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
                 updateSettingsMutation.isPending && 'opacity-50 cursor-not-allowed'
               )}
             >
-              {updateSettingsMutation.isPending ? 'Saving...' : 'Save Now'}
+              {updateSettingsMutation.isPending ? t('settingsAi.saving') : t('settingsAi.saveNow')}
             </button>
           </div>
         )}
@@ -340,11 +343,11 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
                 />
               </div>
               <div>
-                <div className="font-semibold text-text-primary">Enable AI-powered features</div>
+                <div className="font-semibold text-text-primary">{t('settingsAi.enableAi')}</div>
                 <div className="text-sm text-text-muted">
                   {isEnabled
-                    ? 'AI providers are active and will be used for supported tasks'
-                    : 'AI disabled - using rule-based fallback only'}
+                    ? t('settingsAi.enabledDesc')
+                    : t('settingsAi.disabledDesc')}
                 </div>
               </div>
             </div>
@@ -372,13 +375,13 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
         {providers && (
           <div className="grid grid-cols-2 gap-4">
             <StatCard
-              label="Available Providers"
+              label={t('settingsAi.availableProviders')}
               value={providers.available_count}
               color="success"
               icon={<Zap className="w-4 h-4 text-success" />}
             />
             <StatCard
-              label="Running"
+              label={t('settingsAi.running')}
               value={providers.running_count}
               color="neural"
               icon={<Power className="w-4 h-4 text-neural" />}
@@ -389,7 +392,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
         {/* Provider Cards - AI providers only (not rule_based) */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-text-secondary flex items-center gap-2">
-            <span>AI Providers</span>
+            <span>{t('settingsAi.aiProviders')}</span>
             <div className="flex-1 h-px bg-slate-light/30" />
           </h3>
 
@@ -414,7 +417,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
               'bg-slate-dark/30 border border-slate-light/20'
             )}
           >
-            <h4 className="text-sm font-semibold text-text-secondary mb-3">Extraction Priority</h4>
+            <h4 className="text-sm font-semibold text-text-secondary mb-3">{t('settingsAi.extractionPriority')}</h4>
             <div className="flex items-center gap-2 text-sm flex-wrap">
               {mergedSettings.task_priorities.parameter_extraction.provider_order.map((id, i, arr) => (
                 <span key={id} className="flex items-center gap-2">
@@ -467,17 +470,17 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
             >
               <Database className="w-4 h-4 text-neural" />
             </div>
-            <h4 className="text-sm font-semibold text-text-primary">Cache</h4>
+            <h4 className="text-sm font-semibold text-text-primary">{t('settingsAi.cache')}</h4>
           </div>
 
           {cacheStats && (
             <div className="grid grid-cols-3 gap-4 mb-4">
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Entries</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.entries')}</div>
                 <div className="text-lg font-bold text-text-primary">{cacheStats.entry_count}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Size</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.size')}</div>
                 <div className="text-lg font-bold text-neural">
                   {typeof cacheStats.total_size_bytes === 'number'
                     ? formatBytes(cacheStats.total_size_bytes)
@@ -485,8 +488,8 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
                 </div>
               </div>
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">TTL</div>
-                <div className="text-lg font-bold text-text-primary">{cacheStats.ttl_days} days</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.ttl')}</div>
+                <div className="text-lg font-bold text-text-primary">{t('settingsAi.ttlDays', { count: cacheStats.ttl_days })}</div>
               </div>
             </div>
           )}
@@ -506,7 +509,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
               <RefreshCw
                 className={clsx('w-4 h-4', cleanupCacheMutation.isPending && 'animate-spin')}
               />
-              Cleanup Expired
+              {t('settingsAi.cleanupExpired')}
             </button>
             <button
               onClick={handleClearCache}
@@ -524,7 +527,7 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
               ) : (
                 <Trash2 className="w-4 h-4" />
               )}
-              Clear All
+              {t('settingsAi.clearAll')}
             </button>
           </div>
         </div>
@@ -532,36 +535,36 @@ export const AIServicesSettings = forwardRef<AIServicesSettingsHandle>(function 
         {/* Settings Summary */}
         {mergedSettings && (
           <div className="border-t border-slate-light/30 pt-6">
-            <h4 className="text-sm font-semibold text-text-secondary mb-3">Configuration Summary</h4>
+            <h4 className="text-sm font-semibold text-text-secondary mb-3">{t('settingsAi.configSummary')}</h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Timeout</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.timeout')}</div>
                 <div className="text-sm font-mono text-text-primary">{mergedSettings.cli_timeout_seconds}s</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Max Retries</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.maxRetries')}</div>
                 <div className="text-sm font-mono text-text-primary">{mergedSettings.max_retries}</div>
               </div>
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Cache</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.cacheLabel')}</div>
                 <div
                   className={clsx(
                     'text-sm font-mono',
                     mergedSettings.cache_enabled ? 'text-success' : 'text-text-muted'
                   )}
                 >
-                  {mergedSettings.cache_enabled ? 'Enabled' : 'Disabled'}
+                  {mergedSettings.cache_enabled ? t('settingsAi.enabled') : t('settingsAi.disabled')}
                 </div>
               </div>
               <div className="p-3 rounded-xl bg-slate-dark/30 border border-slate-light/20">
-                <div className="text-xs text-text-muted">Fallback</div>
+                <div className="text-xs text-text-muted">{t('settingsAi.fallback')}</div>
                 <div
                   className={clsx(
                     'text-sm font-mono',
                     mergedSettings.always_fallback_to_rule_based ? 'text-success' : 'text-text-muted'
                   )}
                 >
-                  {mergedSettings.always_fallback_to_rule_based ? 'Always' : 'Disabled'}
+                  {mergedSettings.always_fallback_to_rule_based ? t('settingsAi.always') : t('settingsAi.disabled')}
                 </div>
               </div>
             </div>

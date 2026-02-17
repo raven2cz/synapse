@@ -14,6 +14,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   Package,
@@ -38,6 +39,7 @@ import type {
   PluginBadge,
   PackDependencyStatus,
 } from './types'
+import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
 // =============================================================================
@@ -49,6 +51,7 @@ interface PackDependenciesSectionProps {
 }
 
 function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
+  const { t } = useTranslation()
   const { pack, isEditing, openModal } = context
   const [expanded, setExpanded] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -78,7 +81,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
                 ...dep,
                 installed: false,
                 version_match: false,
-                error: 'Pack not found',
+                error: t('pack.plugins.custom.packNotFound'),
               }
             }
           } catch (e) {
@@ -86,7 +89,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
               ...dep,
               installed: false,
               version_match: false,
-              error: 'Failed to check status',
+              error: t('pack.plugins.custom.failedToCheck'),
             }
           }
         })
@@ -111,9 +114,9 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
               <Layers className="w-5 h-5 text-text-muted" />
             </div>
             <div>
-              <h3 className="font-medium text-text-primary">Pack Dependencies</h3>
+              <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
               <p className="text-sm text-text-muted">
-                No dependencies on other packs
+                {t('pack.plugins.custom.noDeps')}
               </p>
             </div>
           </div>
@@ -125,7 +128,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
               onClick={() => openModal('addPackDependency')}
             >
               <Plus className="w-4 h-4" />
-              Add
+              {t('common.add')}
             </Button>
           )}
         </div>
@@ -154,12 +157,12 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
             )} />
           </div>
           <div>
-            <h3 className="font-medium text-text-primary">Pack Dependencies</h3>
+            <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
             <p className="text-sm text-text-muted">
-              {installedCount} installed
+              {t('pack.plugins.custom.installedCount', { count: installedCount })}
               {missingCount > 0 && (
                 <span className="text-amber-400 ml-1">
-                  • {missingCount} missing
+                  • {t('pack.plugins.custom.missingCount', { count: missingCount })}
                 </span>
               )}
             </p>
@@ -177,7 +180,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
               }}
             >
               <Plus className="w-4 h-4" />
-              Add
+              {t('common.add')}
             </Button>
           )}
           {expanded ? (
@@ -200,7 +203,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search dependencies..."
+                  placeholder={t('pack.plugins.custom.searchPlaceholder')}
                   className={clsx(
                     'w-full pl-9 pr-4 py-2 rounded-lg',
                     'bg-slate-dark border border-slate-mid',
@@ -221,7 +224,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
                 isEditing={isEditing}
                 onRemove={() => {
                   // TODO: implement remove
-                  context.toast.info('Remove pack dependency: ' + dep.pack_name)
+                  context.toast.info(t('pack.plugins.custom.removeTooltip', { name: dep.pack_name }))
                 }}
                 onNavigate={() => {
                   // Navigate to pack
@@ -232,7 +235,7 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
 
             {filteredDependencies.length === 0 && searchQuery && (
               <div className="p-4 text-center text-text-muted">
-                No dependencies match "{searchQuery}"
+                {t('pack.plugins.custom.noMatch', { query: searchQuery })}
               </div>
             )}
           </div>
@@ -254,6 +257,7 @@ interface PackDependencyRowProps {
 }
 
 function PackDependencyRow({ dependency, isEditing, onRemove, onNavigate }: PackDependencyRowProps) {
+  const { t } = useTranslation()
   return (
     <div
       className={clsx(
@@ -292,16 +296,16 @@ function PackDependencyRow({ dependency, isEditing, onRemove, onNavigate }: Pack
         <div className="flex items-center gap-2 text-sm text-text-muted">
           {dependency.installed ? (
             <>
-              <span className="text-green-400">Installed</span>
+              <span className="text-green-400">{t('pack.plugins.custom.installed')}</span>
               {dependency.current_version && (
                 <span>v{dependency.current_version}</span>
               )}
             </>
           ) : (
-            <span className="text-red-400">{dependency.error || 'Not installed'}</span>
+            <span className="text-red-400">{dependency.error || t('pack.plugins.custom.notInstalled')}</span>
           )}
           {dependency.required && (
-            <span className="text-amber-400">• Required</span>
+            <span className="text-amber-400">• {t('pack.plugins.custom.required')}</span>
           )}
           {dependency.version_constraint && (
             <span className="font-mono">{dependency.version_constraint}</span>
@@ -318,7 +322,7 @@ function PackDependencyRow({ dependency, isEditing, onRemove, onNavigate }: Pack
             onClick={onNavigate}
           >
             <Package className="w-4 h-4" />
-            Find
+            {t('pack.plugins.custom.find')}
           </Button>
         )}
         {isEditing && (
@@ -328,7 +332,7 @@ function PackDependencyRow({ dependency, isEditing, onRemove, onNavigate }: Pack
             onClick={onRemove}
             className="text-red-400 hover:bg-red-500/20"
           >
-            Remove
+            {t('common.remove')}
           </Button>
         )}
       </div>
@@ -345,6 +349,7 @@ interface EditCapabilitiesInfoProps {
 }
 
 function EditCapabilitiesInfo({ context }: EditCapabilitiesInfoProps) {
+  const { t } = useTranslation()
   const { isEditing } = context
 
   if (!isEditing) return null
@@ -356,26 +361,26 @@ function EditCapabilitiesInfo({ context }: EditCapabilitiesInfoProps) {
           <Edit3 className="w-5 h-5 text-synapse" />
         </div>
         <div>
-          <h3 className="font-medium text-text-primary">Full Edit Mode</h3>
+          <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.fullEditMode')}</h3>
           <p className="text-sm text-text-muted mt-1">
-            This is a custom pack. You can edit all fields:
+            {t('pack.plugins.custom.fullEditDesc')}
           </p>
           <ul className="text-sm text-text-muted mt-2 space-y-1">
             <li className="flex items-center gap-2">
               <Check className="w-3 h-3 text-synapse" />
-              Name, description, and metadata
+              {t('pack.plugins.custom.editName')}
             </li>
             <li className="flex items-center gap-2">
               <Check className="w-3 h-3 text-synapse" />
-              Previews (add, remove, reorder)
+              {t('pack.plugins.custom.editPreviews')}
             </li>
             <li className="flex items-center gap-2">
               <Check className="w-3 h-3 text-synapse" />
-              Dependencies and pack dependencies
+              {t('pack.plugins.custom.editDeps')}
             </li>
             <li className="flex items-center gap-2">
               <Check className="w-3 h-3 text-synapse" />
-              Workflows and parameters
+              {t('pack.plugins.custom.editWorkflows')}
             </li>
           </ul>
         </div>
@@ -390,7 +395,7 @@ function EditCapabilitiesInfo({ context }: EditCapabilitiesInfoProps) {
 
 export const CustomPlugin: PackPlugin = {
   id: 'custom',
-  name: 'Custom Pack',
+  get name() { return i18n.t('pack.plugins.custom.title') },
   priority: 0, // Lowest - fallback
 
   appliesTo: (pack: PackDetail) => {
@@ -402,10 +407,10 @@ export const CustomPlugin: PackPlugin = {
     // Only show badge for explicitly custom packs
     if (pack.pack?.pack_category === 'custom') {
       return {
-        label: 'Custom',
+        label: i18n.t('pack.plugins.custom.title'),
         variant: 'success',
         icon: 'Package',
-        tooltip: 'Locally created pack',
+        tooltip: i18n.t('pack.plugins.custom.localPack'),
       }
     }
     return null
@@ -451,9 +456,9 @@ export const CustomPlugin: PackPlugin = {
     // Validate name if changed
     if (changes.name !== undefined) {
       if (!changes.name || changes.name.trim() === '') {
-        errors.name = 'Pack name is required'
+        errors.name = i18n.t('pack.plugins.custom.nameRequired')
       } else if (changes.name.length > 100) {
-        errors.name = 'Pack name must be 100 characters or less'
+        errors.name = i18n.t('pack.plugins.custom.nameTooLong')
       }
     }
 
@@ -461,7 +466,7 @@ export const CustomPlugin: PackPlugin = {
     if (changes.version !== undefined) {
       const versionRegex = /^\d+\.\d+\.\d+$/
       if (changes.version && !versionRegex.test(changes.version)) {
-        errors.version = 'Version must be in format X.Y.Z'
+        errors.version = i18n.t('pack.plugins.custom.invalidVersion')
       }
     }
 

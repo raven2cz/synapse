@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import {
   X, Loader2, ChevronDown, ChevronRight, Sliders, Maximize2, Sparkles,
@@ -134,7 +135,7 @@ type CategoryKey = 'generation' | 'resolution' | 'hires' | 'model' | 'controlnet
 
 interface ParamDefinition {
   key: string
-  label: string
+  labelKey: string
   type: ParamType
   default: string
   category: CategoryKey
@@ -149,97 +150,97 @@ interface ParamDefinition {
 
 const PARAM_DEFINITIONS: ParamDefinition[] = [
   // Generation
-  { key: 'sampler', label: 'Sampler', type: 'string', default: 'euler', category: 'generation' },
-  { key: 'scheduler', label: 'Scheduler', type: 'string', default: 'normal', category: 'generation' },
-  { key: 'steps', label: 'Steps', type: 'number', default: '20', category: 'generation', step: 1, min: 1, max: 150 },
-  { key: 'cfg_scale', label: 'CFG Scale', type: 'number', default: '7', category: 'generation', step: 0.5, min: 1, max: 30 },
-  { key: 'clip_skip', label: 'Clip Skip', type: 'number', default: '2', category: 'generation', step: 1, min: 1, max: 12 },
-  { key: 'denoise', label: 'Denoise', type: 'number', default: '1.0', category: 'generation', step: 0.05, min: 0, max: 1 },
-  { key: 'seed', label: 'Seed', type: 'number', default: '-1', category: 'generation', step: 1 },
-  { key: 'eta', label: 'Eta', type: 'number', default: '0', category: 'generation', step: 0.1, min: 0, max: 1 },
+  { key: 'sampler', labelKey: 'sampler', type: 'string', default: 'euler', category: 'generation' },
+  { key: 'scheduler', labelKey: 'scheduler', type: 'string', default: 'normal', category: 'generation' },
+  { key: 'steps', labelKey: 'steps', type: 'number', default: '20', category: 'generation', step: 1, min: 1, max: 150 },
+  { key: 'cfg_scale', labelKey: 'cfg_scale', type: 'number', default: '7', category: 'generation', step: 0.5, min: 1, max: 30 },
+  { key: 'clip_skip', labelKey: 'clip_skip', type: 'number', default: '2', category: 'generation', step: 1, min: 1, max: 12 },
+  { key: 'denoise', labelKey: 'denoise', type: 'number', default: '1.0', category: 'generation', step: 0.05, min: 0, max: 1 },
+  { key: 'seed', labelKey: 'seed', type: 'number', default: '-1', category: 'generation', step: 1 },
+  { key: 'eta', labelKey: 'eta', type: 'number', default: '0', category: 'generation', step: 0.1, min: 0, max: 1 },
 
   // Resolution
-  { key: 'width', label: 'Width', type: 'number', default: '512', category: 'resolution', step: 64, min: 64, max: 4096 },
-  { key: 'height', label: 'Height', type: 'number', default: '512', category: 'resolution', step: 64, min: 64, max: 4096 },
-  { key: 'aspect_ratio', label: 'Aspect Ratio', type: 'string', default: '1:1', category: 'resolution' },
+  { key: 'width', labelKey: 'width', type: 'number', default: '512', category: 'resolution', step: 64, min: 64, max: 4096 },
+  { key: 'height', labelKey: 'height', type: 'number', default: '512', category: 'resolution', step: 64, min: 64, max: 4096 },
+  { key: 'aspect_ratio', labelKey: 'aspect_ratio', type: 'string', default: '1:1', category: 'resolution' },
 
   // HiRes Fix
-  { key: 'hires_fix', label: 'Enable HiRes', type: 'boolean', default: 'false', category: 'hires' },
-  { key: 'hires_upscaler', label: 'Upscaler', type: 'string', default: 'Latent', category: 'hires' },
-  { key: 'hires_steps', label: 'HiRes Steps', type: 'number', default: '15', category: 'hires', step: 1, min: 1, max: 150 },
-  { key: 'hires_denoise', label: 'HiRes Denoise', type: 'number', default: '0.5', category: 'hires', step: 0.05, min: 0, max: 1 },
-  { key: 'hires_scale', label: 'HiRes Scale', type: 'number', default: '2.0', category: 'hires', step: 0.25, min: 1, max: 4 },
-  { key: 'hires_width', label: 'HiRes Width', type: 'number', default: '1024', category: 'hires', step: 64, min: 64, max: 4096 },
-  { key: 'hires_height', label: 'HiRes Height', type: 'number', default: '1024', category: 'hires', step: 64, min: 64, max: 4096 },
+  { key: 'hires_fix', labelKey: 'hires_fix', type: 'boolean', default: 'false', category: 'hires' },
+  { key: 'hires_upscaler', labelKey: 'hires_upscaler', type: 'string', default: 'Latent', category: 'hires' },
+  { key: 'hires_steps', labelKey: 'hires_steps', type: 'number', default: '15', category: 'hires', step: 1, min: 1, max: 150 },
+  { key: 'hires_denoise', labelKey: 'hires_denoise', type: 'number', default: '0.5', category: 'hires', step: 0.05, min: 0, max: 1 },
+  { key: 'hires_scale', labelKey: 'hires_scale', type: 'number', default: '2.0', category: 'hires', step: 0.25, min: 1, max: 4 },
+  { key: 'hires_width', labelKey: 'hires_width', type: 'number', default: '1024', category: 'hires', step: 64, min: 64, max: 4096 },
+  { key: 'hires_height', labelKey: 'hires_height', type: 'number', default: '1024', category: 'hires', step: 64, min: 64, max: 4096 },
 
   // Model Settings
-  { key: 'strength', label: 'LoRA Strength', type: 'number', default: '1.0', category: 'model', step: 0.05, min: -2, max: 2 },
-  { key: 'vae', label: 'VAE', type: 'string', default: 'Automatic', category: 'model' },
-  { key: 'base_model', label: 'Base Model', type: 'string', default: '', category: 'model' },
-  { key: 'model_hash', label: 'Model Hash', type: 'string', default: '', category: 'model' },
+  { key: 'strength', labelKey: 'strength', type: 'number', default: '1.0', category: 'model', step: 0.05, min: -2, max: 2 },
+  { key: 'vae', labelKey: 'vae', type: 'string', default: 'Automatic', category: 'model' },
+  { key: 'base_model', labelKey: 'base_model', type: 'string', default: '', category: 'model' },
+  { key: 'model_hash', labelKey: 'model_hash', type: 'string', default: '', category: 'model' },
 
   // ControlNet
-  { key: 'controlnet_enabled', label: 'Enable ControlNet', type: 'boolean', default: 'false', category: 'controlnet' },
-  { key: 'controlnet_strength', label: 'CN Strength', type: 'number', default: '1.0', category: 'controlnet', step: 0.05, min: 0, max: 2 },
-  { key: 'controlnet_start', label: 'CN Start', type: 'number', default: '0', category: 'controlnet', step: 0.05, min: 0, max: 1 },
-  { key: 'controlnet_end', label: 'CN End', type: 'number', default: '1', category: 'controlnet', step: 0.05, min: 0, max: 1 },
-  { key: 'controlnet_model', label: 'CN Model', type: 'string', default: '', category: 'controlnet' },
-  { key: 'control_mode', label: 'Control Mode', type: 'string', default: 'balanced', category: 'controlnet' },
+  { key: 'controlnet_enabled', labelKey: 'controlnet_enabled', type: 'boolean', default: 'false', category: 'controlnet' },
+  { key: 'controlnet_strength', labelKey: 'controlnet_strength', type: 'number', default: '1.0', category: 'controlnet', step: 0.05, min: 0, max: 2 },
+  { key: 'controlnet_start', labelKey: 'controlnet_start', type: 'number', default: '0', category: 'controlnet', step: 0.05, min: 0, max: 1 },
+  { key: 'controlnet_end', labelKey: 'controlnet_end', type: 'number', default: '1', category: 'controlnet', step: 0.05, min: 0, max: 1 },
+  { key: 'controlnet_model', labelKey: 'controlnet_model', type: 'string', default: '', category: 'controlnet' },
+  { key: 'control_mode', labelKey: 'control_mode', type: 'string', default: 'balanced', category: 'controlnet' },
 
   // Inpainting
-  { key: 'inpaint_full_res', label: 'Inpaint Full Res', type: 'boolean', default: 'true', category: 'inpainting' },
-  { key: 'inpaint_full_res_padding', label: 'Padding', type: 'number', default: '32', category: 'inpainting', step: 8, min: 0, max: 256 },
-  { key: 'mask_blur', label: 'Mask Blur', type: 'number', default: '4', category: 'inpainting', step: 1, min: 0, max: 64 },
-  { key: 'inpainting_fill', label: 'Fill Method', type: 'string', default: 'original', category: 'inpainting' },
+  { key: 'inpaint_full_res', labelKey: 'inpaint_full_res', type: 'boolean', default: 'true', category: 'inpainting' },
+  { key: 'inpaint_full_res_padding', labelKey: 'inpaint_full_res_padding', type: 'number', default: '32', category: 'inpainting', step: 8, min: 0, max: 256 },
+  { key: 'mask_blur', labelKey: 'mask_blur', type: 'number', default: '4', category: 'inpainting', step: 1, min: 0, max: 64 },
+  { key: 'inpainting_fill', labelKey: 'inpainting_fill', type: 'string', default: 'original', category: 'inpainting' },
 
   // Batch
-  { key: 'batch_size', label: 'Batch Size', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 16 },
-  { key: 'batch_count', label: 'Batch Count', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 100 },
-  { key: 'n_iter', label: 'Iterations', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 100 },
+  { key: 'batch_size', labelKey: 'batch_size', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 16 },
+  { key: 'batch_count', labelKey: 'batch_count', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 100 },
+  { key: 'n_iter', labelKey: 'n_iter', type: 'number', default: '1', category: 'batch', step: 1, min: 1, max: 100 },
 
   // Advanced
-  { key: 's_noise', label: 'Sigma Noise', type: 'number', default: '1.0', category: 'advanced', step: 0.01, min: 0, max: 2 },
-  { key: 's_churn', label: 'Sigma Churn', type: 'number', default: '0', category: 'advanced', step: 0.1, min: 0, max: 100 },
-  { key: 's_tmin', label: 'Sigma Tmin', type: 'number', default: '0', category: 'advanced', step: 0.1, min: 0, max: 10 },
-  { key: 's_tmax', label: 'Sigma Tmax', type: 'number', default: 'inf', category: 'advanced', step: 0.1 },
-  { key: 'noise_offset', label: 'Noise Offset', type: 'number', default: '0', category: 'advanced', step: 0.01, min: 0, max: 1 },
-  { key: 'tiling', label: 'Tiling', type: 'boolean', default: 'false', category: 'advanced' },
-  { key: 'ensd', label: 'ENSD', type: 'number', default: '31337', category: 'advanced', step: 1 },
+  { key: 's_noise', labelKey: 's_noise', type: 'number', default: '1.0', category: 'advanced', step: 0.01, min: 0, max: 2 },
+  { key: 's_churn', labelKey: 's_churn', type: 'number', default: '0', category: 'advanced', step: 0.1, min: 0, max: 100 },
+  { key: 's_tmin', labelKey: 's_tmin', type: 'number', default: '0', category: 'advanced', step: 0.1, min: 0, max: 10 },
+  { key: 's_tmax', labelKey: 's_tmax', type: 'number', default: 'inf', category: 'advanced', step: 0.1 },
+  { key: 'noise_offset', labelKey: 'noise_offset', type: 'number', default: '0', category: 'advanced', step: 0.01, min: 0, max: 1 },
+  { key: 'tiling', labelKey: 'tiling', type: 'boolean', default: 'false', category: 'advanced' },
+  { key: 'ensd', labelKey: 'ensd', type: 'number', default: '31337', category: 'advanced', step: 1 },
 
   // SDXL
-  { key: 'refiner_checkpoint', label: 'Refiner Model', type: 'string', default: '', category: 'sdxl' },
-  { key: 'refiner_switch', label: 'Refiner Switch', type: 'number', default: '0.8', category: 'sdxl', step: 0.05, min: 0, max: 1 },
-  { key: 'aesthetic_score', label: 'Aesthetic Score', type: 'number', default: '6.0', category: 'sdxl', step: 0.5, min: 1, max: 10 },
-  { key: 'negative_aesthetic_score', label: 'Neg Aesthetic', type: 'number', default: '2.5', category: 'sdxl', step: 0.5, min: 1, max: 10 },
+  { key: 'refiner_checkpoint', labelKey: 'refiner_checkpoint', type: 'string', default: '', category: 'sdxl' },
+  { key: 'refiner_switch', labelKey: 'refiner_switch', type: 'number', default: '0.8', category: 'sdxl', step: 0.05, min: 0, max: 1 },
+  { key: 'aesthetic_score', labelKey: 'aesthetic_score', type: 'number', default: '6.0', category: 'sdxl', step: 0.5, min: 1, max: 10 },
+  { key: 'negative_aesthetic_score', labelKey: 'negative_aesthetic_score', type: 'number', default: '2.5', category: 'sdxl', step: 0.5, min: 1, max: 10 },
 
   // FreeU
-  { key: 'freeu_enabled', label: 'Enable FreeU', type: 'boolean', default: 'false', category: 'freeu' },
-  { key: 'freeu_b1', label: 'FreeU B1', type: 'number', default: '1.3', category: 'freeu', step: 0.05, min: 0, max: 2 },
-  { key: 'freeu_b2', label: 'FreeU B2', type: 'number', default: '1.4', category: 'freeu', step: 0.05, min: 0, max: 2 },
-  { key: 'freeu_s1', label: 'FreeU S1', type: 'number', default: '0.9', category: 'freeu', step: 0.05, min: 0, max: 2 },
-  { key: 'freeu_s2', label: 'FreeU S2', type: 'number', default: '0.2', category: 'freeu', step: 0.05, min: 0, max: 2 },
+  { key: 'freeu_enabled', labelKey: 'freeu_enabled', type: 'boolean', default: 'false', category: 'freeu' },
+  { key: 'freeu_b1', labelKey: 'freeu_b1', type: 'number', default: '1.3', category: 'freeu', step: 0.05, min: 0, max: 2 },
+  { key: 'freeu_b2', labelKey: 'freeu_b2', type: 'number', default: '1.4', category: 'freeu', step: 0.05, min: 0, max: 2 },
+  { key: 'freeu_s1', labelKey: 'freeu_s1', type: 'number', default: '0.9', category: 'freeu', step: 0.05, min: 0, max: 2 },
+  { key: 'freeu_s2', labelKey: 'freeu_s2', type: 'number', default: '0.2', category: 'freeu', step: 0.05, min: 0, max: 2 },
 
   // IP-Adapter
-  { key: 'ip_adapter_enabled', label: 'Enable IP-Adapter', type: 'boolean', default: 'false', category: 'ipadapter' },
-  { key: 'ip_adapter_weight', label: 'IP Weight', type: 'number', default: '1.0', category: 'ipadapter', step: 0.05, min: 0, max: 2 },
-  { key: 'ip_adapter_noise', label: 'IP Noise', type: 'number', default: '0', category: 'ipadapter', step: 0.05, min: 0, max: 1 },
-  { key: 'ip_adapter_model', label: 'IP Model', type: 'string', default: '', category: 'ipadapter' },
+  { key: 'ip_adapter_enabled', labelKey: 'ip_adapter_enabled', type: 'boolean', default: 'false', category: 'ipadapter' },
+  { key: 'ip_adapter_weight', labelKey: 'ip_adapter_weight', type: 'number', default: '1.0', category: 'ipadapter', step: 0.05, min: 0, max: 2 },
+  { key: 'ip_adapter_noise', labelKey: 'ip_adapter_noise', type: 'number', default: '0', category: 'ipadapter', step: 0.05, min: 0, max: 1 },
+  { key: 'ip_adapter_model', labelKey: 'ip_adapter_model', type: 'string', default: '', category: 'ipadapter' },
 ]
 
 // Category metadata
-const CATEGORY_META: Record<CategoryKey, { label: string; icon: React.ElementType; color: string }> = {
-  generation: { label: 'Generation', icon: Sliders, color: 'text-synapse' },
-  resolution: { label: 'Resolution', icon: Maximize2, color: 'text-blue-400' },
-  hires: { label: 'HiRes Fix', icon: Sparkles, color: 'text-amber-400' },
-  model: { label: 'Model Settings', icon: Layers, color: 'text-green-400' },
-  controlnet: { label: 'ControlNet', icon: Zap, color: 'text-cyan-400' },
-  inpainting: { label: 'Inpainting', icon: Paintbrush, color: 'text-pink-400' },
-  batch: { label: 'Batch', icon: Grid3X3, color: 'text-orange-400' },
-  advanced: { label: 'Advanced', icon: Cpu, color: 'text-red-400' },
-  sdxl: { label: 'SDXL', icon: Box, color: 'text-violet-400' },
-  freeu: { label: 'FreeU', icon: Image, color: 'text-teal-400' },
-  ipadapter: { label: 'IP-Adapter', icon: Image, color: 'text-indigo-400' },
-  custom: { label: 'Custom', icon: Settings2, color: 'text-purple-400' },
+const CATEGORY_META: Record<CategoryKey, { labelKey: string; icon: React.ElementType; color: string }> = {
+  generation: { labelKey: 'generation', icon: Sliders, color: 'text-synapse' },
+  resolution: { labelKey: 'resolution', icon: Maximize2, color: 'text-blue-400' },
+  hires: { labelKey: 'hires', icon: Sparkles, color: 'text-amber-400' },
+  model: { labelKey: 'modelSettings', icon: Layers, color: 'text-green-400' },
+  controlnet: { labelKey: 'controlnet', icon: Zap, color: 'text-cyan-400' },
+  inpainting: { labelKey: 'inpainting', icon: Paintbrush, color: 'text-pink-400' },
+  batch: { labelKey: 'batch', icon: Grid3X3, color: 'text-orange-400' },
+  advanced: { labelKey: 'advanced', icon: Cpu, color: 'text-red-400' },
+  sdxl: { labelKey: 'sdxl', icon: Box, color: 'text-violet-400' },
+  freeu: { labelKey: 'freeu', icon: Image, color: 'text-teal-400' },
+  ipadapter: { labelKey: 'ipadapter', icon: Image, color: 'text-indigo-400' },
+  custom: { labelKey: 'custom', icon: Settings2, color: 'text-purple-400' },
 }
 
 // Build lookup maps
@@ -279,9 +280,16 @@ function getParamType(key: string): ParamType {
   return def?.type ?? 'string'
 }
 
-function getParamLabel(key: string): string {
+function getParamLabel(key: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const def = getParamDef(key)
-  return def?.label ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  if (!def) {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+  return t('pack.parameters.editLabels.' + def.labelKey, {
+    defaultValue: t('pack.parameters.labels.' + def.labelKey, {
+      defaultValue: def.labelKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    }),
+  })
 }
 
 // =============================================================================
@@ -404,7 +412,8 @@ interface ParameterRowProps {
 }
 
 function ParameterRow({ paramKey, value, onChange, onRemove, customType }: ParameterRowProps) {
-  const label = getParamLabel(paramKey)
+  const { t } = useTranslation()
+  const label = getParamLabel(paramKey, t)
   const def = getParamDef(paramKey)
   const type = customType ?? def?.type ?? 'string'
 
@@ -429,7 +438,7 @@ function ParameterRow({ paramKey, value, onChange, onRemove, customType }: Param
               onChange={(checked) => onChange(checked ? 'true' : 'false')}
             />
             <span className="text-sm text-text-muted">
-              {value === 'true' ? 'Enabled' : 'Disabled'}
+              {value === 'true' ? t('pack.modals.parameters.enabled') : t('pack.modals.parameters.disabled')}
             </span>
           </div>
         ) : type === 'number' ? (
@@ -462,7 +471,7 @@ function ParameterRow({ paramKey, value, onChange, onRemove, customType }: Param
           "p-1.5 rounded-lg",
           "hover:bg-red-500/20 transition-colors duration-200"
         )}
-        title="Remove parameter"
+        title={t('pack.modals.parameters.removeParam')}
       >
         <X className="w-4 h-4 text-red-400" />
       </button>
@@ -477,6 +486,7 @@ interface AddParamDropdownProps {
 }
 
 function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownProps) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -544,7 +554,7 @@ function AddParamDropdown({ category, existingKeys, onAdd }: AddParamDropdownPro
                 "flex items-center justify-between gap-3"
               )}
             >
-              <span>{p.label}</span>
+              <span>{getParamLabel(p.key, t)}</span>
               <span className="text-xs text-text-muted/70 px-1.5 py-0.5 bg-slate-mid/30 rounded">
                 {p.type}
               </span>
@@ -789,6 +799,7 @@ interface AddSectionDropdownProps {
 }
 
 function AddSectionDropdown({ visibleSections, onAdd }: AddSectionDropdownProps) {
+  const { t } = useTranslation()
   const [isOpen, setIsOpen] = useState(false)
   const buttonRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -833,7 +844,7 @@ function AddSectionDropdown({ visibleSections, onAdd }: AddSectionDropdownProps)
         )}
       >
         <Plus className="w-4 h-4" />
-        <span className="text-sm font-medium">Add Section</span>
+        <span className="text-sm font-medium">{t('pack.modals.parameters.addSection')}</span>
       </button>
 
       <PortalDropdownMenu
@@ -895,6 +906,7 @@ function CategorySection({
   collapsible = false,
   defaultExpanded = true,
 }: CategorySectionProps) {
+  const { t } = useTranslation()
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const meta = CATEGORY_META[category]
   const Icon = meta.icon
@@ -915,7 +927,7 @@ function CategorySection({
               <ChevronRight className="w-4 h-4 text-text-muted" />
             )}
             <Icon className={clsx("w-4 h-4", meta.color)} />
-            <span className="text-sm font-semibold text-text-primary">{meta.label}</span>
+            <span className="text-sm font-semibold text-text-primary">{t('pack.parameters.categories.' + meta.labelKey)}</span>
             <span className="text-xs text-text-muted ml-1">({parameters.length})</span>
           </button>
           <div className="ml-auto">
@@ -925,7 +937,7 @@ function CategorySection({
       ) : (
         <div className="flex items-center gap-2 mb-2 px-2">
           <Icon className={clsx("w-4 h-4", meta.color)} />
-          <span className="text-sm font-semibold text-text-primary">{meta.label}</span>
+          <span className="text-sm font-semibold text-text-primary">{t('pack.parameters.categories.' + meta.labelKey)}</span>
           <div className="ml-auto">
             <AddParamDropdown category={category} existingKeys={existingKeys} onAdd={onAdd} />
           </div>
@@ -935,7 +947,7 @@ function CategorySection({
       {(!collapsible || isExpanded) && (
         <div className="space-y-2">
           {parameters.length === 0 ? (
-            <p className="text-xs text-text-muted px-2 py-3">No parameters in this category</p>
+            <p className="text-xs text-text-muted px-2 py-3">{t('pack.modals.parameters.noParamsInCategory')}</p>
           ) : (
             parameters.map(([key, value]) => (
               <ParameterRow
@@ -965,6 +977,7 @@ export function EditParametersModal({
   onClose,
   isSaving = false,
 }: EditParametersModalProps) {
+  const { t } = useTranslation()
   const [parameters, setParameters] = useState<Record<string, string>>(initialParameters)
   const [customTypes, setCustomTypes] = useState<Map<string, ParamType>>(new Map())
   const [customCategories, setCustomCategories] = useState<Map<string, CategoryKey>>(new Map())
@@ -1159,7 +1172,7 @@ export function EditParametersModal({
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
             <Sliders className="w-5 h-5 text-synapse" />
-            Edit Generation Parameters
+            {t('pack.modals.parameters.title')}
           </h2>
           <button
             onClick={onClose}
@@ -1177,9 +1190,9 @@ export function EditParametersModal({
           {!hasAnyParams && visibleSections.size === 0 ? (
             <div className="text-center py-8">
               <Sliders className="w-10 h-10 mx-auto mb-3 text-text-muted/50" />
-              <p className="text-sm text-text-muted mb-2">No parameters set.</p>
+              <p className="text-sm text-text-muted mb-2">{t('pack.modals.parameters.noParams')}</p>
               <p className="text-xs text-text-muted">
-                Click <span className="text-synapse">+ Add Section</span> below to start adding parameters.
+                {t('pack.modals.parameters.noParamsHint')}
               </p>
             </div>
           ) : null}
@@ -1218,12 +1231,12 @@ export function EditParametersModal({
         <div className="border-t border-slate-mid pt-4 mb-4">
           <p className="text-xs text-text-muted mb-3 flex items-center gap-2">
             <Settings2 className="w-3.5 h-3.5 text-purple-400" />
-            Add custom parameter (for unlisted parameters):
+            {t('pack.modals.parameters.addCustomHint')}
           </p>
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Parameter name"
+              placeholder={t('pack.modals.parameters.paramName')}
               value={newKey}
               onChange={(e) => setNewKey(e.target.value)}
               className={clsx(
@@ -1236,7 +1249,7 @@ export function EditParametersModal({
             />
             <input
               type="text"
-              placeholder="Value"
+              placeholder={t('pack.modals.parameters.value')}
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
               onKeyDown={(e) => {
@@ -1272,7 +1285,7 @@ export function EditParametersModal({
                 "transition-colors duration-200"
               )}
             >
-              + Add
+              {t('pack.modals.parameters.addCustom')}
             </button>
           </div>
         </div>
@@ -1284,7 +1297,7 @@ export function EditParametersModal({
             className="flex-1"
             onClick={onClose}
           >
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             className="flex-1"
@@ -1294,7 +1307,7 @@ export function EditParametersModal({
             {isSaving ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              'Save'
+              t('common.save')
             )}
           </Button>
         </div>

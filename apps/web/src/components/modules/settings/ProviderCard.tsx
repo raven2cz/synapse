@@ -6,6 +6,7 @@
  */
 
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import {
   CheckCircle2,
@@ -110,7 +111,7 @@ function ModelSelector({
   options,
   onChange,
   disabled,
-  placeholder = 'Enter or select model...',
+  placeholder,
 }: {
   value: string
   options: string[]
@@ -118,6 +119,8 @@ function ModelSelector({
   disabled?: boolean
   placeholder?: string
 }) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('settingsAi.provider.modelPlaceholder')
   const [isOpen, setIsOpen] = useState(false)
   const [inputValue, setInputValue] = useState(value)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
@@ -248,7 +251,7 @@ function ModelSelector({
             'border-b border-slate-mid/30 mb-1'
           )}
         >
-          <span className="text-xs">Use custom:</span>
+          <span className="text-xs">{t('settingsAi.provider.useCustom')}</span>
           <span className="font-mono text-xs font-semibold flex-1">{inputValue}</span>
         </button>
       )}
@@ -257,7 +260,7 @@ function ModelSelector({
       {filteredOptions.length > 0 ? (
         <>
           <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-text-muted">
-            Available models
+            {t('settingsAi.provider.availableModels')}
           </div>
           {filteredOptions.map((option) => (
             <button
@@ -279,7 +282,7 @@ function ModelSelector({
         </>
       ) : (
         <div className="px-3 py-4 text-center text-xs text-text-muted">
-          No matching models. Type to use a custom model name.
+          {t('settingsAi.provider.noMatchingModels')}
         </div>
       )}
     </div>
@@ -296,7 +299,7 @@ function ModelSelector({
           onFocus={handleInputFocus}
           onKeyDown={handleInputKeyDown}
           disabled={disabled}
-          placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
           className={clsx(
             'w-full h-9 pl-3 pr-8 font-mono text-xs',
             'bg-slate-dark/80 backdrop-blur-sm',
@@ -339,11 +342,13 @@ function ModelSelector({
  * Status Badge with glow effect
  */
 function StatusBadge({ status }: { status?: ProviderStatus }) {
+  const { t } = useTranslation()
+
   if (!status) {
     return (
       <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-mid/50 border border-slate-mid/50">
         <Circle className="w-2.5 h-2.5 text-text-muted" />
-        <span className="text-xs font-medium text-text-muted">Unknown</span>
+        <span className="text-xs font-medium text-text-muted">{t('settingsAi.provider.unknown')}</span>
       </span>
     )
   }
@@ -358,7 +363,7 @@ function StatusBadge({ status }: { status?: ProviderStatus }) {
             animation: 'pulse 2s ease-in-out infinite',
           }}
         />
-        <span className="text-xs font-semibold text-success uppercase tracking-wide">Running</span>
+        <span className="text-xs font-semibold text-success uppercase tracking-wide">{t('settingsAi.provider.running')}</span>
       </span>
     )
   }
@@ -367,7 +372,7 @@ function StatusBadge({ status }: { status?: ProviderStatus }) {
     return (
       <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-warning/15 border border-warning/40">
         <Circle className="w-2.5 h-2.5 text-warning fill-warning" />
-        <span className="text-xs font-semibold text-warning uppercase tracking-wide">Available</span>
+        <span className="text-xs font-semibold text-warning uppercase tracking-wide">{t('settingsAi.provider.available')}</span>
       </span>
     )
   }
@@ -375,7 +380,7 @@ function StatusBadge({ status }: { status?: ProviderStatus }) {
   return (
     <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-error/15 border border-error/40">
       <XCircle className="w-2.5 h-2.5 text-error" />
-      <span className="text-xs font-semibold text-error uppercase tracking-wide">Not Installed</span>
+      <span className="text-xs font-semibold text-error uppercase tracking-wide">{t('settingsAi.provider.notInstalled')}</span>
     </span>
   )
 }
@@ -390,6 +395,7 @@ function InstallationGuide({
   providerId: string
   onRedetect?: () => void
 }) {
+  const { t } = useTranslation()
   const instructions = INSTALL_INSTRUCTIONS[providerId]
   if (!instructions) return null
 
@@ -397,7 +403,7 @@ function InstallationGuide({
     <div className="mt-4 pt-4 border-t border-slate-mid/30 space-y-4">
       <div className="flex items-center gap-2">
         <Server className="w-4 h-4 text-text-muted" />
-        <span className="text-sm font-medium text-text-secondary">Installation Required</span>
+        <span className="text-sm font-medium text-text-secondary">{t('settingsAi.provider.installRequired')}</span>
       </div>
 
       <div className="space-y-2">
@@ -416,7 +422,7 @@ function InstallationGuide({
 
       {instructions.postInstall && (
         <div className="p-3 rounded-lg bg-synapse/5 border border-synapse/20">
-          <span className="text-xs text-text-muted">After installation:</span>
+          <span className="text-xs text-text-muted">{t('settingsAi.provider.afterInstall')}</span>
           <code className="block mt-1 text-xs font-mono text-synapse">{instructions.postInstall}</code>
         </div>
       )}
@@ -436,13 +442,13 @@ function InstallationGuide({
             )}
           >
             <ExternalLink className="w-3 h-3" />
-            Documentation
+            {t('settingsAi.provider.documentation')}
           </a>
         )}
         {onRedetect && (
           <Button variant="secondary" size="sm" onClick={onRedetect}>
             <RefreshCw className="w-3 h-3 mr-1.5" />
-            Re-detect
+            {t('settingsAi.provider.reDetect')}
           </Button>
         )}
       </div>
@@ -494,6 +500,7 @@ export function ProviderCard({
   onChange,
   onRedetect,
 }: ProviderCardProps) {
+  const { t } = useTranslation()
   const [showEndpoint, setShowEndpoint] = useState(false)
   const [isRefreshingModels, setIsRefreshingModels] = useState(false)
 
@@ -605,7 +612,7 @@ export function ProviderCard({
                         : 'bg-pulse/10 text-pulse border-pulse/30'
                     )}
                   >
-                    {info.type === 'local' ? 'Local' : 'Cloud'}
+                    {info.type === 'local' ? t('settingsAi.provider.local') : t('settingsAi.provider.cloud')}
                   </span>
                 </div>
                 <p className="text-sm text-text-muted mt-0.5">{info.description}</p>
@@ -621,13 +628,13 @@ export function ProviderCard({
           <div className="mt-4 pt-4 border-t border-slate-mid/30 space-y-3">
             {/* Model Selection - Editable with suggestions */}
             <div className="flex items-center gap-3">
-              <span className="text-xs font-medium text-text-muted min-w-[50px]">Model</span>
+              <span className="text-xs font-medium text-text-muted min-w-[50px]">{t('settingsAi.provider.model')}</span>
               <ModelSelector
                 value={currentModel}
                 options={availableModels}
                 onChange={handleModelChange}
                 disabled={!onChange}
-                placeholder="Enter or select model..."
+                placeholder={t('settingsAi.provider.modelPlaceholder')}
               />
               {/* Refresh Models Button */}
               {onRedetect && (
@@ -635,7 +642,7 @@ export function ProviderCard({
                   type="button"
                   onClick={handleRefreshModels}
                   disabled={isRefreshingModels || isLoading}
-                  title="Refresh available models from service"
+                  title={t('settingsAi.provider.refreshModels')}
                   className={clsx(
                     'flex items-center justify-center w-9 h-9 rounded-lg',
                     'bg-slate-dark/80 border border-slate-mid/50',
@@ -667,18 +674,18 @@ export function ProviderCard({
                     className={clsx('w-3 h-3 transition-transform duration-200', showEndpoint && 'rotate-180')}
                   />
                   <Zap className="w-3 h-3" />
-                  Endpoint settings
+                  {t('settingsAi.provider.endpointSettings')}
                 </button>
 
                 {showEndpoint && (
                   <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <span className="text-xs font-medium text-text-muted min-w-[50px]">URL</span>
+                    <span className="text-xs font-medium text-text-muted min-w-[50px]">{t('settingsAi.provider.url')}</span>
                     <input
                       type="text"
                       value={endpoint}
                       onChange={(e) => handleEndpointChange(e.target.value)}
                       disabled={!onChange}
-                      placeholder="http://localhost:11434"
+                      placeholder={t('settingsAi.provider.urlPlaceholder')}
                       className={clsx(
                         'flex-1 h-9 px-3 text-xs font-mono',
                         'bg-slate-dark/80 border border-slate-mid/50 rounded-lg',
@@ -697,11 +704,11 @@ export function ProviderCard({
             <div className="flex items-center gap-4 text-xs text-text-muted">
               {status?.version && (
                 <span>
-                  Version: <span className="font-mono text-text-secondary">{status.version}</span>
+                  {t('settingsAi.provider.version')} <span className="font-mono text-text-secondary">{status.version}</span>
                 </span>
               )}
               {availableModels.length > 1 && (
-                <span>{availableModels.length} models available</span>
+                <span>{t('settingsAi.provider.modelsAvailable', { count: availableModels.length })}</span>
               )}
             </div>
           </div>
@@ -712,10 +719,10 @@ export function ProviderCard({
           <div className="mt-4 pt-4 border-t border-slate-mid/30">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-success" />
-              <span className="text-sm text-text-secondary">Always available as fallback</span>
+              <span className="text-sm text-text-secondary">{t('settingsAi.provider.alwaysFallback')}</span>
             </div>
             <p className="mt-2 text-xs text-text-muted">
-              Pattern matching extraction. No AI providers required.
+              {t('settingsAi.provider.ruleBasedDesc')}
             </p>
           </div>
         )}
@@ -736,7 +743,7 @@ export function ProviderCard({
         {isLoading && (
           <div className="mt-3 flex items-center gap-2">
             <RefreshCw className="w-3.5 h-3.5 text-synapse animate-spin" />
-            <span className="text-xs text-text-muted">Detecting provider...</span>
+            <span className="text-xs text-text-muted">{t('settingsAi.provider.detecting')}</span>
           </div>
         )}
       </div>

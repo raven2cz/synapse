@@ -79,39 +79,40 @@ export function Sidebar() {
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
+      {/* Invisible hover zone extending right to cover the toggle tab */}
+      <div className="absolute top-0 -right-4 w-4 h-full" />
       <aside
         className={clsx(
           "sticky top-14 self-start",
           "bg-slate-900/95 backdrop-blur-2xl backdrop-saturate-150",
           "border-r border-slate-700/50 rounded-br-xl",
-          "flex flex-col overflow-hidden"
+          "flex flex-col"
         )}
         style={{
           width: isCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH,
           transition: 'width 200ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        {/* Toggle button - appears on hover at the edge */}
+        {/* Toggle tab - subtle handle protruding from the right edge */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className={clsx(
-            "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 z-20",
-            "w-5 h-10 rounded-full",
-            "bg-slate-800/90 backdrop-blur-sm",
-            "border border-slate-600/50",
+            "absolute top-1/2 -translate-y-1/2 -right-3.5 z-20",
+            "w-3.5 h-7 rounded-r-md",
+            "bg-slate-800/50 hover:bg-slate-700/80",
+            "border border-l-0 border-slate-600/30 hover:border-slate-500/50",
             "flex items-center justify-center",
-            "text-slate-400 hover:text-white hover:bg-slate-700",
-            "shadow-lg shadow-black/20",
+            "text-slate-500 hover:text-slate-200",
             "transition-all duration-200",
-            // Show on hover or when collapsed
-            isHovering || isCollapsed ? "opacity-100" : "opacity-0 pointer-events-none"
+            // Show only on hover
+            isHovering ? "opacity-70 hover:opacity-100" : "opacity-0 pointer-events-none"
           )}
           title={isCollapsed ? `${t('sidebar.expandSidebar')} (⌘ \\)` : `${t('sidebar.collapseSidebar')} (⌘ \\)`}
         >
           {isCollapsed ? (
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3 h-3" />
           ) : (
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-3 h-3" />
           )}
         </button>
 
@@ -161,7 +162,7 @@ export function Sidebar() {
 
         {/* Footer status */}
         <div className={clsx(
-          "border-t shrink-0",
+          "border-t shrink-0 overflow-hidden",
           isCollapsed ? "p-2" : "p-4",
           isConnected
             ? 'border-slate-700/50 bg-gradient-to-br from-slate-900 to-slate-800/50'

@@ -11,6 +11,7 @@
  */
 
 import { useState, useRef, type KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Plus, Tag } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -75,11 +76,13 @@ export function EditableTags({
   editable = true,
   suggestions = [],
   maxTags,
-  placeholder = 'Add tag...',
+  placeholder,
   label,
   className,
   variant = 'default',
 }: EditableTagsProps) {
+  const { t } = useTranslation()
+  const resolvedPlaceholder = placeholder ?? t('pack.shared.editableTags.placeholder')
   const [inputValue, setInputValue] = useState('')
   const [showSuggestions, setShowSuggestions] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -178,7 +181,7 @@ export function EditableTags({
 
         {/* Empty state */}
         {tags.length === 0 && !editable && (
-          <span className="text-text-muted text-sm italic">No tags</span>
+          <span className="text-text-muted text-sm italic">{t('pack.shared.editableTags.noTags')}</span>
         )}
       </div>
 
@@ -201,7 +204,7 @@ export function EditableTags({
                 setTimeout(() => setShowSuggestions(false), 200)
               }}
               onKeyDown={handleKeyDown}
-              placeholder={placeholder}
+              placeholder={resolvedPlaceholder}
               className={clsx(
                 'w-full pl-9 pr-3 py-2 rounded-lg',
                 'bg-slate-dark border border-slate-mid',
@@ -248,7 +251,7 @@ export function EditableTags({
           'text-xs mt-1',
           tags.length >= maxTags ? 'text-amber-400' : 'text-text-muted'
         )}>
-          {tags.length}/{maxTags} tags
+          {t('pack.shared.editableTags.tagCount', { current: tags.length, max: maxTags })}
         </div>
       )}
     </div>

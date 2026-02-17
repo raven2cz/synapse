@@ -18,6 +18,7 @@
  */
 
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   RefreshCw,
@@ -40,6 +41,7 @@ import type {
   UpdateCheckResponse,
   UpdateResult,
 } from './types'
+import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
 // =============================================================================
@@ -51,6 +53,7 @@ interface UpdateCheckSectionProps {
 }
 
 function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
+  const { t } = useTranslation()
   const { pack, toast, refetch } = context
   const queryClient = useQueryClient()
   const [showDetails, setShowDetails] = useState(false)
@@ -67,7 +70,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
       const res = await fetch(`/api/updates/check/${encodeURIComponent(pack.name)}`)
       if (!res.ok) {
         const error = await res.text()
-        throw new Error(error || 'Failed to check updates')
+        throw new Error(error || t('pack.plugins.civitai.failedToCheck'))
       }
       return res.json()
     },
@@ -90,22 +93,22 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
       })
       if (!res.ok) {
         const error = await res.text()
-        throw new Error(error || 'Failed to apply updates')
+        throw new Error(error || t('pack.plugins.civitai.failedToApply'))
       }
       return res.json() as Promise<UpdateResult>
     },
     onSuccess: (result) => {
       if (result.applied) {
-        toast.success(`Pack updated successfully`)
+        toast.success(t('pack.plugins.civitai.updatedSuccess'))
         queryClient.invalidateQueries({ queryKey: ['pack', pack.name] })
         queryClient.invalidateQueries({ queryKey: ['update-check', pack.name] })
         refetch()
       } else if (result.already_up_to_date) {
-        toast.info('Pack is already up to date')
+        toast.info(t('pack.plugins.civitai.alreadyUpToDate'))
       }
     },
     onError: (error: Error) => {
-      toast.error(`Update failed: ${error.message}`)
+      toast.error(t('pack.plugins.civitai.updateFailed', { error: error.message }))
     },
   })
 
@@ -128,14 +131,14 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
             )}
           </div>
           <div>
-            <h3 className="font-medium text-text-primary">Civitai Updates</h3>
+            <h3 className="font-medium text-text-primary">{t('pack.plugins.civitai.updates')}</h3>
             <p className="text-sm text-text-muted">
               {!isFetched ? (
-                'Click to check for updates'
+                t('pack.plugins.civitai.checkTooltip')
               ) : hasUpdates ? (
-                `${changesCount} update${changesCount !== 1 ? 's' : ''} available`
+                t('pack.plugins.civitai.updatesAvailable', { count: changesCount })
               ) : (
-                'Pack is up to date'
+                t('pack.plugins.civitai.upToDate')
               )}
             </p>
           </div>
@@ -154,7 +157,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              Apply Updates
+              {t('pack.plugins.civitai.applyUpdates')}
             </Button>
           )}
 
@@ -169,7 +172,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            Check
+            {t('pack.plugins.civitai.check')}
           </Button>
         </div>
       </div>
@@ -182,7 +185,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
             className="flex items-center gap-2 text-sm text-text-muted hover:text-text-primary transition-colors"
           >
             <Info className="w-4 h-4" />
-            {showDetails ? 'Hide details' : 'Show details'}
+            {showDetails ? t('pack.plugins.civitai.hideDetails') : t('pack.plugins.civitai.showDetails')}
           </button>
 
           {showDetails && (
@@ -194,9 +197,9 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
                 >
                   <p className="font-mono text-synapse">{change.dependency_id}</p>
                   <div className="flex items-center gap-2 mt-1 text-text-muted">
-                    <span>{String(change.old?.version_name || 'unknown')}</span>
+                    <span>{String(change.old?.version_name || t('pack.plugins.civitai.unknown'))}</span>
                     <span>→</span>
-                    <span className="text-pulse">{String(change.new?.version_name || 'new')}</span>
+                    <span className="text-pulse">{String(change.new?.version_name || t('pack.plugins.civitai.new'))}</span>
                   </div>
                 </div>
               ))}
@@ -204,7 +207,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
               {ambiguousCount > 0 && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <p className="text-sm text-amber-400">
-                    {ambiguousCount} update{ambiguousCount !== 1 ? 's' : ''} require manual selection
+                    {t('pack.plugins.civitai.manualSelection', { count: ambiguousCount })}
                   </p>
                 </div>
               )}
@@ -225,6 +228,7 @@ interface CivitaiInfoSectionProps {
 }
 
 function CivitaiInfoSection({ context }: CivitaiInfoSectionProps) {
+  const { t } = useTranslation()
   const { pack } = context
   const source = pack.pack?.source
 
@@ -236,29 +240,29 @@ function CivitaiInfoSection({ context }: CivitaiInfoSectionProps) {
         <div className="p-2 bg-pulse/20 rounded-lg">
           <Globe className="w-5 h-5 text-pulse" />
         </div>
-        <h3 className="font-medium text-text-primary">Civitai Source</h3>
+        <h3 className="font-medium text-text-primary">{t('pack.plugins.civitai.source')}</h3>
       </div>
 
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
-          <p className="text-text-muted">Provider</p>
+          <p className="text-text-muted">{t('pack.plugins.civitai.provider')}</p>
           <p className="font-mono text-text-primary">{source.provider}</p>
         </div>
         {source.model_id && (
           <div>
-            <p className="text-text-muted">Model ID</p>
+            <p className="text-text-muted">{t('pack.plugins.civitai.modelId')}</p>
             <p className="font-mono text-synapse">{source.model_id}</p>
           </div>
         )}
         {source.version_id && (
           <div>
-            <p className="text-text-muted">Version ID</p>
+            <p className="text-text-muted">{t('pack.plugins.civitai.versionId')}</p>
             <p className="font-mono text-pulse">{source.version_id}</p>
           </div>
         )}
         {pack.source_url && (
           <div className="col-span-2">
-            <p className="text-text-muted">Source URL</p>
+            <p className="text-text-muted">{t('pack.plugins.civitai.sourceUrl')}</p>
             <a
               href={pack.source_url}
               target="_blank"
@@ -280,7 +284,7 @@ function CivitaiInfoSection({ context }: CivitaiInfoSectionProps) {
 
 export const CivitaiPlugin: PackPlugin = {
   id: 'civitai',
-  name: 'Civitai Integration',
+  get name() { return i18n.t('pack.plugins.civitai.integration') },
   priority: 50,
 
   appliesTo: (pack: PackDetail) => {
@@ -288,10 +292,10 @@ export const CivitaiPlugin: PackPlugin = {
   },
 
   getBadge: (): PluginBadge => ({
-    label: 'Civitai',
+    label: i18n.t('pack.plugins.civitai.name'),
     variant: 'info',
     icon: 'Globe',
-    tooltip: 'Imported from Civitai',
+    tooltip: i18n.t('pack.plugins.civitai.importedFrom'),
   }),
 
   features: {
@@ -322,7 +326,7 @@ export const CivitaiPlugin: PackPlugin = {
             className="hover:bg-pulse/20 hover:text-pulse transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
-            Civitai
+            {i18n.t('pack.plugins.civitai.name')}
           </Button>
         )}
       </>

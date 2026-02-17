@@ -24,6 +24,7 @@
 
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { Loader2, Trash2, Zap, Sparkles, Pencil, Save, X, AlertCircle, AlertTriangle } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -158,6 +159,8 @@ export function PackHeader({
   // Plugin props
   pluginActions,
 }: PackHeaderProps) {
+  const { t } = useTranslation()
+
   // State for delete confirmation dialog
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -201,7 +204,7 @@ export function PackHeader({
               'bg-synapse/20 text-synapse border border-synapse/30',
               'animate-pulse'
             )}>
-              Editing
+              {t('pack.header.editing')}
             </span>
           )}
 
@@ -212,7 +215,7 @@ export function PackHeader({
               'bg-amber-500/20 text-amber-400 border border-amber-500/30'
             )}>
               <AlertCircle className="w-3 h-3" />
-              Unsaved
+              {t('pack.header.unsaved')}
             </span>
           )}
         </div>
@@ -263,7 +266,7 @@ export function PackHeader({
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save
+              {t('pack.actions.save')}
             </Button>
 
             {/* Discard Button */}
@@ -277,7 +280,7 @@ export function PackHeader({
               )}
             >
               <X className="w-4 h-4" />
-              Discard
+              {t('common.cancel')}
             </Button>
           </>
         ) : (
@@ -291,7 +294,7 @@ export function PackHeader({
                 className="transition-all duration-200 hover:scale-105 hover:bg-synapse/20 hover:text-synapse"
               >
                 <Pencil className="w-4 h-4" />
-                Edit
+                {t('pack.actions.edit')}
               </Button>
             )}
 
@@ -313,7 +316,7 @@ export function PackHeader({
               ) : (
                 <Zap className="w-4 h-4" />
               )}
-              Use
+              {t('pack.actions.use')}
             </Button>
 
             {/* Delete Button */}
@@ -360,18 +363,18 @@ export function PackHeader({
                 <AlertTriangle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">Delete Pack</h3>
-                <p className="text-sm text-text-muted">This action cannot be undone</p>
+                <h3 className="text-lg font-semibold text-text-primary">{t('pack.modals.delete.title')}</h3>
+                <p className="text-sm text-text-muted">{t('pack.modals.delete.warning')}</p>
               </div>
             </div>
 
             {/* Content */}
             <div className="p-4">
               <p className="text-text-secondary">
-                Are you sure you want to delete <span className="font-semibold text-text-primary">{pack.name}</span>?
+                {t('pack.header.deleteConfirm', { name: pack.name })}
               </p>
               <p className="mt-2 text-sm text-text-muted">
-                All pack data, parameters, workflows, and settings will be permanently removed.
+                {t('pack.header.deleteWarning')}
               </p>
             </div>
 
@@ -381,7 +384,7 @@ export function PackHeader({
                 variant="secondary"
                 onClick={handleCancelDelete}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -392,12 +395,12 @@ export function PackHeader({
                 {isDeleting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Deleting...
+                    {t('pack.header.deleting')}
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    Delete Pack
+                    {t('pack.modals.delete.title')}
                   </>
                 )}
               </Button>

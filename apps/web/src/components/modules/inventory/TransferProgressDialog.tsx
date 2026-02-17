@@ -10,6 +10,7 @@
  * - Resumable transfers
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { clsx } from 'clsx'
 import {
   X,
@@ -40,40 +41,30 @@ interface TransferProgressDialogProps {
   onCancel?: () => void
 }
 
-// Operation configs
+// Operation configs (visual only - text is translated via i18n)
 const OPERATION_CONFIGS: Record<
   TransferOperation,
-  { icon: React.ReactNode; color: string; verb: string; verbPast: string }
+  { icon: React.ReactNode; color: string }
 > = {
   backup: {
     icon: <Upload className="w-5 h-5" />,
     color: 'text-synapse',
-    verb: 'Backing up',
-    verbPast: 'backed up',
   },
   restore: {
     icon: <Download className="w-5 h-5" />,
     color: 'text-blue-400',
-    verb: 'Restoring',
-    verbPast: 'restored',
   },
   download: {
     icon: <Download className="w-5 h-5" />,
     color: 'text-green-400',
-    verb: 'Downloading',
-    verbPast: 'downloaded',
   },
   cleanup: {
     icon: <Trash2 className="w-5 h-5" />,
     color: 'text-amber-400',
-    verb: 'Cleaning up',
-    verbPast: 'cleaned up',
   },
   verify: {
     icon: <Shield className="w-5 h-5" />,
     color: 'text-purple-400',
-    verb: 'Verifying',
-    verbPast: 'verified',
   },
 }
 
@@ -104,6 +95,7 @@ export function TransferProgressDialog({
   onExecute,
   onCancel,
 }: TransferProgressDialogProps) {
+  const { t } = useTranslation()
   const [progress, setProgress] = useState<TransferProgress | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -301,7 +293,7 @@ export function TransferProgressDialog({
             <div>
               <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
               <p className="text-sm text-text-muted">
-                {totalItems} file{totalItems !== 1 ? 's' : ''} &middot; {formatBytes(totalBytes)}
+                {t('inventory.transfer.filesCount', { count: totalItems })} &middot; {formatBytes(totalBytes)}
               </p>
             </div>
           </div>
@@ -323,10 +315,10 @@ export function TransferProgressDialog({
             <div className="flex justify-between text-sm">
               <span className="text-text-secondary">
                 {isCompleted
-                  ? `${completedItems} ${config.verbPast}`
+                  ? t(`inventory.transfer.completed.${operation}`, { count: completedItems })
                   : isFailed
-                    ? `${completedItems} completed, ${failedItems} failed`
-                    : `${config.verb}...`}
+                    ? t('inventory.transfer.completedAndFailed', { completed: completedItems, failed: failedItems })
+                    : t(`inventory.transfer.running.${operation}`)}
               </span>
               <span className="text-text-primary font-medium">{progressPercent.toFixed(0)}%</span>
             </div>
@@ -350,11 +342,11 @@ export function TransferProgressDialog({
               {isRunning && bytesPerSecond > 0 && (
                 <span>
                   {formatSpeed(bytesPerSecond)}
-                  {etaSeconds !== undefined && ` \u2022 ${formatDuration(etaSeconds)} remaining`}
+                  {etaSeconds !== undefined && ` \u2022 ${t('inventory.transfer.remaining', { duration: formatDuration(etaSeconds) })}`}
                 </span>
               )}
               {isCompleted && elapsedSeconds > 0 && (
-                <span>Completed in {formatDuration(elapsedSeconds)}</span>
+                <span>{t('inventory.transfer.completedIn', { duration: formatDuration(elapsedSeconds) })}</span>
               )}
             </div>
           </div>
@@ -379,7 +371,7 @@ export function TransferProgressDialog({
             <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
               <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
               <span className="text-sm text-green-400">
-                Successfully {config.verbPast} {completedItems} file{completedItems !== 1 ? 's' : ''}
+                {t(`inventory.transfer.success.${operation}`, { count: completedItems })}
               </span>
             </div>
           )}
@@ -390,14 +382,14 @@ export function TransferProgressDialog({
                 <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
                 <div className="flex-1">
                   <span className="text-sm text-red-400">
-                    {failedItems} file{failedItems !== 1 ? 's' : ''} failed
+                    {t('inventory.transfer.filesFailed', { count: failedItems })}
                   </span>
                   {progress?.errors && progress.errors.length > 0 && (
                     <button
                       onClick={() => setShowDetails(!showDetails)}
                       className="text-xs text-red-400/70 hover:text-red-400 ml-2 underline"
                     >
-                      {showDetails ? 'Hide details' : 'Show details'}
+                      {showDetails ? t('inventory.transfer.hideDetails') : t('inventory.transfer.showDetails')}
                     </button>
                   )}
                 </div>
@@ -420,7 +412,7 @@ export function TransferProgressDialog({
             <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
               <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
               <span className="text-sm text-amber-400">
-                Not enough space on target. Free up space and try again.
+                {t('inventory.transfer.notEnoughSpace')}
               </span>
             </div>
           )}
@@ -429,13 +421,13 @@ export function TransferProgressDialog({
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-slate-mid/30 bg-slate-mid/10">
           <div className="text-xs text-text-muted">
-            {completedItems}/{totalItems} files
+            {t('inventory.transfer.filesProgress', { completed: completedItems, total: totalItems })}
           </div>
 
           <div className="flex gap-2">
             {isRunning && (
               <Button variant="ghost" size="sm" onClick={handleCancel} leftIcon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
 
@@ -446,13 +438,13 @@ export function TransferProgressDialog({
                 onClick={handleRetryFailed}
                 leftIcon={<RotateCcw className="w-4 h-4" />}
               >
-                Retry Failed ({failedItems})
+                {t('inventory.transfer.retryFailed', { count: failedItems })}
               </Button>
             )}
 
             {(isCompleted || (isFailed && !progress?.can_resume)) && (
               <Button variant="primary" size="sm" onClick={onClose}>
-                Done
+                {t('inventory.transfer.done')}
               </Button>
             )}
           </div>
