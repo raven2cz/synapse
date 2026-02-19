@@ -27,6 +27,35 @@ export interface UpdateOptions {
   update_model_info: boolean
 }
 
+// --- Dismissed persistence ---
+const DISMISSED_KEY = 'synapse-updates-dismissed'
+
+function loadDismissed(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveDismissed(dismissed: Record<string, string>) {
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed))
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+/** Build a version key from plan changes for dismissed tracking */
+function versionKeyFromPlan(plan: UpdatePlanEntry): string {
+  const ids = [
+    ...plan.changes.map(c => `${c.dependency_id}:${(c.new as Record<string, unknown>)?.provider_version_id ?? '?'}`),
+    ...plan.ambiguous.map(a => `${a.dependency_id}:ambiguous`),
+  ]
+  return ids.sort().join(',')
+}
+
 interface UpdatesState {
   // Check state
   isChecking: boolean
@@ -42,6 +71,12 @@ interface UpdatesState {
   // Apply state
   applyingPacks: string[]
 
+  // Download group tracking
+  activeGroupId: string | null
+
+  // Dismissed updates persistence
+  dismissedVersions: Record<string, string>
+
   // Computed
   updatesCount: number
 
@@ -55,6 +90,7 @@ interface UpdatesState {
   applyUpdate: (packName: string, options?: Partial<UpdateOptions>) => Promise<boolean>
   applySelected: (options?: Partial<UpdateOptions>) => Promise<{ applied: number; failed: number }>
   dismissUpdate: (packName: string) => void
+  cancelBatch: () => Promise<void>
   clearAll: () => void
 }
 
@@ -62,7 +98,11 @@ interface UpdatesState {
  * Queue downloads for changed dependencies via the existing download-asset endpoint.
  * This gives us progress tracking, Downloads tab integration, proper symlinks, etc.
  */
-async function queueDownloadsForPack(packName: string, plan: UpdatePlanEntry): Promise<void> {
+async function queueDownloadsForPack(
+  packName: string,
+  plan: UpdatePlanEntry,
+  groupId?: string,
+): Promise<void> {
   const changedDeps = [
     ...plan.changes.map(c => c.dependency_id),
     ...plan.ambiguous.map(a => a.dependency_id),
@@ -75,7 +115,7 @@ async function queueDownloadsForPack(packName: string, plan: UpdatePlanEntry): P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           asset_name: depId,
-          // URL and asset_type auto-detected from lock + dependency
+          ...(groupId ? { group_id: groupId, group_label: 'Pack Updates' } : {}),
         }),
       })
     } catch {
@@ -91,6 +131,8 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   availableUpdates: {},
   selectedPacks: [],
   applyingPacks: [],
+  activeGroupId: null,
+  dismissedVersions: loadDismissed(),
   updatesCount: 0,
 
   checkAll: async () => {
@@ -101,12 +143,23 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
       const data = await res.json()
 
       const plans: Record<string, UpdatePlanEntry> = data.plans || {}
-      const packNames = Object.keys(plans)
+      const dismissed = get().dismissedVersions
+
+      // Filter out dismissed updates
+      const filtered: Record<string, UpdatePlanEntry> = {}
+      for (const [name, plan] of Object.entries(plans)) {
+        const key = versionKeyFromPlan(plan)
+        if (!dismissed[name] || dismissed[name] !== key) {
+          filtered[name] = plan
+        }
+      }
+
+      const packNames = Object.keys(filtered)
 
       set(() => ({
         isChecking: false,
         lastChecked: Date.now(),
-        availableUpdates: plans,
+        availableUpdates: filtered,
         updatesCount: packNames.length,
         selectedPacks: [...packNames],
       }))
@@ -168,10 +221,10 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
 
       if (result.applied) {
         // Step 2: Queue downloads via existing download-asset endpoint
-        // This gives us progress tracking, Downloads tab, etc.
+        const groupId = `update-${Date.now()}`
         const plan = get().availableUpdates[packName]
         if (plan) {
-          await queueDownloadsForPack(packName, plan)
+          await queueDownloadsForPack(packName, plan, groupId)
         }
 
         set((state) => {
@@ -182,6 +235,7 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
             updatesCount: Object.keys(updates).length,
             selectedPacks: state.selectedPacks.filter(n => n !== packName),
             applyingPacks: state.applyingPacks.filter(n => n !== packName),
+            activeGroupId: groupId,
           }
         })
         return true
@@ -204,6 +258,9 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
     const packs = [...selectedPacks]
 
     if (packs.length === 0) return { applied: 0, failed: 0 }
+
+    // Generate group ID for all downloads in this batch
+    const groupId = `update-${Date.now()}`
 
     // Mark all as applying
     set((state) => ({
@@ -236,7 +293,7 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
           appliedPacks.push(packName)
           const plan = availableUpdates[packName]
           if (plan) {
-            await queueDownloadsForPack(packName, plan)
+            await queueDownloadsForPack(packName, plan, groupId)
           }
         }
       }
@@ -254,6 +311,7 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
           updatesCount: Object.keys(updates).length,
           selectedPacks: selected,
           applyingPacks: [],
+          activeGroupId: appliedPacks.length > 0 ? groupId : null,
         }
       })
 
@@ -269,18 +327,44 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
 
   dismissUpdate: (packName: string) => set((state) => {
     const updates = { ...state.availableUpdates }
+    const plan = updates[packName]
+
+    // Record dismissed version key for persistence
+    const dismissed = { ...state.dismissedVersions }
+    if (plan) {
+      dismissed[packName] = versionKeyFromPlan(plan)
+      saveDismissed(dismissed)
+    }
+
     delete updates[packName]
     return {
       availableUpdates: updates,
       updatesCount: Object.keys(updates).length,
       selectedPacks: state.selectedPacks.filter(n => n !== packName),
+      dismissedVersions: dismissed,
     }
   }),
+
+  cancelBatch: async () => {
+    const { activeGroupId } = get()
+    if (!activeGroupId) return
+
+    try {
+      await fetch(`/api/packs/downloads/group/${encodeURIComponent(activeGroupId)}`, {
+        method: 'DELETE',
+      })
+    } catch {
+      // Best-effort cancel
+    }
+
+    set(() => ({ activeGroupId: null }))
+  },
 
   clearAll: () => set(() => ({
     availableUpdates: {},
     selectedPacks: [],
     applyingPacks: [],
+    activeGroupId: null,
     updatesCount: 0,
     lastChecked: null,
     checkError: null,

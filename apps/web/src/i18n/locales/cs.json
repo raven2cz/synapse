@@ -819,7 +819,13 @@
       "title": "Zobrazení",
       "subtitle": "Předvolby uživatelského rozhraní",
       "nsfwBlur": "Rozmazání NSFW",
-      "nsfwBlurDesc": "Rozmazat NSFW náhledy ve výchozím nastavení"
+      "nsfwBlurDesc": "Rozmazat NSFW náhledy ve výchozím nastavení",
+      "autoCheckUpdates": "Automatická kontrola aktualizací",
+      "autoCheckUpdatesDesc": "Automaticky kontrolovat aktualizace packů na pozadí",
+      "autoCheckOff": "Vypnuto",
+      "autoCheck1h": "Každou hodinu",
+      "autoCheck6h": "Každých 6 hodin",
+      "autoCheck24h": "Každých 24 hodin"
     },
     "language": {
       "title": "Jazyk",
@@ -1319,6 +1325,13 @@
       "failed": "Selhalo",
       "cancelled": "Zrušeno",
       "pending": "Čeká"
+    },
+    "group": {
+      "packUpdates": "Aktualizace packů",
+      "progress": "{{completed}}/{{total}} dokončeno",
+      "cancelAll": "Zrušit vše",
+      "collapseGroup": "Sbalit skupinu",
+      "expandGroup": "Rozbalit skupinu"
     }
   },
   "importModal": {
@@ -1638,7 +1651,17 @@
       "updatesFound": "{{count}} packů má dostupné aktualizace",
       "updatesFound_one": "{{count}} pack má dostupnou aktualizaci",
       "allUpToDate": "Všechny packy jsou aktuální",
-      "allUpToDateDesc": "Na Civitai nebyly nalezeny žádné nové verze"
+      "allUpToDateDesc": "Na Civitai nebyly nalezeny žádné nové verze",
+      "downloadProgress": "Stahování {{completed}}/{{total}} assetů",
+      "estimatedTime": "~{{eta}}",
+      "calculatingEta": "Počítám...",
+      "cancelBatch": "Zrušit všechna stahování",
+      "downloadComplete": "Všechna stahování dokončena"
+    },
+    "autoCheck": {
+      "found": "{{count}} packů má dostupné aktualizace",
+      "found_one": "{{count}} pack má dostupnou aktualizaci",
+      "found_few": "{{count}} packy mají dostupné aktualizace"
     },
     "options": {
       "title": "Možnosti aktualizace",

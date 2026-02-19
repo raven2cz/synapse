@@ -8,12 +8,13 @@
  * - Select all / Deselect all
  * - Apply Selected button with options
  * - Batch progress tracking
+ * - Aggregate download progress after apply
  */
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   X,
   RefreshCw,
@@ -27,15 +28,29 @@ import {
   Layers,
   Package,
   Check,
+  XCircle,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
+import { ProgressBar } from '@/components/ui/ProgressBar'
 import { useUpdatesStore, type UpdatePlanEntry } from '@/stores/updatesStore'
 import { toast } from '@/stores/toastStore'
+import { formatBytes, formatSpeed, formatEta } from '@/lib/utils/format'
 
 interface UpdatesPanelProps {
   open: boolean
   onClose: () => void
+}
+
+interface DownloadInfo {
+  download_id: string
+  status: string
+  progress: number
+  downloaded_bytes: number
+  total_bytes: number
+  speed_bps: number
+  eta_seconds: number | null
+  group_id: string | null
 }
 
 function UpdateItem({
@@ -157,6 +172,84 @@ function UpdateItem({
   )
 }
 
+function GroupDownloadProgress({ groupId, onCancel }: { groupId: string; onCancel: () => void }) {
+  const { t } = useTranslation()
+
+  const { data: downloads } = useQuery<DownloadInfo[]>({
+    queryKey: ['downloads-active'],
+    queryFn: async () => {
+      const res = await fetch('/api/packs/downloads/active')
+      if (!res.ok) return []
+      return res.json()
+    },
+    select: (data) => data.filter((d: DownloadInfo) => d.group_id === groupId),
+    refetchInterval: (query) => {
+      const data = query.state.data as DownloadInfo[] | undefined
+      const hasActive = data?.some(d => d.status === 'downloading' || d.status === 'pending')
+      return hasActive ? 1500 : false
+    },
+  })
+
+  if (!downloads || downloads.length === 0) return null
+
+  const totalBytes = downloads.reduce((sum, d) => sum + d.total_bytes, 0)
+  const downloadedBytes = downloads.reduce((sum, d) => sum + d.downloaded_bytes, 0)
+  const completedCount = downloads.filter(d => d.status === 'completed').length
+  const totalCount = downloads.length
+  const allCompleted = completedCount === totalCount
+  const hasActive = downloads.some(d => d.status === 'downloading' || d.status === 'pending')
+  const progress = totalBytes > 0 ? (downloadedBytes / totalBytes) * 100 : 0
+
+  // Aggregate speed and ETA
+  const totalSpeed = downloads.reduce((sum, d) => d.status === 'downloading' ? sum + d.speed_bps : sum, 0)
+  const remainingBytes = totalBytes - downloadedBytes
+  const aggregateEta = totalSpeed > 0 ? remainingBytes / totalSpeed : 0
+
+  if (allCompleted) {
+    return (
+      <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+        <div className="flex items-center gap-2">
+          <Check className="w-5 h-5 text-green-400" />
+          <span className="text-sm font-medium text-green-400">
+            {t('updates.panel.downloadComplete')}
+          </span>
+        </div>
+        <p className="text-xs text-text-muted mt-1">
+          {formatBytes(totalBytes)} {t('downloads.complete').toLowerCase()}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      <ProgressBar progress={progress} showLabel={true} />
+      <div className="flex items-center justify-between text-xs text-text-muted">
+        <span>
+          {t('updates.panel.downloadProgress', { completed: completedCount, total: totalCount })}
+        </span>
+        {hasActive && totalSpeed > 0 && (
+          <span>
+            {formatSpeed(totalSpeed)} • {t('updates.panel.estimatedTime', { eta: formatEta(aggregateEta) })}
+          </span>
+        )}
+        {hasActive && totalSpeed === 0 && (
+          <span>{t('updates.panel.calculatingEta')}</span>
+        )}
+      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        className="w-full"
+        onClick={onCancel}
+      >
+        <XCircle className="w-4 h-4" />
+        {t('updates.panel.cancelBatch')}
+      </Button>
+    </div>
+  )
+}
+
 export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -166,11 +259,13 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
     selectedPacks,
     applyingPacks,
     updatesCount,
+    activeGroupId,
     checkAll,
     selectAll,
     deselectAll,
     togglePack,
     applySelected,
+    cancelBatch,
   } = useUpdatesStore()
 
   const [isApplying, setIsApplying] = useState(false)
@@ -204,6 +299,11 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
     } else {
       toast.success(t('updates.panel.allUpToDate'))
     }
+  }
+
+  const handleCancelBatch = async () => {
+    await cancelBatch()
+    queryClient.invalidateQueries({ queryKey: ['downloads-active'] })
   }
 
   if (!open) return null
@@ -244,7 +344,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {/* Check button when no updates */}
-          {updatesCount === 0 && !isChecking && (
+          {updatesCount === 0 && !isChecking && !activeGroupId && (
             <div className="text-center py-8">
               <RefreshCw className="w-12 h-12 text-slate-mid mx-auto mb-3" />
               <p className="text-text-muted mb-4">{t('updates.panel.checkPrompt')}</p>
@@ -303,7 +403,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
           ))}
 
           {/* All up to date after check */}
-          {updatesCount === 0 && !isChecking && useUpdatesStore.getState().lastChecked && (
+          {updatesCount === 0 && !isChecking && !activeGroupId && useUpdatesStore.getState().lastChecked && (
             <div className="text-center py-8">
               <Check className="w-12 h-12 text-green-400 mx-auto mb-3" />
               <p className="text-text-primary font-medium">{t('updates.panel.allUpToDate')}</p>
@@ -312,22 +412,33 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
           )}
         </div>
 
-        {/* Footer with apply button */}
-        {updatesCount > 0 && (
-          <div className="p-4 border-t border-slate-mid/50 bg-slate-900/95">
-            <Button
-              variant="primary"
-              className="w-full"
-              onClick={handleApplySelected}
-              disabled={selectedCount === 0 || isApplying}
-            >
-              {isApplying ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              {t('updates.panel.applySelected', { count: selectedCount })}
-            </Button>
+        {/* Footer */}
+        {(updatesCount > 0 || activeGroupId) && (
+          <div className="p-4 border-t border-slate-mid/50 bg-slate-900/95 space-y-3">
+            {/* Aggregate download progress when active */}
+            {activeGroupId && (
+              <GroupDownloadProgress
+                groupId={activeGroupId}
+                onCancel={handleCancelBatch}
+              />
+            )}
+
+            {/* Apply button when there are updates to apply */}
+            {updatesCount > 0 && (
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={handleApplySelected}
+                disabled={selectedCount === 0 || isApplying}
+              >
+                {isApplying ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {t('updates.panel.applySelected', { count: selectedCount })}
+              </Button>
+            )}
           </div>
         )}
       </div>

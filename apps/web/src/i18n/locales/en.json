@@ -815,7 +815,13 @@
       "title": "Display",
       "subtitle": "UI preferences",
       "nsfwBlur": "NSFW Blur",
-      "nsfwBlurDesc": "Blur NSFW preview images by default"
+      "nsfwBlurDesc": "Blur NSFW preview images by default",
+      "autoCheckUpdates": "Auto-Check Updates",
+      "autoCheckUpdatesDesc": "Automatically check for pack updates in the background",
+      "autoCheckOff": "Off",
+      "autoCheck1h": "Every hour",
+      "autoCheck6h": "Every 6 hours",
+      "autoCheck24h": "Every 24 hours"
     },
     "language": {
       "title": "Language",
@@ -1314,6 +1320,13 @@
       "failed": "Failed",
       "cancelled": "Cancelled",
       "pending": "Pending"
+    },
+    "group": {
+      "packUpdates": "Pack Updates",
+      "progress": "{{completed}}/{{total}} completed",
+      "cancelAll": "Cancel All",
+      "collapseGroup": "Collapse group",
+      "expandGroup": "Expand group"
     }
   },
   "importModal": {
@@ -1629,7 +1642,16 @@
       "updatesFound": "{{count}} packs have updates available",
       "updatesFound_one": "{{count}} pack has updates available",
       "allUpToDate": "All packs are up to date",
-      "allUpToDateDesc": "No new versions found on Civitai"
+      "allUpToDateDesc": "No new versions found on Civitai",
+      "downloadProgress": "Downloading {{completed}}/{{total}} assets",
+      "estimatedTime": "~{{eta}}",
+      "calculatingEta": "Calculating...",
+      "cancelBatch": "Cancel All Downloads",
+      "downloadComplete": "All downloads completed"
+    },
+    "autoCheck": {
+      "found": "{{count}} packs have updates available",
+      "found_one": "{{count}} pack has updates available"
     },
     "options": {
       "title": "Update Options",

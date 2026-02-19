@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
@@ -14,7 +14,9 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useDownloadsStore } from '../../stores/downloadsStore'
 import { useUpdatesStore } from '../../stores/updatesStore'
+import { useSettingsStore } from '../../stores/settingsStore'
 import { Logo } from '../ui/Logo'
+import { toast } from '../../stores/toastStore'
 import { clsx } from 'clsx'
 
 const navItems = [
@@ -58,6 +60,68 @@ export function Sidebar() {
     s.downloads.filter(d => d.status === 'downloading').length
   )
   const availableUpdates = useUpdatesStore((s) => s.updatesCount)
+  const autoCheckUpdates = useSettingsStore((s) => s.autoCheckUpdates)
+
+  // Keyboard shortcut: Ctrl/Cmd+U to check updates
+  const handleCheckUpdates = useCallback(async () => {
+    const store = useUpdatesStore.getState()
+    if (store.isChecking) return
+    await store.checkAll()
+    const after = useUpdatesStore.getState()
+    if (after.updatesCount > 0) {
+      toast.info(t('updates.autoCheck.found', { count: after.updatesCount }))
+    } else {
+      toast.success(t('updates.panel.allUpToDate'))
+    }
+  }, [t])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
+        e.preventDefault()
+        handleCheckUpdates()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleCheckUpdates])
+
+  // Auto-check updates on interval
+  useEffect(() => {
+    if (autoCheckUpdates === 'off') return
+
+    const intervalMs: Record<string, number> = {
+      '1h': 3_600_000,
+      '6h': 21_600_000,
+      '24h': 86_400_000,
+    }
+    const ms = intervalMs[autoCheckUpdates]
+    if (!ms) return
+
+    // Debounce: 5s delay after mount to avoid hammering on rapid reloads
+    const debounceTimer = setTimeout(() => {
+      const { lastChecked, isChecking } = useUpdatesStore.getState()
+      const now = Date.now()
+      if (!isChecking && (!lastChecked || now - lastChecked >= ms)) {
+        handleCheckUpdates()
+      }
+    }, 5000)
+
+    // Recurring interval for long-lived sessions
+    const interval = setInterval(() => {
+      const { lastChecked, isChecking } = useUpdatesStore.getState()
+      const now = Date.now()
+      if (!isChecking && (!lastChecked || now - lastChecked >= ms)) {
+        handleCheckUpdates()
+      }
+    }, ms)
+
+    return () => {
+      clearTimeout(debounceTimer)
+      clearInterval(interval)
+    }
+  }, [autoCheckUpdates, handleCheckUpdates])
 
   const { data: status, isError } = useQuery({
     queryKey: ['system-status'],

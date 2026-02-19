@@ -41,7 +41,7 @@ interface DiagnosticsResponse {
 export function SettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const { nsfwBlurEnabled, setNsfwBlur } = useSettingsStore()
+  const { nsfwBlurEnabled, setNsfwBlur, autoCheckUpdates, setAutoCheckUpdates } = useSettingsStore()
   const aiSettingsRef = useRef<AIServicesSettingsHandle>(null)
   const [comfyuiPath, setComfyuiPath] = useState('~/ComfyUI')
   const [civitaiToken, setCivitaiToken] = useState('')
@@ -254,6 +254,29 @@ export function SettingsPage() {
                   }`}
                 />
               </button>
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-slate-700/50" />
+
+            {/* Auto-check updates */}
+            <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+              <div>
+                <span className="text-slate-100">{t('settings.display.autoCheckUpdates')}</span>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t('settings.display.autoCheckUpdatesDesc')}
+                </p>
+              </div>
+              <select
+                value={autoCheckUpdates}
+                onChange={(e) => setAutoCheckUpdates(e.target.value as 'off' | '1h' | '6h' | '24h')}
+                className="px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
+              >
+                <option value="off">{t('settings.display.autoCheckOff')}</option>
+                <option value="1h">{t('settings.display.autoCheck1h')}</option>
+                <option value="6h">{t('settings.display.autoCheck6h')}</option>
+                <option value="24h">{t('settings.display.autoCheck24h')}</option>
+              </select>
             </div>
           </div>
         </Card>
