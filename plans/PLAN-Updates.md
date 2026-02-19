@@ -815,82 +815,89 @@ interface ApplyBatchResponse {
 
 ## 13. ⚠️ Known Gap: Download Integration
 
-### 13.1 Problem
+### 13.1 Problem (pre-existing, NOT introduced by v1.0.0)
 
-`_sync_after_update()` (update_service.py:747) does **synchronous** `blob_store.download()`
-directly inside the API request handler. This **bypasses** the existing download infrastructure:
+`_sync_after_update()` (update_service.py, existed on main since first commit) does
+**synchronous** `blob_store.download()` directly in the API request handler. This is a
+**parallel download path** that bypasses the existing download infrastructure.
+
+### 13.2 Two Download Paths Exist (BAD — must be unified)
 
 ```
-CURRENT (broken for large files):
+PATH A: Existing download system (CORRECT, used by UI "Download" button)
+═══════════════════════════════════════════════════════════════════════
+  POST /api/packs/{name}/download-asset
+  → Background thread (threading.Thread)
+  → blob_store.download(url, progress_callback=...)
+  → _active_downloads dict tracks state
+  → GET /api/packs/downloads/{id}/progress ← Frontend polls this
+  → downloadsStore.ts updates UI
+  → Downloads tab shows: progress bar, speed, ETA
+  → Validates downloaded file (HTML check, min size)
+  → Creates symlink to ComfyUI models folder
+  → Updates lock.json with verified SHA256
+
+PATH B: _sync_after_update (BROKEN, used by updates apply)
+═══════════════════════════════════════════════════════════
   POST /api/updates/apply { sync: true }
-  → apply_update() updates lock.json ✅
-  → _sync_after_update() → blob_store.download(url, sha256) ← BLOCKS HERE
-  → HTTP response only after download completes (or timeouts)
-  → Downloads tab shows NOTHING
-
-CORRECT (needed):
-  POST /api/updates/apply { sync: true }
-  → apply_update() updates lock.json ✅
-  → Queue downloads via existing download system
-  → Return immediately with download task IDs
-  → Downloads tab shows progress, resume, cancel
+  → _sync_after_update() called synchronously
+  → blob_store.download(url) ← NO progress callback
+  → BLOCKS the HTTP request for entire download (2-10 GB!)
+  → _active_downloads NOT updated → Downloads tab shows NOTHING
+  → NO HTML validation
+  → NO symlink creation to ComfyUI
+  → NO proper error handling (was silent `except: pass` before v1.0.1)
 ```
 
-### 13.2 What Exists (Downloads Infrastructure)
+### 13.3 Correct Fix
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| `blob_store.download()` | ✅ Works | Synchronous, no progress callback |
-| `blob_store.download_many()` | ✅ Works | Still synchronous |
-| `downloadsStore.ts` | ✅ Works | Frontend state (progress, speed, ETA) |
-| `Downloads tab` | ✅ Works | UI for tracking active downloads |
-| `GET /api/store/download-asset` | ✅ Works | Single asset download endpoint |
-| `POST /api/store/download-all-assets` | ✅ Works | Bulk download endpoint |
+After `apply_update()` updates lock.json, the frontend should call the **existing**
+`download-asset` endpoint for each changed dependency — NOT rely on `sync: true`.
 
-### 13.3 What's Missing
+```
+STEP 1: Apply (lock only, no download)
+  POST /api/updates/apply { sync: false }
+  → Updates lock.json with new version_id, sha256, URLs
+  → Returns immediately: { applied: true, changes: [...] }
 
-1. **Updates → Download queue bridge**: After `apply_update()` updates lock.json,
-   need to call the existing download endpoints (or a new one) to queue blob downloads
-   instead of doing synchronous `blob_store.download()`.
+STEP 2: Download via existing system
+  For each change in result.changes:
+    POST /api/packs/{name}/download-asset
+      { asset_name: change.dependency_id, url: change.download_url }
+    → Background thread, progress tracking, Downloads tab ✅
 
-2. **Frontend integration**: After `applyUpdate()` in updatesStore, should add entries
-   to `downloadsStore` so Downloads tab shows progress.
-
-3. **Async download tracking**: The apply endpoint should return immediately and
-   let the download happen asynchronously. UI polls or uses SSE for progress.
-
-### 13.4 Recommended Fix (Future)
-
-```python
-# update_service.py - replace _sync_after_update:
-def _queue_downloads_after_update(self, pack_name, lock):
-    """Queue blob downloads via existing download system (non-blocking)."""
-    download_ids = []
-    for resolved in lock.resolved:
-        sha256 = resolved.artifact.sha256
-        if sha256 and not self.blob_store.blob_exists(sha256):
-            # Queue via download service instead of direct download
-            download_id = self.download_service.queue(
-                url=resolved.artifact.download.urls[0],
-                sha256=sha256,
-                pack_name=pack_name,
-                dep_id=resolved.dependency_id,
-            )
-            download_ids.append(download_id)
-    return download_ids
+STEP 3: Frontend bridges the two
+  updatesStore.applyUpdate() {
+    // 1. Apply lock changes
+    const result = await fetch('/api/updates/apply', { sync: false })
+    // 2. Queue downloads via existing download system
+    for (const change of result.changes) {
+      await fetch(`/api/packs/${packName}/download-asset`, {
+        body: { asset_name: change.dep_id, ... }
+      })
+    }
+    // 3. Downloads tab picks up automatically
+  }
 ```
 
-```typescript
-// updatesStore.ts - after apply:
-const result = await applyUpdate(packName, options)
-if (result.download_ids?.length) {
-  // Downloads tab picks up automatically via polling
-  toast.info(`Queued ${result.download_ids.length} downloads`)
-}
-```
+### 13.4 What Needs to Change
 
-> **Priority:** HIGH for production use. Without this, updates only work for small
-> files or with `sync: false` (which just updates lock.json without downloading).
+| Change | File | Description |
+|--------|------|-------------|
+| Frontend: `sync: false` | `updatesStore.ts` | Stop using sync:true, call download-asset instead |
+| Frontend: bridge to downloads | `updatesStore.ts` | After apply, call download-asset per changed dep |
+| Backend: return download URLs | `api.py /apply` | Return changed dep URLs in response for frontend |
+| Backend: ~~remove~~ deprecate `_sync_after_update` | `update_service.py` | Keep for CLI use, but frontend should not use it |
+| Backend: apply response enrichment | `update_service.py` | `UpdateResult` should include changed dep download info |
+
+### 13.5 Interim: `_sync_after_update` kept for CLI
+
+The CLI (`synapse update <pack> --sync`) can still use `_sync_after_update` because
+CLI doesn't have a Downloads tab. But the web frontend MUST use Path A (download-asset).
+
+> **Priority:** HIGH. This is the NEXT task before updates are production-ready.
+> Without this fix, applying updates with `sync: true` from the web UI will either
+> timeout (large files) or download without any progress tracking.
 
 ---
 
