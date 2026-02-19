@@ -83,6 +83,7 @@ export interface PackDependenciesSectionProps {
   onDeleteResource: (assetName: string) => void
   onOpenBaseModelResolver: () => void
   onResolvePack: () => void
+  onSetAsBaseModel?: (asset: AssetInfo) => void
 
   /**
    * Loading states
@@ -289,6 +290,272 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
 }
 
 // =============================================================================
+// Asset Row Component
+// =============================================================================
+
+interface AssetRowProps {
+  asset: AssetInfo
+  isSuggested: boolean
+  backupStatus?: PackBackupStatusResponse
+  downloadingAssets: Set<string>
+  getAssetDownload: (assetName: string) => DownloadProgress | undefined
+  onDownloadAsset: (asset: AssetInfo) => void
+  onRestoreFromBackup: (asset: AssetInfo) => Promise<void>
+  onDeleteResource: (assetName: string) => void
+  onOpenBaseModelResolver: () => void
+  onResolvePack: () => void
+  onSetAsBaseModel?: (asset: AssetInfo) => void
+  isResolvePending?: boolean
+  isDeletePending?: boolean
+}
+
+function AssetRow({
+  asset,
+  isSuggested,
+  backupStatus,
+  downloadingAssets,
+  getAssetDownload,
+  onDownloadAsset,
+  onRestoreFromBackup,
+  onDeleteResource,
+  onOpenBaseModelResolver,
+  onResolvePack,
+  onSetAsBaseModel,
+  isResolvePending = false,
+  isDeletePending = false,
+}: AssetRowProps) {
+  const { t } = useTranslation()
+
+  // Determine asset state
+  const isBaseModel = asset.is_base_model ?? false
+
+  const assetDownload = getAssetDownload(asset.name)
+  const isDownloading = assetDownload?.status === 'downloading' || downloadingAssets.has(asset.name)
+  const isInstalled = asset.installed || !!asset.local_path
+  const canDownload = !!asset.url && !isInstalled && !isDownloading
+  const needsResolve = asset.status === 'unresolved'
+  const readyToDownload = !!asset.url && !isInstalled
+
+  // Check backup status
+  const backupBlob = asset.sha256
+    ? backupStatus?.blobs?.find(b => b.sha256 === asset.sha256)
+    : undefined
+  const isOnBackup = backupBlob && typeof backupBlob === 'object' && backupBlob.on_backup
+  const isBackupOnly = isOnBackup && !isInstalled
+
+  // Can this asset be set as base model? Only checkpoints that aren't already base model
+  const canSetAsBaseModel = onSetAsBaseModel && !isBaseModel &&
+    (asset.asset_type === 'checkpoint' || asset.asset_type === 'base_model')
+
+  return (
+    <div
+      className={clsx(
+        "p-4 rounded-xl border transition-all duration-200",
+        // Suggested deps use softer styling
+        isSuggested
+          ? isInstalled
+            ? "bg-green-900/20 border-green-500/30"
+            : "bg-slate-dark/50 border-slate-mid/30"
+          : // Required deps use full-intensity status styling
+            isDownloading
+              ? "bg-synapse/10 border-synapse/50"
+              : isInstalled
+                ? "bg-green-900/30 border-green-500/50"
+                : isBackupOnly
+                  ? "bg-sky-900/30 border-sky-500/50"
+                  : needsResolve
+                    ? "bg-amber-900/30 border-amber-500/50"
+                    : readyToDownload
+                      ? "bg-blue-900/20 border-blue-500/30"
+                      : "bg-slate-dark border-slate-mid",
+        "hover:shadow-lg"
+      )}
+    >
+      {/* Main row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          {/* Status icon - suggested unresolved deps show package icon instead of warning */}
+          <StatusIcon
+            isDownloading={isDownloading}
+            isInstalled={isInstalled}
+            isBackupOnly={!!isBackupOnly}
+            needsResolve={!isSuggested && needsResolve}
+          />
+
+          {/* Asset info */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className={clsx(
+                "font-medium truncate",
+                isSuggested ? "text-text-secondary" : "text-text-primary"
+              )}>{asset.name}</p>
+              {asset.version_name && (
+                <span className="px-1.5 py-0.5 bg-slate-mid/50 text-text-muted rounded text-xs">
+                  v{asset.version_name}
+                </span>
+              )}
+              {isSuggested && (
+                <span className="px-1.5 py-0.5 bg-slate-mid/30 text-text-muted rounded text-xs">
+                  {t('pack.dependencies.optional', 'Optional')}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="uppercase font-medium">{asset.asset_type}</span>
+              <span>•</span>
+              <span>{asset.source}</span>
+              {asset.base_model_hint && (
+                <>
+                  <span>•</span>
+                  <span className="text-amber-400 font-medium">{asset.base_model_hint}</span>
+                </>
+              )}
+              {asset.size && (
+                <>
+                  <span>•</span>
+                  <span>{formatSize(asset.size)}</span>
+                </>
+              )}
+            </div>
+            {/* Description */}
+            {asset.description && (
+              <p className="text-xs text-amber-400/80 mt-1 italic">
+                {asset.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Restore from Backup */}
+          {isBackupOnly && asset.sha256 && (
+            <button
+              onClick={() => onRestoreFromBackup(asset)}
+              className="p-2 bg-sky-500 text-white rounded-lg hover:bg-sky-400 transition-all duration-200 hover:scale-105"
+              title={t('pack.dependencies.restoreFromBackup')}
+            >
+              <Cloud className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Download button */}
+          {canDownload && !isDownloading && !isBackupOnly && (
+            <button
+              onClick={() => onDownloadAsset(asset)}
+              className="p-2 bg-synapse text-white rounded-lg hover:bg-synapse/80 transition-all duration-200 hover:scale-105"
+              title={t('pack.dependencies.downloadAsset')}
+            >
+              <Download className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Downloading spinner */}
+          {isDownloading && !assetDownload && (
+            <Loader2 className="w-5 h-5 text-synapse animate-spin" />
+          )}
+
+          {/* Select Model (base model) */}
+          {isBaseModel && !isInstalled && !canDownload && (
+            <button
+              onClick={onOpenBaseModelResolver}
+              className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
+            >
+              {t('pack.dependencies.selectModel')}
+            </button>
+          )}
+
+          {/* Set as base model (for checkpoints that aren't already base model) */}
+          {canSetAsBaseModel && isInstalled && (
+            <button
+              onClick={() => onSetAsBaseModel(asset)}
+              className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-amber-400 hover:bg-slate-mid/80 transition-all duration-200"
+              title={t('pack.dependencies.setAsBaseModel', 'Set as base model')}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Resolve button */}
+          {!isBaseModel && needsResolve && !isSuggested && !isResolvePending && (
+            <button
+              onClick={onResolvePack}
+              className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
+              title={t('pack.dependencies.reResolve')}
+            >
+              {t('pack.dependencies.resolve')}
+            </button>
+          )}
+          {!isBaseModel && needsResolve && !isSuggested && isResolvePending && (
+            <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
+          )}
+
+          {/* Change base model */}
+          {isBaseModel && isInstalled && !needsResolve && (
+            <button
+              onClick={onOpenBaseModelResolver}
+              className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-amber-400 hover:bg-slate-mid/80 transition-all duration-200"
+              title={t('pack.dependencies.changeBaseModel')}
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Re-download */}
+          {isInstalled && (
+            <button
+              onClick={() => {
+                if (confirm(t('pack.dependencies.confirmRedownload', { name: asset.filename || asset.name }))) {
+                  onDownloadAsset(asset)
+                }
+              }}
+              className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-synapse hover:bg-slate-mid/80 transition-all duration-200"
+              title={t('pack.dependencies.reDownloadTitle')}
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Delete */}
+          {isInstalled && (
+            <button
+              onClick={() => {
+                const deleteChoice = confirm(t('pack.dependencies.confirmDelete', { name: asset.filename || asset.name }))
+                if (deleteChoice) {
+                  onDeleteResource(asset.name)
+                }
+              }}
+              disabled={isDeletePending}
+              className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all duration-200"
+              title={t('pack.dependencies.deleteFile')}
+            >
+              {isDeletePending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Download progress */}
+      {assetDownload && assetDownload.status === 'downloading' && (
+        <DownloadProgressDisplay download={assetDownload} />
+      )}
+
+      {/* Asset details */}
+      <AssetDetails
+        asset={asset}
+        isInstalled={isInstalled}
+        isBackupOnly={!!isBackupOnly}
+        isDownloading={isDownloading}
+      />
+    </div>
+  )
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -303,12 +570,19 @@ export function PackDependenciesSection({
   onDeleteResource,
   onOpenBaseModelResolver,
   onResolvePack,
+  onSetAsBaseModel,
   isDownloadAllPending = false,
   isResolvePending = false,
   isDeletePending = false,
   animationDelay = 0,
 }: PackDependenciesSectionProps) {
   const { t } = useTranslation()
+
+  // Split assets into required and suggested
+  // required=false means "suggested" (e.g. base model from import)
+  // required=true or undefined means "required" (backward compatible)
+  const requiredAssets = assets?.filter(a => a.required !== false) ?? []
+  const suggestedAssets = assets?.filter(a => a.required === false) ?? []
 
   // Check if any asset can be downloaded
   const hasDownloadableAssets = assets?.some(a => a.url && !a.installed && !a.local_path)
@@ -350,212 +624,58 @@ export function PackDependenciesSection({
       {/* Assets List */}
       {assets?.length > 0 ? (
         <div className="space-y-3">
-          {assets.map((asset, idx) => {
-            // Determine asset state
-            const isBaseModel = asset.asset_type === 'base_model' ||
-              asset.asset_type === 'checkpoint' ||
-              asset.name.toLowerCase().includes('base model') ||
-              asset.name.toLowerCase().includes('base_checkpoint')
+          {/* Required dependencies */}
+          {requiredAssets.map((asset, idx) => (
+            <AssetRow
+              key={`req-${idx}`}
+              asset={asset}
+              isSuggested={false}
+              backupStatus={backupStatus}
+              downloadingAssets={downloadingAssets}
+              getAssetDownload={getAssetDownload}
+              onDownloadAsset={onDownloadAsset}
+              onRestoreFromBackup={onRestoreFromBackup}
+              onDeleteResource={onDeleteResource}
+              onOpenBaseModelResolver={onOpenBaseModelResolver}
+              onResolvePack={onResolvePack}
+              onSetAsBaseModel={onSetAsBaseModel}
+              isResolvePending={isResolvePending}
+              isDeletePending={isDeletePending}
+            />
+          ))}
 
-            const assetDownload = getAssetDownload(asset.name)
-            const isDownloading = assetDownload?.status === 'downloading' || downloadingAssets.has(asset.name)
-            const isInstalled = asset.installed || !!asset.local_path
-            const canDownload = !!asset.url && !isInstalled && !isDownloading
-            const needsResolve = asset.status === 'unresolved'
-            const readyToDownload = !!asset.url && !isInstalled
-
-            // Check backup status
-            const backupBlob = asset.sha256
-              ? backupStatus?.blobs?.find(b => b.sha256 === asset.sha256)
-              : undefined
-            const isOnBackup = backupBlob && typeof backupBlob === 'object' && backupBlob.on_backup
-            const isBackupOnly = isOnBackup && !isInstalled
-
-            return (
-              <div
-                key={idx}
-                className={clsx(
-                  "p-4 rounded-xl border transition-all duration-200",
-                  // Status-based styling
-                  isDownloading
-                    ? "bg-synapse/10 border-synapse/50"
-                    : isInstalled
-                      ? "bg-green-900/30 border-green-500/50"
-                      : isBackupOnly
-                        ? "bg-sky-900/30 border-sky-500/50"
-                        : needsResolve
-                          ? "bg-amber-900/30 border-amber-500/50"
-                          : readyToDownload
-                            ? "bg-blue-900/20 border-blue-500/30"
-                            : "bg-slate-dark border-slate-mid",
-                  // Hover effect
-                  "hover:shadow-lg"
-                )}
-              >
-                {/* Main row */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {/* Status icon */}
-                    <StatusIcon
-                      isDownloading={isDownloading}
-                      isInstalled={isInstalled}
-                      isBackupOnly={!!isBackupOnly}
-                      needsResolve={needsResolve}
-                    />
-
-                    {/* Asset info */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-text-primary font-medium truncate">{asset.name}</p>
-                        {asset.version_name && (
-                          <span className="px-1.5 py-0.5 bg-slate-mid/50 text-text-muted rounded text-xs">
-                            v{asset.version_name}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-text-muted">
-                        <span className="uppercase font-medium">{asset.asset_type}</span>
-                        <span>•</span>
-                        <span>{asset.source}</span>
-                        {asset.base_model_hint && (
-                          <>
-                            <span>•</span>
-                            <span className="text-amber-400 font-medium">{asset.base_model_hint}</span>
-                          </>
-                        )}
-                        {asset.size && (
-                          <>
-                            <span>•</span>
-                            <span>{formatSize(asset.size)}</span>
-                          </>
-                        )}
-                      </div>
-                      {/* Description */}
-                      {asset.description && (
-                        <p className="text-xs text-amber-400/80 mt-1 italic">
-                          {asset.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Restore from Backup */}
-                    {isBackupOnly && asset.sha256 && (
-                      <button
-                        onClick={() => onRestoreFromBackup(asset)}
-                        className="p-2 bg-sky-500 text-white rounded-lg hover:bg-sky-400 transition-all duration-200 hover:scale-105"
-                        title={t('pack.dependencies.restoreFromBackup')}
-                      >
-                        <Cloud className="w-4 h-4" />
-                      </button>
-                    )}
-
-                    {/* Download button */}
-                    {canDownload && !isDownloading && !isBackupOnly && (
-                      <button
-                        onClick={() => onDownloadAsset(asset)}
-                        className="p-2 bg-synapse text-white rounded-lg hover:bg-synapse/80 transition-all duration-200 hover:scale-105"
-                        title={t('pack.dependencies.downloadAsset')}
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                    )}
-
-                    {/* Downloading spinner */}
-                    {isDownloading && !assetDownload && (
-                      <Loader2 className="w-5 h-5 text-synapse animate-spin" />
-                    )}
-
-                    {/* Select Model (base model) */}
-                    {isBaseModel && !isInstalled && !canDownload && (
-                      <button
-                        onClick={onOpenBaseModelResolver}
-                        className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
-                      >
-                        {t('pack.dependencies.selectModel')}
-                      </button>
-                    )}
-
-                    {/* Resolve button */}
-                    {!isBaseModel && needsResolve && !isResolvePending && (
-                      <button
-                        onClick={onResolvePack}
-                        className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
-                        title={t('pack.dependencies.reResolve')}
-                      >
-                        {t('pack.dependencies.resolve')}
-                      </button>
-                    )}
-                    {!isBaseModel && needsResolve && isResolvePending && (
-                      <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
-                    )}
-
-                    {/* Change base model */}
-                    {isBaseModel && isInstalled && !needsResolve && (
-                      <button
-                        onClick={onOpenBaseModelResolver}
-                        className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-amber-400 hover:bg-slate-mid/80 transition-all duration-200"
-                        title={t('pack.dependencies.changeBaseModel')}
-                      >
-                        <ArrowLeftRight className="w-4 h-4" />
-                      </button>
-                    )}
-
-                    {/* Re-download */}
-                    {isInstalled && (
-                      <button
-                        onClick={() => {
-                          if (confirm(t('pack.dependencies.confirmRedownload', { name: asset.filename || asset.name }))) {
-                            onDownloadAsset(asset)
-                          }
-                        }}
-                        className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-synapse hover:bg-slate-mid/80 transition-all duration-200"
-                        title={t('pack.dependencies.reDownloadTitle')}
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                      </button>
-                    )}
-
-                    {/* Delete */}
-                    {isInstalled && (
-                      <button
-                        onClick={() => {
-                          const deleteChoice = confirm(t('pack.dependencies.confirmDelete', { name: asset.filename || asset.name }))
-                          if (deleteChoice) {
-                            onDeleteResource(asset.name)
-                          }
-                        }}
-                        disabled={isDeletePending}
-                        className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-all duration-200"
-                        title={t('pack.dependencies.deleteFile')}
-                      >
-                        {isDeletePending ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
-                  </div>
+          {/* Suggested dependencies divider */}
+          {suggestedAssets.length > 0 && (
+            <>
+              {requiredAssets.length > 0 && (
+                <div className="flex items-center gap-3 pt-2">
+                  <div className="h-px bg-slate-mid/50 flex-1" />
+                  <span className="text-xs text-text-muted uppercase tracking-wider">
+                    {t('pack.dependencies.suggested', 'Suggested')}
+                  </span>
+                  <div className="h-px bg-slate-mid/50 flex-1" />
                 </div>
-
-                {/* Download progress */}
-                {assetDownload && assetDownload.status === 'downloading' && (
-                  <DownloadProgressDisplay download={assetDownload} />
-                )}
-
-                {/* Asset details */}
-                <AssetDetails
+              )}
+              {suggestedAssets.map((asset, idx) => (
+                <AssetRow
+                  key={`sug-${idx}`}
                   asset={asset}
-                  isInstalled={isInstalled}
-                  isBackupOnly={!!isBackupOnly}
-                  isDownloading={isDownloading}
+                  isSuggested={true}
+                  backupStatus={backupStatus}
+                  downloadingAssets={downloadingAssets}
+                  getAssetDownload={getAssetDownload}
+                  onDownloadAsset={onDownloadAsset}
+                  onRestoreFromBackup={onRestoreFromBackup}
+                  onDeleteResource={onDeleteResource}
+                  onOpenBaseModelResolver={onOpenBaseModelResolver}
+                  onResolvePack={onResolvePack}
+                  onSetAsBaseModel={onSetAsBaseModel}
+                  isResolvePending={isResolvePending}
+                  isDeletePending={isDeletePending}
                 />
-              </div>
-            )
-          })}
+              ))}
+            </>
+          )}
         </div>
       ) : (
         <div className="text-center py-8">

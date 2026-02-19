@@ -896,6 +896,16 @@ class Pack(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("Dependency IDs must be unique within a pack")
         return self
+
+    @model_validator(mode="after")
+    def validate_unique_pack_deps(self) -> "Pack":
+        """Ensure all pack dependency names are unique and no self-reference."""
+        names = [ref.pack_name for ref in self.pack_dependencies]
+        if len(names) != len(set(names)):
+            raise ValueError("Pack dependency names must be unique")
+        if self.name in names:
+            raise ValueError("Pack cannot depend on itself")
+        return self
     
     def get_dependency(self, dep_id: str) -> Optional[PackDependency]:
         """Get dependency by ID."""

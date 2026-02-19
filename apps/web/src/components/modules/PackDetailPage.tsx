@@ -365,6 +365,7 @@ function PackDetailPageContent() {
           onDeleteResource={packData.deleteResource}
           onOpenBaseModelResolver={() => openModal('baseModelResolver')}
           onResolvePack={packData.resolvePack}
+          onSetAsBaseModel={(asset) => packData.setAsBaseModel(asset.name)}
           isDownloadAllPending={downloads.isDownloadingAll}
           isResolvePending={packData.isResolvingPack}
           animationDelay={150}

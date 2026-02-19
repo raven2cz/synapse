@@ -35,7 +35,9 @@ from .models import (
     DoctorReport,
     GenerationParameters,
     HuggingFaceSelector,
+    PackDependencyRef,
     SearchResult,
+    SelectorStrategy,
     StatusReport,
     StoreConfig,
     UpdatePlan,
@@ -1389,6 +1391,8 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "filename": dep.expose.filename if dep.expose else None,
                 "description": dep.description or None,
                 "version_name": None,
+                "required": dep.required,
+                "is_base_model": dep.selector.strategy == SelectorStrategy.BASE_MODEL_HINT,
             }
             
             # Get URL from selector first (always available)
@@ -2032,7 +2036,7 @@ def resolve_base_model(
             base_dep = PackDependency(
                 id="base_checkpoint",
                 kind=AssetKind.CHECKPOINT,
-                required=True,
+                required=False,
                 selector=DependencySelector(
                     strategy=strategy,
                     civitai=CivitaiSelector(model_id=0, version_id=0) if request.source == "civitai" else None,
@@ -2567,6 +2571,189 @@ def delete_dependency_resource(
         raise
     except Exception as e:
         logger.error(f"[delete-resource] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.post("/{pack_name}/dependencies/{dep_id}/set-base-model", response_model=Dict[str, Any])
+def set_dependency_as_base_model(
+    pack_name: str,
+    dep_id: str,
+    store=Depends(require_initialized),
+):
+    """Mark a dependency as the base model for this pack.
+
+    Changes the dependency's selector strategy to BASE_MODEL_HINT.
+    If another dependency already has BASE_MODEL_HINT strategy, it is removed.
+    Only one base model dependency is allowed per pack.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Find the target dependency
+        target_dep = None
+        for d in pack.dependencies:
+            if d.id == dep_id:
+                target_dep = d
+                break
+
+        if not target_dep:
+            raise HTTPException(status_code=404, detail=f"Dependency not found: {dep_id}")
+
+        # Remove any existing BASE_MODEL_HINT dependency (except the target)
+        removed_old = None
+        new_deps = []
+        for d in pack.dependencies:
+            if d.id != dep_id and d.selector.strategy == SelectorStrategy.BASE_MODEL_HINT:
+                removed_old = d.id
+                continue
+            new_deps.append(d)
+        pack.dependencies = new_deps
+
+        # Update the target dependency to be the base model
+        target_dep.selector.strategy = SelectorStrategy.BASE_MODEL_HINT
+        if pack.base_model:
+            target_dep.selector.base_model = pack.base_model
+
+        store.layout.save_pack(pack)
+        logger.info(f"[set-base-model] Set {dep_id} as base model for {pack_name}")
+
+        return {
+            "success": True,
+            "dependency_id": dep_id,
+            "removed_old_base_model": removed_old,
+            "message": f"Set {dep_id} as base model",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[set-base-model] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# Pack Dependencies (pack-to-pack) CRUD
+# =============================================================================
+
+
+@v2_packs_router.get("/{pack_name}/pack-dependencies/status", response_model=List[Dict[str, Any]])
+def get_pack_dependencies_status(
+    pack_name: str,
+    store=Depends(require_initialized),
+):
+    """Get status of all pack dependencies (batch resolve).
+
+    Returns installation status for each pack dependency,
+    replacing the N+1 per-pack query pattern.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+        statuses = []
+        for ref in pack.pack_dependencies:
+            try:
+                dep_pack = store.get_pack(ref.pack_name)
+                statuses.append({
+                    "pack_name": ref.pack_name,
+                    "required": ref.required,
+                    "installed": True,
+                    "version": dep_pack.version if hasattr(dep_pack, 'version') else None,
+                })
+            except Exception:
+                statuses.append({
+                    "pack_name": ref.pack_name,
+                    "required": ref.required,
+                    "installed": False,
+                    "version": None,
+                })
+        return statuses
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[pack-deps-status] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+class AddPackDependencyRequest(BaseModel):
+    pack_name: str
+    required: bool = True
+
+
+@v2_packs_router.post("/{pack_name}/pack-dependencies", response_model=Dict[str, Any])
+def add_pack_dependency(
+    pack_name: str,
+    request: AddPackDependencyRequest = Body(...),
+    store=Depends(require_initialized),
+):
+    """Add a pack dependency (pack-to-pack reference)."""
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Self-reference check
+        if request.pack_name == pack_name:
+            raise HTTPException(status_code=400, detail="Pack cannot depend on itself")
+
+        # Duplicate check
+        existing_names = {ref.pack_name for ref in pack.pack_dependencies}
+        if request.pack_name in existing_names:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Pack dependency already exists: {request.pack_name}",
+            )
+
+        # Add the dependency
+        new_ref = PackDependencyRef(
+            pack_name=request.pack_name,
+            required=request.required,
+        )
+        pack.pack_dependencies.append(new_ref)
+        store.layout.save_pack(pack)
+
+        logger.info(f"[pack-deps] Added {request.pack_name} to {pack_name}")
+        return {
+            "success": True,
+            "pack_name": request.pack_name,
+            "required": request.required,
+            "message": f"Added pack dependency: {request.pack_name}",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[pack-deps] Error adding: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.delete("/{pack_name}/pack-dependencies/{dep_pack_name}", response_model=Dict[str, Any])
+def remove_pack_dependency(
+    pack_name: str,
+    dep_pack_name: str,
+    store=Depends(require_initialized),
+):
+    """Remove a pack dependency."""
+    try:
+        pack = store.get_pack(pack_name)
+
+        # Check if it exists
+        original_count = len(pack.pack_dependencies)
+        pack.pack_dependencies = [
+            ref for ref in pack.pack_dependencies if ref.pack_name != dep_pack_name
+        ]
+
+        if len(pack.pack_dependencies) == original_count:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pack dependency not found: {dep_pack_name}",
+            )
+
+        store.layout.save_pack(pack)
+        logger.info(f"[pack-deps] Removed {dep_pack_name} from {pack_name}")
+        return {
+            "success": True,
+            "pack_name": dep_pack_name,
+            "message": f"Removed pack dependency: {dep_pack_name}",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[pack-deps] Error removing: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

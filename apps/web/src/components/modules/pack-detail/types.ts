@@ -95,6 +95,8 @@ export interface AssetInfo {
   sha256?: string
   provider_name?: string
   description?: string
+  required?: boolean
+  is_base_model?: boolean
 }
 
 /**

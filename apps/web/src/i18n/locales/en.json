@@ -79,6 +79,9 @@
       "confirmRedownload": "Re-download {{name}}? This will replace the existing file.",
       "confirmDelete": "Delete downloaded file for \"{{name}}\"?\n\nThis will remove the file from blob store.\n\nPress OK to delete file only.\nThe dependency will remain in pack.json for re-download.",
       "downloadAll": "Download All",
+      "suggested": "Suggested",
+      "optional": "Optional",
+      "setAsBaseModel": "Set as base model",
       "eta": "ETA:",
       "detail": {
         "file": "File:",
@@ -97,6 +100,11 @@
       "empty": "No pack dependencies",
       "count": "{{count}} pack dependencies",
       "add": "Add Pack Dependency",
+      "searchPlaceholder": "Search packs...",
+      "noMatch": "No packs match \"{{query}}\"",
+      "noPacks": "No packs available",
+      "required": "Required dependency",
+      "addButton": "Add",
       "status": {
         "installed": "Installed",
         "missing": "Missing"
@@ -500,6 +508,9 @@
         "searchPlaceholder": "Search dependencies...",
         "removeTooltip": "Remove pack dependency: {{name}}",
         "noMatch": "No dependencies match \"{{query}}\"",
+        "depAdded": "Dependency added",
+        "depRemoved": "Dependency removed",
+        "confirmRemove": "Remove pack dependency \"{{name}}\"?",
         "installed": "Installed",
         "notInstalled": "Not installed",
         "required": "Required",

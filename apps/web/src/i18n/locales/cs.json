@@ -80,6 +80,9 @@
       "confirmRedownload": "Znovu stáhnout {{name}}? Nahradí to existující soubor.",
       "confirmDelete": "Smazat stažený soubor pro \"{{name}}\"?\n\nToto odstraní soubor z blob store.\n\nStiskněte OK pro smazání pouze souboru.\nZávislost zůstane v pack.json pro opětovné stažení.",
       "downloadAll": "Stáhnout vše",
+      "suggested": "Doporučené",
+      "optional": "Volitelné",
+      "setAsBaseModel": "Nastavit jako base model",
       "eta": "Zbývá:",
       "detail": {
         "file": "Soubor:",
@@ -98,6 +101,11 @@
       "empty": "Žádné závislosti na packách",
       "count": "{{count}} závislostí na packách",
       "add": "Přidat závislost na pack",
+      "searchPlaceholder": "Hledat packy...",
+      "noMatch": "Žádné packy neodpovídají \"{{query}}\"",
+      "noPacks": "Žádné packy k dispozici",
+      "required": "Povinná závislost",
+      "addButton": "Přidat",
       "status": {
         "installed": "Nainstalováno",
         "missing": "Chybí"
@@ -501,6 +509,9 @@
         "searchPlaceholder": "Hledat závislosti...",
         "removeTooltip": "Odebrat závislost na pack: {{name}}",
         "noMatch": "Žádné závislosti neodpovídají \"{{query}}\"",
+        "depAdded": "Závislost přidána",
+        "depRemoved": "Závislost odebrána",
+        "confirmRemove": "Odebrat závislost na pack \"{{name}}\"?",
         "installed": "Nainstalováno",
         "notInstalled": "Nenainstalováno",
         "required": "Vyžadováno",

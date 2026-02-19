@@ -81,6 +81,9 @@ export interface UsePackDataReturn {
   deleteResource: (depId: string, deleteDependency?: boolean) => void
   isDeletingResource: boolean
 
+  setAsBaseModel: (depId: string) => void
+  isSettingBaseModel: boolean
+
   pullPack: () => void
   isPullingPack: boolean
 
@@ -488,6 +491,31 @@ export function usePackData({
   })
 
   // =========================================================================
+  // Set As Base Model Mutation
+  // =========================================================================
+
+  const setAsBaseModelMutation = useMutation({
+    mutationFn: async (depId: string) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/dependencies/${encodeURIComponent(depId)}/set-base-model`,
+        { method: 'POST' }
+      )
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to set as base model: ${errText}`)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      toast.success('Base model updated')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to set as base model: ${error.message}`)
+    },
+  })
+
+  // =========================================================================
   // Backup Mutations
   // =========================================================================
 
@@ -758,6 +786,9 @@ export function usePackData({
     deleteResource: (depId, deleteDependency) =>
       deleteResourceMutation.mutate({ depId, deleteDependency }),
     isDeletingResource: deleteResourceMutation.isPending,
+
+    setAsBaseModel: (depId) => setAsBaseModelMutation.mutate(depId),
+    isSettingBaseModel: setAsBaseModelMutation.isPending,
 
     pullPack: () => pullPackMutation.mutate(),
     isPullingPack: pullPackMutation.isPending,

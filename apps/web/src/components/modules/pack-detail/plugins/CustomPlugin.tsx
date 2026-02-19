@@ -15,7 +15,7 @@
 
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Package,
   Plus,
@@ -39,6 +39,7 @@ import type {
   PluginBadge,
   PackDependencyStatus,
 } from './types'
+import { AddPackDependencyModal } from '../modals/AddPackDependencyModal'
 import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
@@ -52,52 +53,80 @@ interface PackDependenciesSectionProps {
 
 function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
   const { t } = useTranslation()
-  const { pack, isEditing, openModal } = context
+  const queryClient = useQueryClient()
+  const { pack, isEditing } = context
   const [expanded, setExpanded] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
 
   // Get pack dependencies from pack data
   const packDependencies: PackDependencyRef[] = pack.pack?.pack_dependencies ?? []
 
-  // Query to check status of each pack dependency
+  // Batch status query (replaces N+1 per-pack queries)
   const { data: dependencyStatuses = [] } = useQuery<PackDependencyStatus[]>({
-    queryKey: ['pack-dependencies-status', pack.name, packDependencies],
+    queryKey: ['pack-dependencies-status', pack.name],
     queryFn: async () => {
-      // Check each dependency's status
-      const statuses: PackDependencyStatus[] = await Promise.all(
-        packDependencies.map(async (dep) => {
-          try {
-            const res = await fetch(`/api/packs/${encodeURIComponent(dep.pack_name)}`)
-            if (res.ok) {
-              const data = await res.json()
-              return {
-                ...dep,
-                installed: true,
-                current_version: data.version,
-                version_match: !dep.version_constraint || true, // TODO: semantic version check
-              }
-            } else {
-              return {
-                ...dep,
-                installed: false,
-                version_match: false,
-                error: t('pack.plugins.custom.packNotFound'),
-              }
-            }
-          } catch (e) {
-            return {
-              ...dep,
-              installed: false,
-              version_match: false,
-              error: t('pack.plugins.custom.failedToCheck'),
-            }
-          }
-        })
-      )
-      return statuses
+      const res = await fetch(`/api/packs/${encodeURIComponent(pack.name)}/pack-dependencies/status`)
+      if (!res.ok) throw new Error('Failed to fetch status')
+      const data = await res.json()
+      return data.map((s: { pack_name: string; required: boolean; installed: boolean; version?: string }) => ({
+        pack_name: s.pack_name,
+        required: s.required,
+        installed: s.installed,
+        current_version: s.version,
+        version_match: s.installed,  // simplified: installed = match
+      }))
     },
     enabled: packDependencies.length > 0,
     staleTime: 30000,
+  })
+
+  // Add mutation
+  const addMutation = useMutation({
+    mutationFn: async ({ packName, required }: { packName: string; required: boolean }) => {
+      const res = await fetch(`/api/packs/${encodeURIComponent(pack.name)}/pack-dependencies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pack_name: packName, required }),
+      })
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(err)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pack', pack.name] })
+      queryClient.invalidateQueries({ queryKey: ['pack-dependencies-status', pack.name] })
+      context.toast.success(t('pack.plugins.custom.depAdded', 'Dependency added'))
+      setShowAddModal(false)
+    },
+    onError: (err: Error) => {
+      context.toast.error(err.message)
+    },
+  })
+
+  // Remove mutation
+  const removeMutation = useMutation({
+    mutationFn: async (depPackName: string) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(pack.name)}/pack-dependencies/${encodeURIComponent(depPackName)}`,
+        { method: 'DELETE' }
+      )
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(err)
+      }
+      return res.json()
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pack', pack.name] })
+      queryClient.invalidateQueries({ queryKey: ['pack-dependencies-status', pack.name] })
+      context.toast.success(t('pack.plugins.custom.depRemoved', 'Dependency removed'))
+    },
+    onError: (err: Error) => {
+      context.toast.error(err.message)
+    },
   })
 
   // Filter dependencies by search
@@ -105,143 +134,170 @@ function PackDependenciesSection({ context }: PackDependenciesSectionProps) {
     dep.pack_name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  if (packDependencies.length === 0) {
-    return (
-      <Card className={clsx('p-4', ANIMATION_PRESETS.fadeIn)}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-slate-mid/50 rounded-lg">
-              <Layers className="w-5 h-5 text-text-muted" />
-            </div>
-            <div>
-              <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
-              <p className="text-sm text-text-muted">
-                {t('pack.plugins.custom.noDeps')}
-              </p>
-            </div>
-          </div>
+  const existingDepNames = packDependencies.map(d => d.pack_name)
 
-          {isEditing && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => openModal('addPackDependency')}
-            >
-              <Plus className="w-4 h-4" />
-              {t('common.add')}
-            </Button>
-          )}
+  const emptyState = (
+    <Card className={clsx('p-4', ANIMATION_PRESETS.fadeIn)}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-slate-mid/50 rounded-lg">
+            <Layers className="w-5 h-5 text-text-muted" />
+          </div>
+          <div>
+            <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
+            <p className="text-sm text-text-muted">
+              {t('pack.plugins.custom.noDeps')}
+            </p>
+          </div>
         </div>
-      </Card>
-    )
+
+        {isEditing && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowAddModal(true)}
+          >
+            <Plus className="w-4 h-4" />
+            {t('common.add')}
+          </Button>
+        )}
+      </div>
+
+      <AddPackDependencyModal
+        isOpen={showAddModal}
+        currentPackName={pack.name}
+        existingDependencies={existingDepNames}
+        onAdd={(packName, required) => addMutation.mutate({ packName, required })}
+        onClose={() => setShowAddModal(false)}
+        isAdding={addMutation.isPending}
+      />
+    </Card>
+  )
+
+  if (packDependencies.length === 0) {
+    return emptyState
   }
 
   const installedCount = dependencyStatuses.filter(d => d.installed).length
   const missingCount = dependencyStatuses.filter(d => !d.installed).length
 
   return (
-    <Card className={clsx('overflow-hidden', ANIMATION_PRESETS.fadeIn)}>
-      {/* Header */}
-      <div
-        className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-mid/30 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-3">
-          <div className={clsx(
-            'p-2 rounded-lg',
-            missingCount > 0 ? 'bg-amber-500/20' : 'bg-synapse/20'
-          )}>
-            <Layers className={clsx(
-              'w-5 h-5',
-              missingCount > 0 ? 'text-amber-400' : 'text-synapse'
-            )} />
-          </div>
-          <div>
-            <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
-            <p className="text-sm text-text-muted">
-              {t('pack.plugins.custom.installedCount', { count: installedCount })}
-              {missingCount > 0 && (
-                <span className="text-amber-400 ml-1">
-                  • {t('pack.plugins.custom.missingCount', { count: missingCount })}
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {isEditing && (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                openModal('addPackDependency')
-              }}
-            >
-              <Plus className="w-4 h-4" />
-              {t('common.add')}
-            </Button>
-          )}
-          {expanded ? (
-            <ChevronDown className="w-5 h-5 text-text-muted" />
-          ) : (
-            <ChevronRight className="w-5 h-5 text-text-muted" />
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      {expanded && (
-        <div className="border-t border-slate-mid">
-          {/* Search (if many dependencies) */}
-          {packDependencies.length > 3 && (
-            <div className="p-3 border-b border-slate-mid">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('pack.plugins.custom.searchPlaceholder')}
-                  className={clsx(
-                    'w-full pl-9 pr-4 py-2 rounded-lg',
-                    'bg-slate-dark border border-slate-mid',
-                    'text-text-primary placeholder:text-text-muted',
-                    'focus:outline-none focus:ring-2 focus:ring-synapse/50'
-                  )}
-                />
-              </div>
+    <>
+      <Card className={clsx('overflow-hidden', ANIMATION_PRESETS.fadeIn)}>
+        {/* Header */}
+        <div
+          className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-mid/30 transition-colors"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'p-2 rounded-lg',
+              missingCount > 0 ? 'bg-amber-500/20' : 'bg-synapse/20'
+            )}>
+              <Layers className={clsx(
+                'w-5 h-5',
+                missingCount > 0 ? 'text-amber-400' : 'text-synapse'
+              )} />
             </div>
-          )}
+            <div>
+              <h3 className="font-medium text-text-primary">{t('pack.plugins.custom.packDependencies')}</h3>
+              <p className="text-sm text-text-muted">
+                {t('pack.plugins.custom.installedCount', { count: installedCount })}
+                {missingCount > 0 && (
+                  <span className="text-amber-400 ml-1">
+                    • {t('pack.plugins.custom.missingCount', { count: missingCount })}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
 
-          {/* Dependency List */}
-          <div className="divide-y divide-slate-mid max-h-96 overflow-y-auto">
-            {filteredDependencies.map((dep) => (
-              <PackDependencyRow
-                key={dep.pack_name}
-                dependency={dep}
-                isEditing={isEditing}
-                onRemove={() => {
-                  // TODO: implement remove
-                  context.toast.info(t('pack.plugins.custom.removeTooltip', { name: dep.pack_name }))
+          <div className="flex items-center gap-2">
+            {isEditing && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowAddModal(true)
                 }}
-                onNavigate={() => {
-                  // Navigate to pack
-                  window.location.href = `/pack/${encodeURIComponent(dep.pack_name)}`
-                }}
-              />
-            ))}
-
-            {filteredDependencies.length === 0 && searchQuery && (
-              <div className="p-4 text-center text-text-muted">
-                {t('pack.plugins.custom.noMatch', { query: searchQuery })}
-              </div>
+              >
+                <Plus className="w-4 h-4" />
+                {t('common.add')}
+              </Button>
+            )}
+            {expanded ? (
+              <ChevronDown className="w-5 h-5 text-text-muted" />
+            ) : (
+              <ChevronRight className="w-5 h-5 text-text-muted" />
             )}
           </div>
         </div>
-      )}
-    </Card>
+
+        {/* Content */}
+        {expanded && (
+          <div className="border-t border-slate-mid">
+            {/* Search (if many dependencies) */}
+            {packDependencies.length > 3 && (
+              <div className="p-3 border-b border-slate-mid">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={t('pack.plugins.custom.searchPlaceholder')}
+                    className={clsx(
+                      'w-full pl-9 pr-4 py-2 rounded-lg',
+                      'bg-slate-dark border border-slate-mid',
+                      'text-text-primary placeholder:text-text-muted',
+                      'focus:outline-none focus:ring-2 focus:ring-synapse/50'
+                    )}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Dependency List */}
+            <div className="divide-y divide-slate-mid max-h-96 overflow-y-auto">
+              {filteredDependencies.map((dep) => (
+                <PackDependencyRow
+                  key={dep.pack_name}
+                  dependency={dep}
+                  isEditing={isEditing}
+                  onRemove={() => {
+                    if (confirm(t('pack.plugins.custom.confirmRemove', {
+                      name: dep.pack_name,
+                      defaultValue: `Remove pack dependency "${dep.pack_name}"?`,
+                    }))) {
+                      removeMutation.mutate(dep.pack_name)
+                    }
+                  }}
+                  onNavigate={() => {
+                    window.location.href = `/pack/${encodeURIComponent(dep.pack_name)}`
+                  }}
+                />
+              ))}
+
+              {filteredDependencies.length === 0 && searchQuery && (
+                <div className="p-4 text-center text-text-muted">
+                  {t('pack.plugins.custom.noMatch', { query: searchQuery })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <AddPackDependencyModal
+        isOpen={showAddModal}
+        currentPackName={pack.name}
+        existingDependencies={existingDepNames}
+        onAdd={(packName, required) => addMutation.mutate({ packName, required })}
+        onClose={() => setShowAddModal(false)}
+        isAdding={addMutation.isPending}
+      />
+    </>
   )
 }
 
@@ -435,13 +491,10 @@ export const CustomPlugin: PackPlugin = {
   },
 
   renderExtraSections: (context: PluginContext) => {
-    const { pack } = context
-    const hasPackDependencies = (pack.pack?.pack_dependencies?.length ?? 0) > 0
-
     return (
       <div className="space-y-4">
         <EditCapabilitiesInfo context={context} />
-        {hasPackDependencies && <PackDependenciesSection context={context} />}
+        <PackDependenciesSection context={context} />
       </div>
     )
   },

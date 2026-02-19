@@ -602,7 +602,7 @@ class PackService:
                 return PackDependency(
                     id="base_checkpoint",
                     kind=alias.kind,
-                    required=True,
+                    required=False,
                     selector=DependencySelector(
                         strategy=SelectorStrategy.BASE_MODEL_HINT,
                         base_model=base_model,
