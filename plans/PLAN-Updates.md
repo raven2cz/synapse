@@ -738,7 +738,7 @@ interface ApplyBatchResponse {
 ## 10. Testing
 
 ### 10.1 Backend Unit Tests ✅ DONE
-- [x] `test_update_options.py` - 26 tests:
+- [x] `test_update_options.py` - 49 tests:
   - UpdateOptions model (4 tests: defaults, individual, all, serialization)
   - BatchUpdateResult model (3 tests: defaults, with results, serialization)
   - UpdateResult enriched fields (3 tests: defaults, set, backward compat)
@@ -747,6 +747,13 @@ interface ApplyBatchResponse {
   - Model info update (2 tests: base model, trigger words)
   - Batch apply (3 tests: empty list, serialization, error handling)
   - update_pack with options (1 test: parameter accepted)
+  - URL canonicalization (6 tests: query params, fragment, both, unchanged, empty, dedup variants)
+  - Full plan→apply flow (5 tests: detect update, up-to-date, apply lock, is_updatable, not updatable)
+  - Description preservation (2 tests: preserved without option, updated with option)
+  - Reverse dependencies (3 tests: finds deps, no deps, load errors)
+  - Batch apply mixed (3 tests: success+failure, all up-to-date, options passthrough)
+  - Check all updates (2 tests: skips non-updatable, handles errors)
+  - Apply edge cases (2 tests: missing dep warning, no lock raises)
 - [x] `test_update_impact.py` - 20 tests (existing, Phase 3)
 
 ### 10.2 Frontend Unit Tests
@@ -755,11 +762,14 @@ interface ApplyBatchResponse {
 ### 10.3 Integration Tests
 - [x] Preview merge with existing customizations (in test_update_options.py)
 - [x] Error handling and partial failures (in test_update_options.py)
-- [ ] FUTURE: Full E2E with mock Civitai
+- [x] Full plan→apply cycle with mocked Civitai (in test_update_options.py)
+- [x] Description preservation logic (in test_update_options.py)
+- [x] Batch apply with mixed outcomes (in test_update_options.py)
+- [ ] FUTURE: Full E2E with real file downloads
 
 ### 10.4 E2E Tests
-- [ ] FUTURE: Full update flow
-- [ ] FUTURE: Bulk update multiple packs
+- [ ] FUTURE: Full update flow with download integration
+- [ ] FUTURE: Bulk update multiple packs with Downloads tab tracking
 
 ---
 
@@ -803,7 +813,98 @@ interface ApplyBatchResponse {
 
 ---
 
-## 13. Changelog
+## 13. ⚠️ Known Gap: Download Integration
+
+### 13.1 Problem
+
+`_sync_after_update()` (update_service.py:747) does **synchronous** `blob_store.download()`
+directly inside the API request handler. This **bypasses** the existing download infrastructure:
+
+```
+CURRENT (broken for large files):
+  POST /api/updates/apply { sync: true }
+  → apply_update() updates lock.json ✅
+  → _sync_after_update() → blob_store.download(url, sha256) ← BLOCKS HERE
+  → HTTP response only after download completes (or timeouts)
+  → Downloads tab shows NOTHING
+
+CORRECT (needed):
+  POST /api/updates/apply { sync: true }
+  → apply_update() updates lock.json ✅
+  → Queue downloads via existing download system
+  → Return immediately with download task IDs
+  → Downloads tab shows progress, resume, cancel
+```
+
+### 13.2 What Exists (Downloads Infrastructure)
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `blob_store.download()` | ✅ Works | Synchronous, no progress callback |
+| `blob_store.download_many()` | ✅ Works | Still synchronous |
+| `downloadsStore.ts` | ✅ Works | Frontend state (progress, speed, ETA) |
+| `Downloads tab` | ✅ Works | UI for tracking active downloads |
+| `GET /api/store/download-asset` | ✅ Works | Single asset download endpoint |
+| `POST /api/store/download-all-assets` | ✅ Works | Bulk download endpoint |
+
+### 13.3 What's Missing
+
+1. **Updates → Download queue bridge**: After `apply_update()` updates lock.json,
+   need to call the existing download endpoints (or a new one) to queue blob downloads
+   instead of doing synchronous `blob_store.download()`.
+
+2. **Frontend integration**: After `applyUpdate()` in updatesStore, should add entries
+   to `downloadsStore` so Downloads tab shows progress.
+
+3. **Async download tracking**: The apply endpoint should return immediately and
+   let the download happen asynchronously. UI polls or uses SSE for progress.
+
+### 13.4 Recommended Fix (Future)
+
+```python
+# update_service.py - replace _sync_after_update:
+def _queue_downloads_after_update(self, pack_name, lock):
+    """Queue blob downloads via existing download system (non-blocking)."""
+    download_ids = []
+    for resolved in lock.resolved:
+        sha256 = resolved.artifact.sha256
+        if sha256 and not self.blob_store.blob_exists(sha256):
+            # Queue via download service instead of direct download
+            download_id = self.download_service.queue(
+                url=resolved.artifact.download.urls[0],
+                sha256=sha256,
+                pack_name=pack_name,
+                dep_id=resolved.dependency_id,
+            )
+            download_ids.append(download_id)
+    return download_ids
+```
+
+```typescript
+// updatesStore.ts - after apply:
+const result = await applyUpdate(packName, options)
+if (result.download_ids?.length) {
+  // Downloads tab picks up automatically via polling
+  toast.info(`Queued ${result.download_ids.length} downloads`)
+}
+```
+
+> **Priority:** HIGH for production use. Without this, updates only work for small
+> files or with `sync: false` (which just updates lock.json without downloading).
+
+---
+
+## 14. Changelog
+
+### v1.0.1 (2026-02-19) - Stabilization
+- 🔧 Fix Zustand Set<string> → string[] for reliable React re-renders
+- 🔧 Add URL canonicalization for preview dedup (strips query params/fragments)
+- 🔧 Add logging for all exception handlers (was silent)
+- 🔧 Add dep_id validation in apply_update (warns on missing dep)
+- ✅ 49 backend tests (was 26): +URL canonicalization, full plan→apply flow,
+  description preservation, reverse deps, batch mixed results, edge cases
+- 📝 Document download integration gap (Section 13)
+- Reviews: Gemini (architecture), Codex (security/robustness) - analyzed and incorporated
 
 ### v1.0.0 (2026-02-19)
 - ✅ Phase 1: UpdateOptions model, preview merge, description/model_info sync
@@ -817,4 +918,4 @@ interface ApplyBatchResponse {
 
 ---
 
-*Last updated: 2026-02-19 - v1.0.0 DOKONČENO, kompletní update flow*
+*Last updated: 2026-02-19 - v1.0.1 stabilizace, download gap zdokumentován*
