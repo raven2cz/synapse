@@ -174,7 +174,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
   } = useUpdatesStore()
 
   const [isApplying, setIsApplying] = useState(false)
-  const selectedCount = selectedPacks.size
+  const selectedCount = selectedPacks.length
   const packNames = Object.keys(availableUpdates)
   const allSelected = selectedCount === packNames.length && packNames.length > 0
 
@@ -296,8 +296,8 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
               key={packName}
               packName={packName}
               plan={availableUpdates[packName]}
-              selected={selectedPacks.has(packName)}
-              applying={applyingPacks.has(packName)}
+              selected={selectedPacks.includes(packName)}
+              applying={applyingPacks.includes(packName)}
               onToggle={() => togglePack(packName)}
             />
           ))}

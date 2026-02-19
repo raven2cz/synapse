@@ -36,11 +36,11 @@ interface UpdatesState {
   // Results - only packs with actual updates
   availableUpdates: Record<string, UpdatePlanEntry>
 
-  // Selection for bulk operations
-  selectedPacks: Set<string>
+  // Selection for bulk operations (arrays for reliable React re-renders)
+  selectedPacks: string[]
 
   // Apply state
-  applyingPacks: Set<string>
+  applyingPacks: string[]
 
   // Computed
   updatesCount: number
@@ -58,13 +58,13 @@ interface UpdatesState {
   clearAll: () => void
 }
 
-export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesState) => Partial<UpdatesState>) => void, get: () => UpdatesState) => ({
+export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   isChecking: false,
   lastChecked: null,
   checkError: null,
   availableUpdates: {},
-  selectedPacks: new Set<string>(),
-  applyingPacks: new Set<string>(),
+  selectedPacks: [],
+  applyingPacks: [],
   updatesCount: 0,
 
   checkAll: async () => {
@@ -82,8 +82,7 @@ export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesSt
         lastChecked: Date.now(),
         availableUpdates: plans,
         updatesCount: packNames.length,
-        // Auto-select all packs with updates
-        selectedPacks: new Set(packNames),
+        selectedPacks: [...packNames],
       }))
     } catch (e) {
       set(() => ({
@@ -93,42 +92,34 @@ export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesSt
     }
   },
 
-  selectPack: (name: string) => set((state: UpdatesState) => {
-    const next = new Set(state.selectedPacks)
-    next.add(name)
-    return { selectedPacks: next }
+  selectPack: (name: string) => set((state) => {
+    if (state.selectedPacks.includes(name)) return state
+    return { selectedPacks: [...state.selectedPacks, name] }
   }),
 
-  deselectPack: (name: string) => set((state: UpdatesState) => {
-    const next = new Set(state.selectedPacks)
-    next.delete(name)
-    return { selectedPacks: next }
-  }),
+  deselectPack: (name: string) => set((state) => ({
+    selectedPacks: state.selectedPacks.filter(n => n !== name),
+  })),
 
-  selectAll: () => set((state: UpdatesState) => ({
-    selectedPacks: new Set(Object.keys(state.availableUpdates)),
+  selectAll: () => set((state) => ({
+    selectedPacks: Object.keys(state.availableUpdates),
   })),
 
   deselectAll: () => set(() => ({
-    selectedPacks: new Set<string>(),
+    selectedPacks: [],
   })),
 
-  togglePack: (name: string) => set((state: UpdatesState) => {
-    const next = new Set(state.selectedPacks)
-    if (next.has(name)) {
-      next.delete(name)
-    } else {
-      next.add(name)
+  togglePack: (name: string) => set((state) => {
+    if (state.selectedPacks.includes(name)) {
+      return { selectedPacks: state.selectedPacks.filter(n => n !== name) }
     }
-    return { selectedPacks: next }
+    return { selectedPacks: [...state.selectedPacks, name] }
   }),
 
   applyUpdate: async (packName: string, options?: Partial<UpdateOptions>) => {
-    set((state: UpdatesState) => {
-      const next = new Set(state.applyingPacks)
-      next.add(packName)
-      return { applyingPacks: next }
-    })
+    set((state) => ({
+      applyingPacks: [...state.applyingPacks, packName],
+    }))
 
     try {
       const body: Record<string, unknown> = {
@@ -149,52 +140,41 @@ export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesSt
       const result = await res.json()
 
       if (result.applied) {
-        // Remove from available updates
-        set((state: UpdatesState) => {
+        set((state) => {
           const updates = { ...state.availableUpdates }
           delete updates[packName]
-          const selected = new Set(state.selectedPacks)
-          selected.delete(packName)
-          const applying = new Set(state.applyingPacks)
-          applying.delete(packName)
           return {
             availableUpdates: updates,
             updatesCount: Object.keys(updates).length,
-            selectedPacks: selected,
-            applyingPacks: applying,
+            selectedPacks: state.selectedPacks.filter(n => n !== packName),
+            applyingPacks: state.applyingPacks.filter(n => n !== packName),
           }
         })
         return true
       }
 
-      set((state: UpdatesState) => {
-        const applying = new Set(state.applyingPacks)
-        applying.delete(packName)
-        return { applyingPacks: applying }
-      })
+      set((state) => ({
+        applyingPacks: state.applyingPacks.filter(n => n !== packName),
+      }))
       return false
     } catch {
-      set((state: UpdatesState) => {
-        const applying = new Set(state.applyingPacks)
-        applying.delete(packName)
-        return { applyingPacks: applying }
-      })
+      set((state) => ({
+        applyingPacks: state.applyingPacks.filter(n => n !== packName),
+      }))
       return false
     }
   },
 
   applySelected: async (options?: Partial<UpdateOptions>) => {
     const { selectedPacks } = get()
-    const packs = Array.from(selectedPacks)
+    const packs = [...selectedPacks]
 
     if (packs.length === 0) return { applied: 0, failed: 0 }
 
     // Mark all as applying
-    set((state: UpdatesState) => {
-      const applying = new Set(state.applyingPacks)
-      packs.forEach(p => applying.add(p))
-      return { applyingPacks: applying }
-    })
+    set((state) => ({
+      applyingPacks: [...new Set([...state.applyingPacks, ...packs])],
+    }))
 
     try {
       const body: Record<string, unknown> = {
@@ -215,20 +195,20 @@ export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesSt
       const result = await res.json()
 
       // Remove applied packs from available updates
-      set((state: UpdatesState) => {
+      set((state) => {
         const updates = { ...state.availableUpdates }
-        const selected = new Set(state.selectedPacks)
+        let selected = [...state.selectedPacks]
         for (const [packName, packResult] of Object.entries(result.results || {})) {
           if ((packResult as Record<string, unknown>).applied) {
             delete updates[packName]
-            selected.delete(packName)
+            selected = selected.filter(n => n !== packName)
           }
         }
         return {
           availableUpdates: updates,
           updatesCount: Object.keys(updates).length,
           selectedPacks: selected,
-          applyingPacks: new Set<string>(),
+          applyingPacks: [],
         }
       })
 
@@ -237,27 +217,25 @@ export const useUpdatesStore = create<UpdatesState>((set: (fn: (state: UpdatesSt
         failed: result.total_failed || 0,
       }
     } catch {
-      set(() => ({ applyingPacks: new Set<string>() }))
+      set(() => ({ applyingPacks: [] }))
       return { applied: 0, failed: packs.length }
     }
   },
 
-  dismissUpdate: (packName: string) => set((state: UpdatesState) => {
+  dismissUpdate: (packName: string) => set((state) => {
     const updates = { ...state.availableUpdates }
     delete updates[packName]
-    const selected = new Set(state.selectedPacks)
-    selected.delete(packName)
     return {
       availableUpdates: updates,
       updatesCount: Object.keys(updates).length,
-      selectedPacks: selected,
+      selectedPacks: state.selectedPacks.filter(n => n !== packName),
     }
   }),
 
   clearAll: () => set(() => ({
     availableUpdates: {},
-    selectedPacks: new Set<string>(),
-    applyingPacks: new Set<string>(),
+    selectedPacks: [],
+    applyingPacks: [],
     updatesCount: 0,
     lastChecked: null,
     checkError: null,

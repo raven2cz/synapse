@@ -12,11 +12,14 @@ Features:
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from .blob_store import BlobStore
 from .layout import StoreLayout
+
+logger = logging.getLogger(__name__)
 from .models import (
     AmbiguousUpdate,
     ArtifactDownload,
@@ -25,6 +28,7 @@ from .models import (
     BatchUpdateResult,
     Pack,
     PackLock,
+    PreviewInfo,
     ProviderName,
     ResolvedArtifact,
     ResolvedDependency,
@@ -171,8 +175,8 @@ class UpdateService:
                                 "sha256": update_info["sha256"],
                             },
                         ))
-            except Exception:
-                pass  # Log error, continue
+            except Exception as e:
+                logger.warning("Failed to check updates for %s dep %s: %s", pack_name, dep.id, e)
         
         already_up_to_date = len(changes) == 0 and len(ambiguous) == 0
 
@@ -209,7 +213,7 @@ class UpdateService:
 
     def _check_dependency_update(
         self,
-        dep: Any,
+        dep: "PackDependency",
         current: ResolvedDependency,
     ) -> Optional[Dict[str, Any]]:
         """
@@ -279,7 +283,7 @@ class UpdateService:
     def _filter_files(
         self,
         files: List[Dict[str, Any]],
-        constraints: Optional[Any],
+        constraints: Optional["SelectorConstraints"],
     ) -> List[Dict[str, Any]]:
         """Filter files based on constraints."""
         if not files:
@@ -348,29 +352,38 @@ class UpdateService:
         for change in plan.changes:
             dep_id = change.dependency_id
             new_data = change.new
-            
+
             # Find and update resolved entry
+            found = False
             for i, resolved in enumerate(lock.resolved):
                 if resolved.dependency_id == dep_id:
-                    download_url = f"https://civitai.com/api/download/models/{new_data['provider_version_id']}"
-                    
+                    file_id = new_data.get("provider_file_id")
+                    version_id = new_data.get("provider_version_id")
+                    download_url = (
+                        f"https://civitai.com/api/download/models/{version_id}"
+                        + (f"?type=Model&format=SafeTensor" if file_id else "")
+                    )
+
                     lock.resolved[i] = ResolvedDependency(
                         dependency_id=dep_id,
                         artifact=ResolvedArtifact(
                             kind=resolved.artifact.kind,
                             sha256=new_data.get("sha256"),
-                            size_bytes=resolved.artifact.size_bytes,  # Will be updated on download
+                            size_bytes=resolved.artifact.size_bytes,
                             provider=ArtifactProvider(
                                 name=ProviderName.CIVITAI,
                                 model_id=new_data.get("provider_model_id"),
-                                version_id=new_data.get("provider_version_id"),
-                                file_id=new_data.get("provider_file_id"),
+                                version_id=version_id,
+                                file_id=file_id,
                             ),
                             download=ArtifactDownload(urls=[download_url]),
                             integrity=ArtifactIntegrity(sha256_verified=new_data.get("sha256") is not None),
                         ),
                     )
+                    found = True
                     break
+            if not found:
+                logger.warning("Dependency %s not found in lock for pack %s, skipping", dep_id, pack_name)
         
         # Apply ambiguous selections
         if choose:
@@ -391,7 +404,10 @@ class UpdateService:
                         dep = pack.get_dependency(amb.dependency_id)
                         for i, resolved in enumerate(lock.resolved):
                             if resolved.dependency_id == amb.dependency_id:
-                                download_url = f"https://civitai.com/api/download/models/{selected.provider_version_id}"
+                                download_url = (
+                                    f"https://civitai.com/api/download/models/{selected.provider_version_id}"
+                                    + (f"?type=Model&format=SafeTensor" if selected.provider_file_id else "")
+                                )
                                 
                                 lock.resolved[i] = ResolvedDependency(
                                     dependency_id=amb.dependency_id,
@@ -522,12 +538,17 @@ class UpdateService:
         if changed:
             self.layout.save_pack(pack)
 
+    @staticmethod
+    def _canonicalize_url(url: str) -> str:
+        """Strip query params and fragments for URL dedup comparison."""
+        return url.split("?")[0].split("#")[0]
+
     def _merge_previews_from_civitai(self, pack: Pack) -> int:
         """
         Merge new previews from Civitai into the pack.
 
         Keeps existing previews and adds new ones that don't exist yet.
-        Deduplicates by URL.
+        Deduplicates by canonical URL (ignoring query params).
 
         Returns:
             Number of new previews added.
@@ -566,17 +587,17 @@ class UpdateService:
         if not civitai_images:
             return 0
 
-        # Build set of existing preview URLs for dedup
+        # Build set of existing preview URLs for dedup (canonical form)
         existing_urls = set()
         for p in pack.previews:
-            if hasattr(p, "url") and p.url:
-                existing_urls.add(p.url)
+            if p.url:
+                existing_urls.add(self._canonicalize_url(p.url))
 
         # Add new previews
         added = 0
         for img in civitai_images:
             url = img.get("url", "")
-            if not url or url in existing_urls:
+            if not url or self._canonicalize_url(url) in existing_urls:
                 continue
 
             # Derive filename from URL
@@ -589,7 +610,6 @@ class UpdateService:
             else:
                 media_type = "image"
 
-            from .models import PreviewInfo
             preview = PreviewInfo(
                 filename=filename,
                 url=url,
@@ -600,7 +620,7 @@ class UpdateService:
                 meta=img.get("meta"),
             )
             pack.previews.append(preview)
-            existing_urls.add(url)
+            existing_urls.add(self._canonicalize_url(url))
             added += 1
 
         return added
@@ -659,7 +679,7 @@ class UpdateService:
         trained_words = target_version.get("trainedWords", [])
         if trained_words:
             for dep in pack.dependencies:
-                if dep.expose and hasattr(dep.expose, "trigger_words"):
+                if dep.expose and dep.expose.trigger_words is not None:
                     if set(dep.expose.trigger_words) != set(trained_words):
                         dep.expose.trigger_words = trained_words
                         changed = True
@@ -726,11 +746,11 @@ class UpdateService:
                 sha256 = resolved.artifact.sha256
                 urls = resolved.artifact.download.urls
                 
-                if sha256 and not self.blob_store.blob_exists(sha256) and urls:
+                if sha256 and not self.blob_store.blob_exists(sha256) and urls and len(urls) > 0:
                     try:
                         self.blob_store.download(urls[0], sha256)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to download blob %s: %s", sha256[:12], e)
             
             # Rebuild views for each UI
             # Need to determine which profile to rebuild
@@ -753,8 +773,8 @@ class UpdateService:
                         
                         self.view_builder.build(ui, profile, packs_data)
                         self.view_builder.activate(ui, active_profile)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.warning("Failed to rebuild views for UI %s: %s", ui, e)
             
             return True
         except Exception:
@@ -778,8 +798,8 @@ class UpdateService:
                 pack = self.layout.load_pack(pack_name)
                 if self.is_updatable(pack):
                     plans[pack_name] = self.plan_update(pack_name)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Skipping pack %s during update check: %s", pack_name, e)
         
         return plans
     
