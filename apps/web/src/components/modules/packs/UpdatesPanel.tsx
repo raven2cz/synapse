@@ -29,6 +29,7 @@ import {
   Package,
   Check,
   XCircle,
+  ExternalLink,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -126,16 +127,39 @@ function UpdateItem({
       {/* Expanded details */}
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-mid/20 pt-3">
-          {plan.changes.map((change, idx) => (
-            <div key={idx} className="p-2.5 bg-slate-900/50 rounded-lg text-sm">
-              <p className="font-mono text-synapse text-xs">{change.dependency_id}</p>
-              <div className="flex items-center gap-2 mt-1 text-text-muted text-xs">
-                <span>{String((change.old as Record<string, unknown>)?.provider_version_id || '?')}</span>
-                <span className="text-text-muted/50">→</span>
-                <span className="text-pulse">{String((change.new as Record<string, unknown>)?.provider_version_id || t('updates.panel.new'))}</span>
+          {plan.changes.map((change, idx) => {
+            const newData = change.new as Record<string, unknown>
+            const modelId = newData?.provider_model_id
+            const versionId = newData?.provider_version_id
+            const civitaiUrl = modelId
+              ? `https://civitai.com/models/${modelId}${versionId ? `?modelVersionId=${versionId}` : ''}`
+              : null
+
+            return (
+              <div key={idx} className="p-2.5 bg-slate-900/50 rounded-lg text-sm">
+                <div className="flex items-center justify-between">
+                  <p className="font-mono text-synapse text-xs">{change.dependency_id}</p>
+                  {civitaiUrl && (
+                    <a
+                      href={civitaiUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1 text-xs text-text-muted hover:text-synapse transition-colors"
+                      title={t('updates.panel.whatsNew')}
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      <span>{t('updates.panel.whatsNew')}</span>
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1 text-text-muted text-xs">
+                  <span>{String((change.old as Record<string, unknown>)?.provider_version_id || '?')}</span>
+                  <span className="text-text-muted/50">→</span>
+                  <span className="text-pulse">{String(versionId || t('updates.panel.new'))}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {ambiguousCount > 0 && (
             <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-2">

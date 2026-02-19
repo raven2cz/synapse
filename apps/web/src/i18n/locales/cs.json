@@ -1656,7 +1656,8 @@
       "estimatedTime": "~{{eta}}",
       "calculatingEta": "Počítám...",
       "cancelBatch": "Zrušit všechna stahování",
-      "downloadComplete": "Všechna stahování dokončena"
+      "downloadComplete": "Všechna stahování dokončena",
+      "whatsNew": "Co je nového"
     },
     "autoCheck": {
       "found": "{{count}} packů má dostupné aktualizace",

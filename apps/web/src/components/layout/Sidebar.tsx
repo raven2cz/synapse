@@ -63,13 +63,20 @@ export function Sidebar() {
   const autoCheckUpdates = useSettingsStore((s) => s.autoCheckUpdates)
 
   // Keyboard shortcut: Ctrl/Cmd+U to check updates
-  const handleCheckUpdates = useCallback(async () => {
+  const handleCheckUpdates = useCallback(async (showDesktopNotification = false) => {
     const store = useUpdatesStore.getState()
     if (store.isChecking) return
     await store.checkAll()
     const after = useUpdatesStore.getState()
     if (after.updatesCount > 0) {
       toast.info(t('updates.autoCheck.found', { count: after.updatesCount }))
+      // Desktop notification for background auto-check
+      if (showDesktopNotification && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Synapse', {
+          body: t('updates.autoCheck.found', { count: after.updatesCount }),
+          icon: '/favicon.ico',
+        })
+      }
     } else {
       toast.success(t('updates.panel.allUpToDate'))
     }
@@ -80,7 +87,7 @@ export function Sidebar() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       if ((e.ctrlKey || e.metaKey) && e.key === 'u') {
         e.preventDefault()
-        handleCheckUpdates()
+        handleCheckUpdates(false)
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -99,12 +106,17 @@ export function Sidebar() {
     const ms = intervalMs[autoCheckUpdates]
     if (!ms) return
 
+    // Request notification permission when auto-check is enabled
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+
     // Debounce: 5s delay after mount to avoid hammering on rapid reloads
     const debounceTimer = setTimeout(() => {
       const { lastChecked, isChecking } = useUpdatesStore.getState()
       const now = Date.now()
       if (!isChecking && (!lastChecked || now - lastChecked >= ms)) {
-        handleCheckUpdates()
+        handleCheckUpdates(true)
       }
     }, 5000)
 
@@ -113,7 +125,7 @@ export function Sidebar() {
       const { lastChecked, isChecking } = useUpdatesStore.getState()
       const now = Date.now()
       if (!isChecking && (!lastChecked || now - lastChecked >= ms)) {
-        handleCheckUpdates()
+        handleCheckUpdates(true)
       }
     }, ms)
 

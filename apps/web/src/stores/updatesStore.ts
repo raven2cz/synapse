@@ -143,7 +143,21 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
       const data = await res.json()
 
       const plans: Record<string, UpdatePlanEntry> = data.plans || {}
-      const dismissed = get().dismissedVersions
+      const dismissed = { ...get().dismissedVersions }
+
+      // Clean up stale dismissed entries for packs no longer in results
+      // (pack was deleted, or version changed so the old dismissed key is irrelevant)
+      const allCheckedPacks = new Set(Object.keys(plans))
+      let dismissedChanged = false
+      for (const name of Object.keys(dismissed)) {
+        if (!allCheckedPacks.has(name)) {
+          delete dismissed[name]
+          dismissedChanged = true
+        }
+      }
+      if (dismissedChanged) {
+        saveDismissed(dismissed)
+      }
 
       // Filter out dismissed updates
       const filtered: Record<string, UpdatePlanEntry> = {}
@@ -162,6 +176,7 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
         availableUpdates: filtered,
         updatesCount: packNames.length,
         selectedPacks: [...packNames],
+        dismissedVersions: dismissed,
       }))
     } catch (e) {
       set(() => ({

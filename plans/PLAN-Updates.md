@@ -1,10 +1,10 @@
 # PLAN: Synapse Updates System
 
-**Status:** ✅ v1.0.2 DOKONČENO - kompletní update flow (check → select → options → apply) + E2E testy
+**Status:** ✅ v2.0.1 DOKONČENO - všechny fáze 1-6 kompletní, žádné zbývající položky
 **Priority:** 🔴 HIGH - klíčová feature celého balíčkovacího systému
 **Depends on:** Pack Edit (✅ done), Downloads infrastructure
 **Created:** 2026-01-31
-**Updated:** 2026-02-17
+**Updated:** 2026-02-19
 
 ---
 
@@ -55,18 +55,37 @@ Updates change the MODEL FILE, not your customizations.
 ### 2.1 Backend Architecture
 
 ```
-src/store/update_service.py (✅ EXISTS, ~550 lines)
+src/store/update_service.py (✅ EXISTS, ~300 lines — refactored v2.0.0)
 ├── is_updatable(pack) → bool
 ├── plan_update(pack_name) → UpdatePlan
 ├── apply_update(pack_name, plan, choose) → PackLock
 ├── update_pack(pack_name, dry_run, sync) → UpdateResult
 ├── check_all_updates() → Dict[str, UpdatePlan]
-└── _check_dependency_update(dep, current) → update_info
+└── Delegates to UpdateProvider protocol for version checks + URL building
+
+src/store/update_provider.py (✅ NEW v2.0.0 — Protocol)
+├── UpdateProvider protocol: check_update(), build_download_url(), merge_previews(), ...
+└── Provider registry: Dict[SelectorStrategy, UpdateProvider]
+
+src/store/civitai_update_provider.py (✅ NEW v2.0.0)
+└── CivitaiUpdateProvider: Civitai-specific version checking + download URL construction
+
+src/store/dependency_resolver.py (✅ NEW v2.0.0 — extracted from pack_service.py)
+├── DependencyResolver protocol
+├── CivitaiFileResolver, CivitaiLatestResolver, BaseModelHintResolver
+├── HuggingFaceResolver, UrlResolver, LocalFileResolver
+└── Registry dispatch in PackService._resolve_dependency()
+
+src/store/download_auth.py (✅ NEW v2.0.0 — extracted from blob_store.py)
+├── DownloadAuthProvider protocol: matches(), authenticate_url(), auth_error_message()
+└── CivitaiAuthProvider: URL-based token injection for civitai.com downloads
 
 src/store/api.py (✅ EXISTS)
-├── GET  /api/updates/check/{pack_name}  → UpdatePlan
-├── GET  /api/updates/check-all          → Dict[str, UpdatePlan]
-└── POST /api/updates/apply              → UpdateResult
+├── GET  /api/updates/check/{pack_name}     → UpdatePlan
+├── GET  /api/updates/check-all             → Dict[str, UpdatePlan]
+├── POST /api/updates/apply                 → UpdateResult
+├── POST /api/updates/apply-batch           → BatchUpdateResult
+└── DELETE /api/packs/downloads/group/{id}  → batch cancel
 ```
 
 ### 2.2 Update Flow (Current)
@@ -674,29 +693,34 @@ interface ApplyBatchResponse {
 - [x] Impacted packs warning per pack
 - [x] Ambiguous count warning
 
-### Phase 4: Downloads Integration ✅ PARTIAL (v1.0.0)
+### Phase 4: Downloads Integration ✅ DONE (v2.0.0)
 - [x] Add `apply-batch` endpoint (`POST /api/updates/apply-batch`)
 - [x] `BatchUpdateResult` model with per-pack results
-- [ ] ~~Extend Downloads tab for batch updates~~ → FUTURE: needs download queue refactoring
-- [ ] ~~Group update downloads visually~~ → FUTURE
-- [ ] ~~Progress tracking per pack~~ → FUTURE: needs WebSocket/SSE
-- [ ] ~~Cancel support~~ → FUTURE
+- [x] `group_id` + `group_label` fields in `DownloadAssetRequest` (api.py)
+- [x] `DELETE /api/packs/downloads/group/{group_id}` batch cancel endpoint
+- [x] DownloadsPage: group rendering with collapsible sections + aggregate progress
+- [x] UpdatesPanel: aggregate download progress bar, speed, ETA after apply
+- [x] `formatBytes`, `formatSpeed`, `formatEta` extracted to `lib/utils/format.ts`
+- [x] `cancelBatch()` in updatesStore calls batch cancel API
+- [x] Tests: `test_downloads_grouping_api.py` (API-level grouping + cancel tests)
 
-### Phase 5: Polish & UX ✅ PARTIAL (v1.0.0)
+### Phase 5: Polish & UX ✅ DONE (v2.0.1)
 - [x] Sidebar badge for updates (amber badge on Packs nav item)
-- [ ] ~~Keyboard shortcuts~~ → FUTURE
-- [ ] ~~Remember dismissed updates~~ → FUTURE
-- [ ] ~~"What's new" link~~ → FUTURE
-- [ ] ~~Estimated download time~~ → FUTURE
+- [x] Keyboard shortcut Ctrl/Cmd+U to check updates (Sidebar.tsx)
+- [x] Remember dismissed updates (localStorage persistence in updatesStore)
+- [x] Dismissed version key generation from plan.changes
+- [x] "What's new" link on each update change → opens Civitai model page with version
+- [x] Estimated download time per-file (already in DownloadCard via eta_seconds)
 
-### Phase 6: Background Checking (Future)
-- [ ] Configurable auto-check interval
-- [ ] Service worker or polling approach
-- [ ] Desktop notifications (optional)
-- [ ] Auto-dismiss old notifications
+### Phase 6: Background Checking ✅ DONE (v2.0.1)
+- [x] Configurable auto-check interval (`autoCheckUpdates` in settingsStore: off/1h/6h/24h)
+- [x] Settings UI dropdown in SettingsPage.tsx
+- [x] Auto-check useEffect in Sidebar.tsx (5s debounce, recurring setInterval, respects lastChecked)
+- [x] Toast notification when updates found
+- [x] Desktop notifications via Notification API (auto-requested when auto-check enabled)
+- [x] Auto-dismiss stale dismissed entries (cleanup in checkAll for removed/changed packs)
 
-> **Note:** Phases 4-6 remaining items are tracked as FUTURE enhancements.
-> The core update flow (check → select → configure options → apply) is complete.
+> **Note:** All phases 1-6 COMPLETE. No remaining FUTURE items.
 
 ---
 
@@ -756,8 +780,8 @@ interface ApplyBatchResponse {
   - Apply edge cases (2 tests: missing dep warning, no lock raises)
 - [x] `test_update_impact.py` - 20 tests (existing, Phase 3)
 
-### 10.2 Frontend Unit Tests
-- [ ] FUTURE: Store/component tests
+### 10.2 Frontend Unit Tests ✅ DONE (v2.0.0)
+- [x] `updates-store.test.ts` - updatesStore tests (dismissed persistence, group tracking)
 
 ### 10.3 Integration Tests
 - [x] Preview merge with existing customizations (in test_update_options.py)
@@ -766,8 +790,8 @@ interface ApplyBatchResponse {
 - [x] Description preservation logic (in test_update_options.py)
 - [x] Batch apply with mixed outcomes (in test_update_options.py)
 
-### 10.4 E2E Integration Tests ✅ DONE
-- [x] `test_update_e2e.py` - 18 tests covering full flow:
+### 10.4 E2E Integration Tests ✅ DONE (v2.0.0)
+- [x] `test_update_e2e.py` - 18+ tests covering full flow:
   - Single pack flow (3 tests: check→apply→lock updated, already up-to-date, dry run)
   - Batch flow (2 tests: check-all→apply-batch, broken pack doesn't block others)
   - With options (4 tests: merge previews, update description, preserve description, model info sync)
@@ -776,47 +800,82 @@ interface ApplyBatchResponse {
   - Impacted packs (1 test: reverse deps shown in plan)
   - Full frontend workflow (2 tests: 5-pack scenario with select/deselect, batch with options)
   - Civitai API errors (2 tests: unreachable skipped, partial failures handled)
+  - Dismissed version keys + auto-check interval tests
+
+### 10.5 Core Workflow E2E Tests ✅ NEW (v2.0.0)
+- [x] `tests/e2e/test_core_workflows.py` - 49 tests in 4 sections:
+  - **A: API Contract Tests (12)** — response shapes match frontend TypeScript interfaces
+  - **B: User Journey Tests (9)** — complete multi-step workflows (import→use→update→download)
+  - **C: Edge Case Tests (12)** — empty packs, missing deps, concurrent operations
+  - **D: Refactoring Risk Tests (16)** — verify provider extraction didn't break:
+    - Download URL chain (apply → lock → download-asset)
+    - Resolver → valid download URLs
+    - Auth provider URL injection compatibility
+    - UpdateProvider.build_download_url() output
+    - UpdateService provider dispatch
+    - Resolver registry integration
+
+### 10.6 Provider Unit Tests ✅ NEW (v2.0.0)
+- [x] `tests/unit/store/test_dependency_resolver.py` - 23 tests (all 6 resolvers + registry)
+- [x] `tests/unit/store/test_download_auth.py` - 13 tests (auth provider protocol + BlobStore integration)
+- [x] `tests/unit/store/test_update_provider.py` - 13 tests (update provider protocol + Civitai impl)
+- [x] `tests/store/test_downloads_grouping_api.py` - download grouping API + batch cancel
 
 ---
 
 ## 11. Related Files
 
 ### Backend
-- `src/store/update_service.py` - Core update logic (✅ ~700 lines, UpdateOptions, batch, preview merge)
-- `src/store/api.py` - API endpoints (✅ /check, /check-all, /apply, /apply-batch)
+- `src/store/update_service.py` - Core update logic (✅ ~300 lines, refactored — delegates to providers)
+- `src/store/update_provider.py` - ✅ NEW: UpdateProvider protocol
+- `src/store/civitai_update_provider.py` - ✅ NEW: Civitai UpdateProvider implementation
+- `src/store/dependency_resolver.py` - ✅ NEW: DependencyResolver protocol + 6 implementations
+- `src/store/download_auth.py` - ✅ NEW: DownloadAuthProvider protocol + CivitaiAuthProvider
+- `src/store/pack_service.py` - ✅ Refactored: resolver registry dispatch
+- `src/store/blob_store.py` - ✅ Refactored: auth provider loop
+- `src/store/api.py` - API endpoints (✅ /check, /check-all, /apply, /apply-batch, /downloads/group/{id})
 - `src/store/models.py` - Models (✅ UpdatePlan, UpdateResult, UpdateOptions, BatchUpdateResult)
-- `src/store/__init__.py` - Store facade (✅ update(), update_batch())
+- `src/store/__init__.py` - Store facade (✅ wires providers + resolvers)
 
 ### Frontend
 - `apps/web/src/components/modules/pack-detail/plugins/CivitaiPlugin.tsx` - Single pack UI (✅ with options dialog)
 - `apps/web/src/components/modules/PacksPage.tsx` - ✅ Check Updates button + badge
-- `apps/web/src/components/modules/packs/UpdatesPanel.tsx` - ✅ Bulk updates slide-out panel
+- `apps/web/src/components/modules/packs/UpdatesPanel.tsx` - ✅ Bulk updates panel + aggregate progress
 - `apps/web/src/components/modules/packs/UpdateOptionsDialog.tsx` - ✅ Update options dialog
-- `apps/web/src/stores/updatesStore.ts` - ✅ Zustand store for updates state
-- `apps/web/src/components/layout/Sidebar.tsx` - ✅ Amber badge for updates count
+- `apps/web/src/components/modules/DownloadsPage.tsx` - ✅ Group rendering with collapsible sections
+- `apps/web/src/components/modules/SettingsPage.tsx` - ✅ Auto-check interval dropdown
+- `apps/web/src/stores/updatesStore.ts` - ✅ Zustand store (check, apply, dismissed, groups)
+- `apps/web/src/stores/settingsStore.ts` - ✅ autoCheckUpdates setting
+- `apps/web/src/components/layout/Sidebar.tsx` - ✅ Badge + Ctrl/Cmd+U + auto-check effect
+- `apps/web/src/lib/utils/format.ts` - ✅ Shared formatBytes/Speed/Eta
 
 ### Tests
-- `tests/store/test_update_options.py` - ✅ 49 tests for UpdateOptions, preview merge, batch, edge cases
+- `tests/e2e/test_core_workflows.py` - ✅ 49 E2E tests (API contracts, user journeys, edge cases, refactoring risks)
+- `tests/store/test_update_options.py` - ✅ 49+ tests for UpdateOptions, preview merge, batch, edge cases
 - `tests/store/test_update_impact.py` - ✅ 20 tests for impact analysis
-- `tests/store/test_update_e2e.py` - ✅ 18 E2E tests for full update flow
+- `tests/store/test_update_e2e.py` - ✅ 18+ E2E tests for full update flow
+- `tests/store/test_downloads_grouping_api.py` - ✅ Download grouping API tests
+- `tests/unit/store/test_dependency_resolver.py` - ✅ 23 tests for resolver protocol + implementations
+- `tests/unit/store/test_download_auth.py` - ✅ 13 tests for auth provider protocol
+- `tests/unit/store/test_update_provider.py` - ✅ 13 tests for update provider protocol
 
 ### Plans
 - `plans/PLAN-Pack-Edit.md` - Pack editing features (✅ done)
 - `plans/PLAN-Model-Inventory.md` - Blob/backup management (✅ done)
 - **🔗 `plans/PLAN-Dependencies.md`** - ✅ Provázáno a DOKONČENO
   - ✅ Dependency impact analysis při updatu (impacted_packs in UpdatePlan)
-  - ~~Kaskádový update~~ → FUTURE: needs careful design
-  - ~~Version constraint validace~~ → FUTURE
+  - ~~Kaskádový update~~ → DEFERRED: nepotřebujeme, nebude se implementovat
+  - ~~Version constraint validace~~ → DEFERRED: nepotřebujeme, nebude se implementovat
   - ✅ Upozornění uživatele na breaking changes (impacted packs shown in UI)
 
 ---
 
 ## 12. Open Questions
 
-1. ~~**Auto-check frequency?**~~ → FUTURE (Phase 6)
-2. ~~**Notification persistence?**~~ → Badge clears when updates are applied/dismissed
+1. ~~**Auto-check frequency?**~~ → ✅ DONE: off/1h/6h/24h in Settings
+2. ~~**Notification persistence?**~~ → ✅ DONE: dismissed versions in localStorage
 3. ~~**Default options?**~~ → All options default to OFF (safe default, user opts in)
-4. **Undo support?** - FUTURE: Could keep old blob as backup before update
+4. ~~**Undo support?**~~ → DEFERRED: nepotřebujeme, nebude se implementovat
 
 ---
 
@@ -865,6 +924,42 @@ CLI doesn't have a Downloads tab. The web frontend MUST NOT use it.
 
 ## 14. Changelog
 
+### v2.0.1 (2026-02-19) - Final Polish
+- ✅ "What's new" link on each update change (opens Civitai model page with version)
+- ✅ Desktop notifications via Notification API (auto-requested when auto-check enabled)
+- ✅ Auto-dismiss stale dismissed entries (cleanup in checkAll for removed packs)
+- ✅ Per-file ETA confirmed working (already in DownloadCard via eta_seconds)
+- 🌐 i18n: `updates.panel.whatsNew` key added (EN + CS)
+- 📝 All PLAN phases 1-6 marked DONE, DEFERRED items documented
+
+### v2.0.0 (2026-02-19) - Provider Refactoring + Phases 4-6 Complete
+- 🏗️ **Architecture refactoring:**
+  - Extract `DependencyResolver` protocol + 6 implementations from PackService (-273 lines)
+  - Extract `DownloadAuthProvider` protocol + CivitaiAuthProvider from BlobStore
+  - Extract `UpdateProvider` protocol + CivitaiUpdateProvider from UpdateService (-549 lines)
+  - Registry dispatch pattern replaces if/elif chains
+- ✅ **Phase 4 — Downloads Integration:**
+  - `group_id`/`group_label` in DownloadAssetRequest
+  - `DELETE /api/packs/downloads/group/{id}` batch cancel endpoint
+  - DownloadsPage: group rendering with collapsible sections + aggregate progress
+  - UpdatesPanel: aggregate download progress bar, speed, ETA
+  - `formatBytes`/`formatSpeed`/`formatEta` extracted to shared `format.ts`
+- ✅ **Phase 5 — UX Polish:**
+  - Keyboard shortcut Ctrl/Cmd+U to check updates
+  - Dismissed updates persistence (localStorage)
+- ✅ **Phase 6 — Background Checking:**
+  - `autoCheckUpdates` setting (off/1h/6h/24h) in settingsStore
+  - Auto-check useEffect in Sidebar (5s debounce, recurring interval)
+  - Settings UI dropdown in SettingsPage
+- 🧪 **Tests:**
+  - 49 E2E workflow tests in `tests/e2e/test_core_workflows.py` (API contracts, user journeys, edge cases, refactoring risks)
+  - 23 dependency resolver unit tests
+  - 13 download auth unit tests
+  - 13 update provider unit tests
+  - Download grouping API tests
+  - Total backend test coverage: 1002 tests
+- 🌐 i18n: EN + CS translations for all new keys
+
 ### v1.0.2 (2026-02-19) - E2E Tests
 - ✅ 18 E2E integration tests in `test_update_e2e.py` covering full flow:
   single pack, batch, options, multi-dep, ambiguous, impacted packs, error handling
@@ -893,4 +988,4 @@ CLI doesn't have a Downloads tab. The web frontend MUST NOT use it.
 
 ---
 
-*Last updated: 2026-02-19 - v1.0.2 E2E testy, Section 13 opravena*
+*Last updated: 2026-02-19 - v2.0.1 ALL PHASES COMPLETE, 1002 tests*

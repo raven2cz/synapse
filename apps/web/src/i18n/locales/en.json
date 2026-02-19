@@ -1647,7 +1647,8 @@
       "estimatedTime": "~{{eta}}",
       "calculatingEta": "Calculating...",
       "cancelBatch": "Cancel All Downloads",
-      "downloadComplete": "All downloads completed"
+      "downloadComplete": "All downloads completed",
+      "whatsNew": "What's new"
     },
     "autoCheck": {
       "found": "{{count}} packs have updates available",
