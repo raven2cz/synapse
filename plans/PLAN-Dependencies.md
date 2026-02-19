@@ -1,7 +1,7 @@
 # PLAN: Dependencies - Rework & Updates Integration
 
-**Version:** v0.7.0
-**Status:** ✅ Phase 1-3 DOKONČENY
+**Version:** v0.8.1
+**Status:** ✅ DOKONČENO (Phase 1-4). Phase 5 → PLAN-Resolution.md
 **Priority:** 🔴 HIGH
 **Created:** 2026-02-03
 **Updated:** 2026-02-19
@@ -33,14 +33,14 @@ A opravit chybné chování base modelu při importu.
 | Asset dep API (CRUD, download, resolve) | ✅ | `src/store/api.py` |
 | Asset dep UI (tabulka, status, download) | ✅ | `PackDependenciesSection.tsx` |
 | Base model resolver modal | ✅ | `BaseModelResolverModal.tsx` (~640 řádků) |
-| Pack dep UI - zobrazení | ⚠️ | `CustomPlugin.tsx:49-246` (read-only, chybí CRUD) |
+| Pack dep UI - zobrazení + CRUD | ✅ | `PackDepsSection.tsx` (Phase 2+4: extracted, rich cards, tree) |
 | Import z Civitai | ✅ | `pack_service.py:495-626` |
 | Update service (single pack) | ✅ | `update_service.py` (~550 řádků) |
 | Base model aliases config | ✅ | `models.py:267-307` (SD1.5, SDXL, Illustrious, Pony) |
 | Delete dep endpoint | ✅ | `api.py:2504-2570` (delete_dependency=true query param) |
 | EditDependenciesModal | ✅ | `EditDependenciesModal.tsx` (add/remove/filter asset deps, callback) |
 
-### 2.2 Co je špatně ❌
+### 2.2 ~~Co je špatně~~ ✅ VŠECHNO OPRAVENO (Phase 1-4)
 
 **A) Base model `required: true` při importu**
 - `pack_service.py:605` hard-codes `required=True` pro base model dependency (when alias found)
@@ -281,25 +281,44 @@ DELETE /api/packs/{name}/pack-dependencies/{dep}    (api.py:2725-2758)
 
 ---
 
-### Phase 4: UI Polish & Consistency (FUTURE)
+### Phase 4: UI Polish & Consistency ✅ IMPL+INTEG
 
-**Cíl:** Sjednotit UX obou typů dependencies, drobná vylepšení.
+**Cíl:** Sjednotit UX obou typů dependencies. Enriched data, pack dep cards, dependency tree.
 
-- [ ] Sjednotit vizuální styl asset deps a pack deps
-- [ ] Collapsible sekce "Asset Dependencies" / "Pack Dependencies" v pack detail
-- [ ] Bulk actions (download all missing, backup all)
-- [ ] i18n pro nové klíče
+#### Backend:
+- [x] `asset_info` enriched: `trigger_words`, `update_policy`, `strategy` fields
+- [x] `pack-dependencies/status` enriched: `pack_type`, `description`, `asset_count`, `trigger_words`, `base_model`, `has_unresolved`, `all_installed`
+- [x] New endpoint: `GET /api/packs/{name}/dependency-tree?max_depth=5` - recursive tree with cycle detection
+
+#### Frontend:
+- [x] Extracted `PackDepsSection.tsx` from `CustomPlugin.tsx` inline code
+- [x] Rich pack dep cards with status-colored borders (matching AssetRow style)
+- [x] `DependencyTree.tsx` - CSS tree visualization with expand/collapse, cycle detection
+- [x] Asset deps: trigger words pills (click-to-copy), update policy badge, strategy info
+- [x] `CivitaiPlugin.tsx` also renders `PackDepsSection`
+- [x] Full i18n coverage (en + cs)
+
+#### Bugfixy nalezené během review:
+- [x] `api.py:2663` `store.layout.load_lock()` → `store.layout.load_pack_lock()` (enriched status vracal vždy `installed: False`)
+- [x] `models.py:618` přidán `"upscale_by": "hires_scale"` do hires_fix normalizer (AI cache fix)
+- [x] `test_inventory_stabilization.py` - 2 code structure testy opraveny pro i18n (hardcoded stringy → i18n klíče)
+
+#### Testy:
+- [x] `tests/store/test_dependency_tree.py` - 25 integration testů s reálným Store (tree, enriched status, asset_info)
+  - Tree: empty, single child, missing, multiple, circular A→B→A, three-way cycle, diamond, deep chain, max_depth, trigger words, metadata, response shape
+  - Enriched status: installed fields, missing defaults, mixed, response shape, trigger aggregation
+  - Asset info: trigger words, update policy, strategy, full dict shape
+- [x] `tests/store/test_dependencies_integration.py` - 7 nových Phase 4 testů (enriched status, asset info roundtrip, tree smoke)
 
 ---
 
-### Phase 5: Smart Resolution (FUTURE)
+### ~~Phase 5: Smart Resolution~~ → MOVED to PLAN-Resolution.md
 
-**Cíl:** Chytřejší párování dependencies na skutečné soubory/packy.
-
-- [ ] Lokální match: skenovat ComfyUI složky a párovat s unresolved deps
-- [ ] Avatar-engine integrace: AI agenti doporučí správné modely k packu
-- [ ] Auto-detect: parsování description pro navržení závislostí
-- [ ] Dependency tree vizualizace
+**Status:** Moved to dedicated plan. See `plans/PLAN-Resolution.md` for:
+- Local model scanning & matching
+- Avatar-engine AI recommendations
+- Auto-detect dependencies from descriptions
+- Download orchestration
 
 ---
 
@@ -331,6 +350,20 @@ MODIFY  src/store/models.py:1156-1161         # UpdatePlan + impacted_packs
 MODIFY  src/store/update_service.py           # Reverse dependency scan v plan_update()
 MODIFY  apps/web/.../CivitaiPlugin.tsx:215+   # Impact info box
 ADD     tests/store/test_update_impact.py
+```
+
+### Phase 4 (UI Polish & Consistency)
+```
+MODIFY  src/store/api.py                      # Enrich asset_info, pack-deps/status, new tree endpoint
+MODIFY  apps/web/.../pack-detail/types.ts     # AssetInfo new fields
+MODIFY  apps/web/.../plugins/types.ts         # PackDependencyStatus new fields
+ADD     apps/web/.../sections/PackDepsSection.tsx  # Extracted from CustomPlugin
+MODIFY  apps/web/.../plugins/CustomPlugin.tsx  # Use PackDepsSection
+MODIFY  apps/web/.../plugins/CivitaiPlugin.tsx # Add PackDepsSection
+MODIFY  apps/web/.../sections/PackDependenciesSection.tsx  # Trigger words, badges
+ADD     tests/store/test_dependency_tree.py
+MODIFY  apps/web/src/i18n/locales/en.json     # New i18n keys
+MODIFY  apps/web/src/i18n/locales/cs.json     # New i18n keys
 ```
 
 ---
@@ -365,6 +398,7 @@ ADD     tests/store/test_update_impact.py
 ## 6. Related Plans
 
 - **🔗 PLAN-Updates.md** - Phase 3 propojuje dependency impact s update systémem. Po dokončení Phase 1-3 pokračujeme na Updates UI vylepšení (bulk updates, update options dialog).
+- **🔗 PLAN-Resolution.md** - Smart Resolution (extracted from Phase 5). Local scanning, AI recommendations, download orchestration.
 
 ---
 
@@ -374,13 +408,28 @@ ADD     tests/store/test_update_impact.py
 |----------|--------|
 | ~~Base model required?~~ | ✅ RESOLVED - `required: false`, smazatelný |
 | Version constraints syntax? | ODLOŽENO - zatím nepoužíváme |
-| Circular dependency detection? | Phase 2 - simple self-reference + duplicity check |
-| Smart model matching? | Phase 5 - lokální match + avatar-engine |
+| ~~Circular dependency detection?~~ | ✅ RESOLVED - Phase 2: self-reference + duplicity validátor. Phase 4: recursive per-branch cycle detection v dependency-tree endpointu |
+| ~~Smart model matching?~~ | ✅ MOVED - viz `PLAN-Resolution.md` |
 | Migration starých packů? | ROZHODNUTO - nechat `required: true`, jen nové importy budou `false` |
 
 ---
 
 ## Changelog
+
+### 2026-02-19 - v0.8.1: Review, bugfixes, integration tests
+- ✅ Bugfix: `api.py:2663` `load_lock()` → `load_pack_lock()` - enriched status endpoint vracal vždy `installed: False`
+- ✅ Bugfix: `models.py` hires_fix normalizer chyběl `"upscale_by"` mapping (Gemini AI cache)
+- ✅ Bugfix: 2 code structure testy opraveny pro i18n migrace
+- ✅ Testy přepsány: z 18 unit testů (duplikovaná logika) na 25 integračních testů s reálným Store
+- ✅ Přidáno 7 nových Phase 4 integration/smoke testů do test_dependencies_integration.py
+- ✅ Celkově: 818 passed, 0 failed, 7 skipped
+
+### 2026-02-19 - v0.8.0: Phase 4 complete + Phase 5 moved
+- ✅ Phase 4: UI Polish & Consistency
+- ✅ Backend: enriched asset_info (trigger_words, update_policy, strategy), enriched pack-deps/status, dependency-tree endpoint
+- ✅ Frontend: PackDepsSection extraction (CustomPlugin ~550→175 lines), rich status-colored cards, DependencyTree (inline in PackDepsSection.tsx), trigger words pills, update policy badges
+- ✅ Phase 5 moved to dedicated PLAN-Resolution.md
+- ✅ Full i18n coverage (en + cs)
 
 ### 2026-02-19 - v0.7.0: Phase 3 complete
 - ✅ Phase 3: Updates + Dependency Impact

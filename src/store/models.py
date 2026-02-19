@@ -616,6 +616,7 @@ class GenerationParameters(BaseModel):
             # Map nested fields
             field_map = {
                 "upscale_factor": "hires_scale",
+                "upscale_by": "hires_scale",
                 "scale": "hires_scale",
                 "upscaler": "hires_scale",  # '2x' will be converted below
                 "denoising_strength": "hires_denoise",
@@ -643,6 +644,7 @@ class GenerationParameters(BaseModel):
                 # Map nested fields
                 field_map = {
                     "upscale_factor": "hires_scale",
+                    "upscale_by": "hires_scale",
                     "scale": "hires_scale",
                     "upscaler": "hires_upscaler",
                     "denoising_strength": "hires_denoise",

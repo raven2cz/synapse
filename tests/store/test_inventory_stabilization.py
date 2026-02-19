@@ -758,9 +758,9 @@ class TestFeature28DeleteLocalForSyncedBlobs:
         assert "canFreeLocal" in content, \
             "selectedSummary should include canFreeLocal count"
 
-        # Check that Free Local button exists
-        assert "Free Local" in content, \
-            "Free Local button should exist in bulk actions"
+        # Check that Free Local button exists (via i18n key or literal)
+        assert "freeLocal" in content, \
+            "Free Local button should exist in bulk actions (via i18n key)"
 
 
 class TestFeature29RestoreFromBackupInDependencies:
@@ -1051,9 +1051,9 @@ class TestBug31InfiniteLoopBackupAndFree:
         assert "progress?.total_bytes" in content, \
             "Success message should use progress.total_bytes for actual freed amount"
 
-        # Check for fallback message when nothing was freed
-        assert "Local space already freed" in content, \
-            "Should show appropriate message when no files needed to be freed"
+        # Check for fallback message when nothing was freed (via i18n key or literal)
+        assert "alreadyFreed" in content, \
+            "Should show appropriate message when no files needed to be freed (via i18n key)"
 
 
 if __name__ == "__main__":

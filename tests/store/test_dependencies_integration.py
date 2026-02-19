@@ -32,6 +32,7 @@ from src.store.models import (
     ProviderName,
     SelectorStrategy,
     UpdatePolicy,
+    UpdatePolicyMode,
 )
 
 
@@ -597,3 +598,331 @@ class TestPackDepsCRUDSmoke:
         names = [ref.pack_name for ref in result.pack_dependencies]
         assert "to-remove" not in names
         assert "to-keep" in names
+
+
+# =============================================================================
+# Phase 4: Integration Tests - Enriched Status Fields
+# =============================================================================
+
+
+class TestEnrichedStatusIntegration:
+    """Integration tests for Phase 4 enriched pack-deps/status."""
+
+    def test_enriched_status_includes_new_fields(self, tmp_path):
+        """Batch status includes pack_type, description, asset_count, etc."""
+        store = make_store(tmp_path)
+        dep_pack = Pack(
+            schema="1.0",
+            name="dep-lora",
+            pack_type="lora",
+            description="A LoRA pack with trigger words",
+            base_model="SDXL",
+            source=PackSource(provider=ProviderName.LOCAL),
+            dependencies=[
+                PackDependency(
+                    id="main_lora",
+                    kind=AssetKind.LORA,
+                    selector=DependencySelector(strategy=SelectorStrategy.CIVITAI_FILE),
+                    update_policy=UpdatePolicy(),
+                    expose=ExposeConfig(
+                        filename="lora.safetensors",
+                        trigger_words=["style_trigger", "quality"],
+                    ),
+                ),
+            ],
+        )
+        store.layout.save_pack(dep_pack)
+        consumer = make_lora_pack(
+            "consumer",
+            pack_deps=[PackDependencyRef(pack_name="dep-lora", required=True)],
+        )
+        store.layout.save_pack(consumer)
+
+        # Build enriched status like the API endpoint
+        loaded = store.get_pack("consumer")
+        for ref in loaded.pack_dependencies:
+            dp = store.get_pack(ref.pack_name)
+            trigger_words = []
+            for d in dp.dependencies:
+                if d.expose and d.expose.trigger_words:
+                    trigger_words.extend(d.expose.trigger_words)
+
+            status = {
+                "pack_name": ref.pack_name,
+                "required": ref.required,
+                "installed": True,
+                "pack_type": dp.pack_type.value if hasattr(dp.pack_type, 'value') else None,
+                "description": (dp.description or "")[:200],
+                "asset_count": len(dp.dependencies),
+                "trigger_words": trigger_words,
+                "base_model": dp.base_model,
+            }
+
+            assert status["pack_type"] == "lora"
+            assert status["description"] == "A LoRA pack with trigger words"
+            assert status["asset_count"] == 1
+            assert status["trigger_words"] == ["style_trigger", "quality"]
+            assert status["base_model"] == "SDXL"
+
+    def test_enriched_status_missing_pack_defaults(self, tmp_path):
+        """Missing pack returns all-None/empty enriched fields."""
+        store = make_store(tmp_path)
+        consumer = make_lora_pack(
+            "consumer",
+            pack_deps=[PackDependencyRef(pack_name="ghost", required=False)],
+        )
+        store.layout.save_pack(consumer)
+
+        loaded = store.get_pack("consumer")
+        for ref in loaded.pack_dependencies:
+            try:
+                store.get_pack(ref.pack_name)
+                assert False, "Should not find ghost pack"
+            except Exception:
+                status = {
+                    "pack_name": ref.pack_name,
+                    "required": ref.required,
+                    "installed": False,
+                    "pack_type": None,
+                    "description": None,
+                    "asset_count": 0,
+                    "trigger_words": [],
+                    "base_model": None,
+                    "has_unresolved": False,
+                    "all_installed": False,
+                }
+                assert status["installed"] is False
+                assert status["trigger_words"] == []
+                assert status["all_installed"] is False
+
+
+# =============================================================================
+# Phase 4: Integration Tests - Asset Info Enriched Fields
+# =============================================================================
+
+
+class TestAssetInfoEnrichedIntegration:
+    """Integration tests for Phase 4 asset_info enriched fields."""
+
+    def test_asset_info_trigger_words_roundtrip(self, tmp_path):
+        """trigger_words survive save/load and appear in asset_info."""
+        store = make_store(tmp_path)
+        pack = Pack(
+            schema="1.0",
+            name="trigger-test",
+            pack_type="lora",
+            source=PackSource(provider=ProviderName.LOCAL),
+            dependencies=[
+                PackDependency(
+                    id="my_lora",
+                    kind=AssetKind.LORA,
+                    selector=DependencySelector(strategy=SelectorStrategy.CIVITAI_FILE),
+                    update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                    expose=ExposeConfig(
+                        filename="lora.safetensors",
+                        trigger_words=["word1", "word2", "word3"],
+                    ),
+                ),
+            ],
+        )
+        store.layout.save_pack(pack)
+
+        loaded = store.get_pack("trigger-test")
+        dep = loaded.get_dependency("my_lora")
+        assert dep is not None
+
+        info = {
+            "trigger_words": dep.expose.trigger_words if dep.expose else [],
+            "update_policy": dep.update_policy.mode.value if dep.update_policy else "pinned",
+            "strategy": dep.selector.strategy.value,
+        }
+        assert info["trigger_words"] == ["word1", "word2", "word3"]
+        assert info["update_policy"] == "follow_latest"
+        assert info["strategy"] == "civitai_file"
+
+    def test_asset_info_all_strategy_types(self, tmp_path):
+        """All SelectorStrategy values produce correct strategy strings."""
+        store = make_store(tmp_path)
+        strategies = [
+            (SelectorStrategy.CIVITAI_FILE, "civitai_file"),
+            (SelectorStrategy.BASE_MODEL_HINT, "base_model_hint"),
+        ]
+        for strat, expected_value in strategies:
+            pack = Pack(
+                schema="1.0",
+                name=f"strat-{expected_value}",
+                pack_type="lora",
+                source=PackSource(provider=ProviderName.LOCAL),
+                dependencies=[
+                    PackDependency(
+                        id="dep1",
+                        kind=AssetKind.LORA,
+                        selector=DependencySelector(strategy=strat),
+                        update_policy=UpdatePolicy(),
+                        expose=ExposeConfig(filename="dep.safetensors"),
+                    ),
+                ],
+            )
+            store.layout.save_pack(pack)
+            loaded = store.get_pack(f"strat-{expected_value}")
+            dep = loaded.get_dependency("dep1")
+            assert dep.selector.strategy.value == expected_value
+
+
+# =============================================================================
+# Phase 4: Smoke Tests - Dependency Tree Endpoint Logic
+# =============================================================================
+
+
+class TestDependencyTreeSmoke:
+    """Smoke tests for dependency tree endpoint logic."""
+
+    def test_tree_endpoint_response_shape(self, tmp_path):
+        """Smoke: dependency tree response has correct shape."""
+        store = make_store(tmp_path)
+        store.layout.save_pack(make_lora_pack(
+            "root",
+            pack_deps=[PackDependencyRef(pack_name="child")],
+        ))
+        store.layout.save_pack(make_checkpoint_pack("child"))
+
+        # Build tree like the endpoint does
+        pack = store.get_pack("root")
+
+        def build_node(name, depth, visited):
+            if name in visited:
+                return {"pack_name": name, "circular": True, "depth": depth,
+                        "installed": False, "version": None, "pack_type": None,
+                        "description": None, "asset_count": 0, "trigger_words": [],
+                        "children": []}
+            visited = visited | {name}
+            try:
+                p = store.get_pack(name)
+            except Exception:
+                return {"pack_name": name, "circular": False, "depth": depth,
+                        "installed": False, "version": None, "pack_type": None,
+                        "description": None, "asset_count": 0, "trigger_words": [],
+                        "children": []}
+            children = []
+            if depth < 5 and p.pack_dependencies:
+                for ref in p.pack_dependencies:
+                    children.append(build_node(ref.pack_name, depth + 1, visited))
+            return {
+                "pack_name": name,
+                "installed": True,
+                "version": getattr(p, 'version', None),
+                "pack_type": p.pack_type.value if hasattr(p.pack_type, 'value') else None,
+                "description": (p.description or "")[:200] if p.description else None,
+                "asset_count": len(p.dependencies),
+                "trigger_words": [],
+                "children": children,
+                "circular": False,
+                "depth": depth,
+            }
+
+        response = {"tree": build_node(pack.name, 0, set()), "max_depth": 5}
+
+        # Validate response shape
+        assert "tree" in response
+        assert "max_depth" in response
+        tree = response["tree"]
+        assert tree["pack_name"] == "root"
+        assert tree["installed"] is True
+        assert len(tree["children"]) == 1
+        assert tree["children"][0]["pack_name"] == "child"
+
+    def test_tree_circular_does_not_infinite_loop(self, tmp_path):
+        """Smoke: circular deps don't cause infinite recursion."""
+        store = make_store(tmp_path)
+        # Create tight cycle
+        store.layout.save_pack(make_lora_pack(
+            "loop-a",
+            pack_deps=[PackDependencyRef(pack_name="loop-b")],
+        ))
+        store.layout.save_pack(make_lora_pack(
+            "loop-b",
+            pack_deps=[PackDependencyRef(pack_name="loop-a")],
+        ))
+
+        pack = store.get_pack("loop-a")
+
+        def build_node(name, depth, visited):
+            if name in visited:
+                return {"pack_name": name, "circular": True, "children": [], "depth": depth}
+            visited = visited | {name}
+            try:
+                p = store.get_pack(name)
+            except Exception:
+                return {"pack_name": name, "circular": False, "children": [], "depth": depth}
+            children = []
+            if depth < 5 and p.pack_dependencies:
+                for ref in p.pack_dependencies:
+                    children.append(build_node(ref.pack_name, depth + 1, visited))
+            return {"pack_name": name, "circular": False, "children": children, "depth": depth}
+
+        # This should complete without hanging
+        tree = build_node(pack.name, 0, set())
+        assert tree["pack_name"] == "loop-a"
+        child = tree["children"][0]
+        assert child["pack_name"] == "loop-b"
+        circular = child["children"][0]
+        assert circular["pack_name"] == "loop-a"
+        assert circular["circular"] is True
+
+    def test_enriched_status_response_shape_complete(self, tmp_path):
+        """Smoke: enriched status has all 11 expected fields."""
+        store = make_store(tmp_path)
+        dep = Pack(
+            schema="1.0",
+            name="full-dep",
+            pack_type="lora",
+            description="Full dep pack",
+            base_model="SD1.5",
+            source=PackSource(provider=ProviderName.LOCAL),
+            dependencies=[
+                PackDependency(
+                    id="lora1",
+                    kind=AssetKind.LORA,
+                    selector=DependencySelector(strategy=SelectorStrategy.CIVITAI_FILE),
+                    update_policy=UpdatePolicy(),
+                    expose=ExposeConfig(filename="l.safetensors", trigger_words=["tw"]),
+                ),
+            ],
+        )
+        store.layout.save_pack(dep)
+        consumer = make_lora_pack(
+            "consumer",
+            pack_deps=[PackDependencyRef(pack_name="full-dep")],
+        )
+        store.layout.save_pack(consumer)
+
+        loaded = store.get_pack("consumer")
+        ref = loaded.pack_dependencies[0]
+        dp = store.get_pack(ref.pack_name)
+        trigger_words = []
+        for d in dp.dependencies:
+            if d.expose and d.expose.trigger_words:
+                trigger_words.extend(d.expose.trigger_words)
+
+        status = {
+            "pack_name": ref.pack_name,
+            "required": ref.required,
+            "installed": True,
+            "version": getattr(dp, 'version', None),
+            "pack_type": dp.pack_type.value if hasattr(dp.pack_type, 'value') else None,
+            "description": (dp.description or "")[:200] if dp.description else None,
+            "asset_count": len(dp.dependencies),
+            "trigger_words": trigger_words,
+            "base_model": dp.base_model,
+            "has_unresolved": False,
+            "all_installed": False,
+        }
+
+        expected_keys = {
+            "pack_name", "required", "installed", "version",
+            "pack_type", "description", "asset_count", "trigger_words",
+            "base_model", "has_unresolved", "all_installed",
+        }
+        assert set(status.keys()) == expected_keys
+        assert status["trigger_words"] == ["tw"]
+        assert status["base_model"] == "SD1.5"

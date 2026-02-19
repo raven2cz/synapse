@@ -97,6 +97,9 @@ export interface AssetInfo {
   description?: string
   required?: boolean
   is_base_model?: boolean
+  trigger_words?: string[]
+  update_policy?: 'pinned' | 'follow_latest'
+  strategy?: string
 }
 
 /**

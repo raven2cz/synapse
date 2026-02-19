@@ -229,6 +229,33 @@ function AssetDetails({ asset, isInstalled, isBackupOnly, isDownloading }: Asset
         </>
       )}
 
+      {/* Trigger words */}
+      {asset.trigger_words && asset.trigger_words.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="font-medium text-text-secondary w-16 pt-0.5">{t('pack.dependencies.detail.triggers', 'Triggers')}</span>
+          <div className="flex flex-wrap gap-1">
+            {asset.trigger_words.map((w, i) => (
+              <button
+                key={i}
+                className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs hover:bg-purple-500/30 transition-colors"
+                onClick={() => navigator.clipboard.writeText(w)}
+                title={t('pack.dependencies.detail.copyTrigger', 'Copy to clipboard')}
+              >
+                {w}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Strategy */}
+      {asset.strategy && (
+        <div className="flex items-center gap-2 text-text-muted">
+          <span className="font-medium text-text-secondary w-16">{t('pack.dependencies.detail.strategy', 'Strategy')}</span>
+          <span className="text-text-muted/80">{t(`pack.dependencies.detail.strategies.${asset.strategy}`, asset.strategy)}</span>
+        </div>
+      )}
+
       {/* Size */}
       {asset.size && (
         <div className="flex items-center gap-2 text-text-muted">
@@ -414,6 +441,12 @@ function AssetRow({
                 <>
                   <span>•</span>
                   <span>{formatSize(asset.size)}</span>
+                </>
+              )}
+              {asset.update_policy === 'follow_latest' && (
+                <>
+                  <span>•</span>
+                  <span className="text-blue-400">{t('pack.dependencies.detail.followLatest', 'Auto-update')}</span>
                 </>
               )}
             </div>

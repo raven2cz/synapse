@@ -1393,6 +1393,9 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "version_name": None,
                 "required": dep.required,
                 "is_base_model": dep.selector.strategy == SelectorStrategy.BASE_MODEL_HINT,
+                "trigger_words": dep.expose.trigger_words if dep.expose else [],
+                "update_policy": dep.update_policy.mode.value if dep.update_policy else "pinned",
+                "strategy": dep.selector.strategy.value,
             }
             
             # Get URL from selector first (always available)
@@ -2651,11 +2654,35 @@ def get_pack_dependencies_status(
         for ref in pack.pack_dependencies:
             try:
                 dep_pack = store.get_pack(ref.pack_name)
+                # Aggregate trigger words from LoRA/embedding deps
+                trigger_words = []
+                for d in dep_pack.dependencies:
+                    if d.expose and d.expose.trigger_words:
+                        trigger_words.extend(d.expose.trigger_words)
+                # Check resolution status
+                dep_lock = store.layout.load_pack_lock(dep_pack.name)
+                has_unresolved = bool(dep_lock and dep_lock.unresolved)
+                # Check if all blobs exist locally
+                all_installed = True
+                if dep_lock:
+                    for rd in dep_lock.resolved:
+                        if rd.artifact.sha256 and not store.blob_store.blob_exists(rd.artifact.sha256):
+                            all_installed = False
+                            break
+                else:
+                    all_installed = False
                 statuses.append({
                     "pack_name": ref.pack_name,
                     "required": ref.required,
                     "installed": True,
                     "version": dep_pack.version if hasattr(dep_pack, 'version') else None,
+                    "pack_type": dep_pack.pack_type.value if hasattr(dep_pack.pack_type, 'value') else str(dep_pack.pack_type) if dep_pack.pack_type else None,
+                    "description": (dep_pack.description or "")[:200] if dep_pack.description else None,
+                    "asset_count": len(dep_pack.dependencies),
+                    "trigger_words": trigger_words,
+                    "base_model": dep_pack.base_model,
+                    "has_unresolved": has_unresolved,
+                    "all_installed": all_installed,
                 })
             except Exception:
                 statuses.append({
@@ -2663,6 +2690,13 @@ def get_pack_dependencies_status(
                     "required": ref.required,
                     "installed": False,
                     "version": None,
+                    "pack_type": None,
+                    "description": None,
+                    "asset_count": 0,
+                    "trigger_words": [],
+                    "base_model": None,
+                    "has_unresolved": False,
+                    "all_installed": False,
                 })
         return statuses
     except HTTPException:
@@ -2754,6 +2788,89 @@ def remove_pack_dependency(
         raise
     except Exception as e:
         logger.error(f"[pack-deps] Error removing: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.get("/{pack_name}/dependency-tree", response_model=Dict[str, Any])
+def get_dependency_tree(
+    pack_name: str,
+    max_depth: int = 5,
+    store=Depends(require_initialized),
+):
+    """Get recursive dependency tree for a pack.
+
+    Builds a tree of pack dependencies with cycle detection.
+    Each node includes installation status, asset count, and metadata.
+    """
+    try:
+        pack = store.get_pack(pack_name)
+
+        def build_node(name: str, depth: int, visited: set) -> dict:
+            """Recursively build tree node with cycle detection."""
+            if name in visited:
+                return {
+                    "pack_name": name,
+                    "installed": False,
+                    "version": None,
+                    "pack_type": None,
+                    "description": None,
+                    "asset_count": 0,
+                    "trigger_words": [],
+                    "children": [],
+                    "circular": True,
+                    "depth": depth,
+                }
+
+            visited = visited | {name}  # New set per branch (not in-place)
+
+            try:
+                p = store.get_pack(name)
+            except Exception:
+                return {
+                    "pack_name": name,
+                    "installed": False,
+                    "version": None,
+                    "pack_type": None,
+                    "description": None,
+                    "asset_count": 0,
+                    "trigger_words": [],
+                    "children": [],
+                    "circular": False,
+                    "depth": depth,
+                }
+
+            # Aggregate trigger words
+            trigger_words = []
+            for d in p.dependencies:
+                if d.expose and d.expose.trigger_words:
+                    trigger_words.extend(d.expose.trigger_words)
+
+            # Build children (if not at max depth)
+            children = []
+            if depth < max_depth and p.pack_dependencies:
+                for ref in p.pack_dependencies:
+                    children.append(build_node(ref.pack_name, depth + 1, visited))
+
+            return {
+                "pack_name": name,
+                "installed": True,
+                "version": p.version if hasattr(p, 'version') else None,
+                "pack_type": p.pack_type.value if hasattr(p.pack_type, 'value') else str(p.pack_type) if p.pack_type else None,
+                "description": (p.description or "")[:200] if p.description else None,
+                "asset_count": len(p.dependencies),
+                "trigger_words": trigger_words,
+                "children": children,
+                "circular": False,
+                "depth": depth,
+            }
+
+        tree = build_node(pack_name, 0, set())
+        return {"tree": tree, "max_depth": max_depth}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[dependency-tree] Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

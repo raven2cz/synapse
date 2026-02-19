@@ -93,7 +93,21 @@
         "size": "Velikost:",
         "sha256": "SHA256:",
         "url": "URL:",
-        "path": "Cesta:"
+        "path": "Cesta:",
+        "triggers": "Triggery",
+        "copyTrigger": "Kopírovat do schránky",
+        "updatePolicy": "Politika",
+        "pinned": "Připnuto",
+        "followLatest": "Auto-update",
+        "strategy": "Strategie",
+        "strategies": {
+          "civitai_file": "Civitai soubor",
+          "civitai_model_latest": "Civitai nejnovější",
+          "huggingface_file": "HuggingFace soubor",
+          "base_model_hint": "Base model hint",
+          "local_file": "Lokální soubor",
+          "url_download": "URL ke stažení"
+        }
       }
     },
     "packDependencies": {
@@ -108,7 +122,21 @@
       "addButton": "Přidat",
       "status": {
         "installed": "Nainstalováno",
-        "missing": "Chybí"
+        "missing": "Chybí",
+        "required": "Povinné"
+      },
+      "assetSummary": "{{count}} assetů",
+      "allInstalled": "Vše nainstalováno",
+      "someUnresolved": "Některé neresolvované",
+      "triggerWords": "Triggery",
+      "description": "Popis",
+      "navigate": "Přejít na pack",
+      "tree": {
+        "title": "Strom závislostí",
+        "circular": "cyklická",
+        "maxDepth": "Dosažena maximální hloubka",
+        "assets": "assetů",
+        "triggers": "triggerů"
       }
     },
     "info": {

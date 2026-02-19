@@ -92,7 +92,21 @@
         "size": "Size:",
         "sha256": "SHA256:",
         "url": "URL:",
-        "path": "Path:"
+        "path": "Path:",
+        "triggers": "Triggers",
+        "copyTrigger": "Copy to clipboard",
+        "updatePolicy": "Policy",
+        "pinned": "Pinned",
+        "followLatest": "Auto-update",
+        "strategy": "Strategy",
+        "strategies": {
+          "civitai_file": "Civitai File",
+          "civitai_model_latest": "Civitai Latest",
+          "huggingface_file": "HuggingFace File",
+          "base_model_hint": "Base Model Hint",
+          "local_file": "Local File",
+          "url_download": "URL Download"
+        }
       }
     },
     "packDependencies": {
@@ -107,7 +121,21 @@
       "addButton": "Add",
       "status": {
         "installed": "Installed",
-        "missing": "Missing"
+        "missing": "Missing",
+        "required": "Required"
+      },
+      "assetSummary": "{{count}} assets",
+      "allInstalled": "All installed",
+      "someUnresolved": "Some unresolved",
+      "triggerWords": "Triggers",
+      "description": "Description",
+      "navigate": "Go to pack",
+      "tree": {
+        "title": "Dependency Tree",
+        "circular": "circular",
+        "maxDepth": "Max depth reached",
+        "assets": "assets",
+        "triggers": "triggers"
       }
     },
     "info": {

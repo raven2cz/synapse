@@ -42,6 +42,7 @@ import type {
   UpdateCheckResponse,
   UpdateResult,
 } from './types'
+import { PackDepsSection } from '../sections/PackDepsSection'
 import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
@@ -364,6 +365,7 @@ export const CivitaiPlugin: PackPlugin = {
       <div className="space-y-4">
         <UpdateCheckSection context={context} />
         <CivitaiInfoSection context={context} />
+        <PackDepsSection context={context} />
       </div>
     )
   },

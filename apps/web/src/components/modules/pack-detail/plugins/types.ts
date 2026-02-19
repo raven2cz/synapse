@@ -345,6 +345,41 @@ export interface PackDependencyStatus extends PackDependencyRef {
    * Error message if any
    */
   error?: string
+
+  /**
+   * Pack type (checkpoint, lora, etc.)
+   */
+  pack_type?: string
+
+  /**
+   * Pack description (truncated to 200 chars)
+   */
+  description?: string
+
+  /**
+   * Number of asset dependencies in the pack
+   */
+  asset_count?: number
+
+  /**
+   * Aggregated trigger words from pack's LoRA/embedding deps
+   */
+  trigger_words?: string[]
+
+  /**
+   * Base model of the pack
+   */
+  base_model?: string
+
+  /**
+   * Whether the pack has unresolved dependencies
+   */
+  has_unresolved?: boolean
+
+  /**
+   * Whether all blobs are installed locally
+   */
+  all_installed?: boolean
 }
 
 // =============================================================================
