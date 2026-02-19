@@ -778,10 +778,11 @@ class Store:
         sync: bool = False,
         ui_targets: Optional[List[str]] = None,
         ui_set: Optional[str] = None,
+        options: Optional["UpdateOptions"] = None,
     ) -> UpdateResult:
         """
         Update a pack to latest versions.
-        
+
         Args:
             pack_name: Pack to update
             dry_run: If True, only plan without applying
@@ -789,19 +790,51 @@ class Store:
             sync: If True, download new blobs and rebuild views
             ui_targets: UI targets for sync
             ui_set: UI set name for sync
-        
+            options: Optional update options (merge previews, etc.)
+
         Returns:
             UpdateResult with details
         """
         if sync and ui_targets is None:
             ui_targets = self.get_ui_targets(ui_set)
-        
+
         return self.update_service.update_pack(
             pack_name,
             dry_run,
             choose,
             sync,
             ui_targets,
+            options,
+        )
+
+    def update_batch(
+        self,
+        pack_names: List[str],
+        choose: Optional[Dict[str, Dict[str, int]]] = None,
+        sync: bool = False,
+        ui_set: Optional[str] = None,
+        options: Optional["UpdateOptions"] = None,
+    ) -> "BatchUpdateResult":
+        """
+        Apply updates to multiple packs.
+
+        Args:
+            pack_names: List of packs to update
+            choose: Nested dict: pack -> dep_id -> file_id
+            sync: If True, download blobs and rebuild views
+            ui_set: UI set name for sync
+            options: Optional update options
+
+        Returns:
+            BatchUpdateResult
+        """
+        ui_targets = self.get_ui_targets(ui_set) if sync else None
+        return self.update_service.apply_batch(
+            pack_names,
+            choose=choose,
+            sync=sync,
+            ui_targets=ui_targets,
+            options=options,
         )
     
     # =========================================================================

@@ -43,6 +43,7 @@ import type {
   UpdateResult,
 } from './types'
 import { PackDepsSection } from '../sections/PackDepsSection'
+import { UpdateOptionsDialog, type UpdateOptionsResult } from '../../packs/UpdateOptionsDialog'
 import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
@@ -59,6 +60,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
   const { pack, toast, refetch } = context
   const queryClient = useQueryClient()
   const [showDetails, setShowDetails] = useState(false)
+  const [showOptionsDialog, setShowOptionsDialog] = useState(false)
 
   // Query for update check
   const {
@@ -82,7 +84,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
 
   // Mutation for applying updates
   const applyUpdateMutation = useMutation({
-    mutationFn: async (options?: { choose?: Record<string, number> }) => {
+    mutationFn: async (applyOptions?: { choose?: Record<string, number>; options?: UpdateOptionsResult }) => {
       const res = await fetch('/api/updates/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,7 +92,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
           pack: pack.name,
           dry_run: false,
           sync: true,
-          ...options,
+          ...applyOptions,
         }),
       })
       if (!res.ok) {
@@ -104,6 +106,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
         toast.success(t('pack.plugins.civitai.updatedSuccess'))
         queryClient.invalidateQueries({ queryKey: ['pack', pack.name] })
         queryClient.invalidateQueries({ queryKey: ['update-check', pack.name] })
+        setShowOptionsDialog(false)
         refetch()
       } else if (result.already_up_to_date) {
         toast.info(t('pack.plugins.civitai.alreadyUpToDate'))
@@ -151,7 +154,7 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => applyUpdateMutation.mutate({})}
+              onClick={() => setShowOptionsDialog(true)}
               disabled={applyUpdateMutation.isPending}
             >
               {applyUpdateMutation.isPending ? (
@@ -242,6 +245,16 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
           )}
         </div>
       )}
+
+      {/* Update Options Dialog */}
+      <UpdateOptionsDialog
+        open={showOptionsDialog}
+        onClose={() => setShowOptionsDialog(false)}
+        onApply={(opts) => applyUpdateMutation.mutate({ options: opts })}
+        packName={pack.name}
+        changesCount={changesCount}
+        isApplying={applyUpdateMutation.isPending}
+      />
     </Card>
   )
 }

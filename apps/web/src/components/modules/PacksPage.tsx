@@ -4,15 +4,18 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import {
   Package, Search, Tag, Plus,
-  ZoomIn, ZoomOut, X, AlertTriangle
+  ZoomIn, ZoomOut, X, AlertTriangle, RefreshCw, Loader2
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePacksStore } from '@/stores/packsStore'
+import { useUpdatesStore } from '@/stores/updatesStore'
 import { MediaPreview } from '../ui/MediaPreview'
 import { BreathingOrb } from '../ui/BreathingOrb'
 import { Button } from '../ui/Button'
 import { CreatePackModal, type CreatePackData } from './pack-detail/modals'
+import { UpdatesPanel } from './packs/UpdatesPanel'
+import { toast } from '@/stores/toastStore'
 
 interface PackSummary {
   name: string
@@ -72,6 +75,19 @@ export function PacksPage() {
   const [cardSize, setCardSize] = useState<CardSize>('md')
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isUpdatesPanelOpen, setIsUpdatesPanelOpen] = useState(false)
+  const { isChecking, updatesCount, checkAll } = useUpdatesStore()
+
+  const handleCheckUpdates = async () => {
+    await checkAll()
+    const state = useUpdatesStore.getState()
+    if (state.updatesCount > 0) {
+      toast.info(t('updates.panel.updatesFound', { count: state.updatesCount }))
+      setIsUpdatesPanelOpen(true)
+    } else {
+      toast.success(t('updates.panel.allUpToDate'))
+    }
+  }
 
   // Fetch packs
   const { data: packs = [], isLoading, error } = useQuery<PackSummary[]>({
@@ -185,6 +201,36 @@ export function PacksPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Updates badge button */}
+          {updatesCount > 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsUpdatesPanelOpen(true)}
+              className="relative transition-all duration-200 hover:scale-105"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {t('updates.badge', { count: updatesCount })}
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {updatesCount}
+              </span>
+            </Button>
+          )}
+
+          {/* Check Updates Button */}
+          <Button
+            variant="secondary"
+            onClick={handleCheckUpdates}
+            disabled={isChecking}
+            className="transition-all duration-200"
+          >
+            {isChecking ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {t('updates.checkUpdates')}
+          </Button>
+
           {/* Create Pack Button */}
           <Button
             variant="primary"
@@ -409,6 +455,12 @@ export function PacksPage() {
         onClose={() => setIsCreateModalOpen(false)}
         onCreate={createPackMutation.mutateAsync}
         isCreating={createPackMutation.isPending}
+      />
+
+      {/* Updates Panel */}
+      <UpdatesPanel
+        open={isUpdatesPanelOpen}
+        onClose={() => setIsUpdatesPanelOpen(false)}
       />
     </div>
   )

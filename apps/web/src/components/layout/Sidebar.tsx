@@ -13,15 +13,16 @@ import {
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useDownloadsStore } from '../../stores/downloadsStore'
+import { useUpdatesStore } from '../../stores/updatesStore'
 import { Logo } from '../ui/Logo'
 import { clsx } from 'clsx'
 
 const navItems = [
-  { to: '/', icon: Package, labelKey: 'nav.packs' },
+  { to: '/', icon: Package, labelKey: 'nav.packs', badgeType: 'updates' as const },
   { to: '/inventory', icon: HardDrive, labelKey: 'nav.inventory' },
   { to: '/profiles', icon: Layers, labelKey: 'nav.profiles' },
   { to: '/browse', icon: Search, labelKey: 'nav.browse' },
-  { to: '/downloads', icon: Download, labelKey: 'nav.downloads', badge: true },
+  { to: '/downloads', icon: Download, labelKey: 'nav.downloads', badgeType: 'downloads' as const },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]
 
@@ -56,6 +57,7 @@ export function Sidebar() {
   const activeDownloads = useDownloadsStore((s) =>
     s.downloads.filter(d => d.status === 'downloading').length
   )
+  const availableUpdates = useUpdatesStore((s) => s.updatesCount)
 
   const { data: status, isError } = useQuery({
     queryKey: ['system-status'],
@@ -121,43 +123,49 @@ export function Sidebar() {
           "flex-1 space-y-1 overflow-y-auto overflow-x-hidden",
           isCollapsed ? "p-2" : "p-4"
         )}>
-          {navItems.map(({ to, icon: Icon, labelKey, badge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              title={isCollapsed ? t(labelKey) : undefined}
-              className={({ isActive }) =>
-                clsx(
-                  "relative flex items-center rounded-xl font-medium",
-                  "transition-all duration-150",
-                  isCollapsed
-                    ? "justify-center w-12 h-12 mx-auto"
-                    : "gap-3 px-4 py-3",
-                  isActive
-                    ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
-                )
-              }
-            >
-              <Icon className="w-5 h-5 shrink-0" />
-              {!isCollapsed && (
-                <span className="flex-1 text-sm whitespace-nowrap overflow-hidden">
-                  {t(labelKey)}
-                </span>
-              )}
-              {badge && activeDownloads > 0 && (
-                <span className={clsx(
-                  "bg-indigo-500 text-white font-medium rounded-full",
-                  isCollapsed
-                    ? "absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[10px]"
-                    : "px-2 py-0.5 text-xs"
-                )}>
-                  {activeDownloads}
-                </span>
-              )}
-            </NavLink>
-          ))}
+          {navItems.map(({ to, icon: Icon, labelKey, badgeType }) => {
+            const badgeCount = badgeType === 'downloads' ? activeDownloads
+              : badgeType === 'updates' ? availableUpdates : 0
+            const badgeColor = badgeType === 'updates' ? 'bg-amber-500' : 'bg-indigo-500'
+
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                title={isCollapsed ? t(labelKey) : undefined}
+                className={({ isActive }) =>
+                  clsx(
+                    "relative flex items-center rounded-xl font-medium",
+                    "transition-all duration-150",
+                    isCollapsed
+                      ? "justify-center w-12 h-12 mx-auto"
+                      : "gap-3 px-4 py-3",
+                    isActive
+                      ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'
+                  )
+                }
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                {!isCollapsed && (
+                  <span className="flex-1 text-sm whitespace-nowrap overflow-hidden">
+                    {t(labelKey)}
+                  </span>
+                )}
+                {badgeType && badgeCount > 0 && (
+                  <span className={clsx(
+                    badgeColor, "text-white font-medium rounded-full",
+                    isCollapsed
+                      ? "absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center text-[10px]"
+                      : "px-2 py-0.5 text-xs"
+                  )}>
+                    {badgeCount}
+                  </span>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
 
         {/* Footer status */}

@@ -1174,6 +1174,13 @@ class UpdatePlan(BaseModel):
     impacted_packs: List[str] = Field(default_factory=list)
 
 
+class UpdateOptions(BaseModel):
+    """Options for what to update beyond blobs."""
+    merge_previews: bool = False
+    update_description: bool = False
+    update_model_info: bool = False
+
+
 class UpdateResult(BaseModel):
     """Result of applying an update."""
     pack: str
@@ -1182,6 +1189,17 @@ class UpdateResult(BaseModel):
     synced: bool
     ui_targets: List[str] = Field(default_factory=list)
     already_up_to_date: bool = False
+    previews_merged: int = 0
+    description_updated: bool = False
+    model_info_updated: bool = False
+
+
+class BatchUpdateResult(BaseModel):
+    """Result of applying updates to multiple packs."""
+    results: Dict[str, Any] = Field(default_factory=dict)
+    total_applied: int = 0
+    total_failed: int = 0
+    total_skipped: int = 0
 
 
 class DoctorActions(BaseModel):

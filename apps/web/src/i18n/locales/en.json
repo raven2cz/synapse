@@ -1598,5 +1598,52 @@
       "compatibility": "Model Compatibility",
       "compatibilityDesc": "Analyze LoRA and checkpoint compatibility"
     }
+  },
+  "updates": {
+    "checkUpdates": "Check Updates",
+    "badge": "{{count}} updates",
+    "badge_one": "{{count}} update",
+    "panel": {
+      "title": "Available Updates",
+      "availableCount": "{{count}} packs with updates",
+      "availableCount_one": "{{count}} pack with updates",
+      "noUpdates": "No updates available",
+      "checkPrompt": "Click Check Updates to scan all packs for new versions",
+      "checkAll": "Check All Packs",
+      "checking": "Checking for updates...",
+      "recheck": "Recheck",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "changesCount": "{{count}} dependencies to update",
+      "changesCount_one": "{{count}} dependency to update",
+      "ambiguousCount": "{{count}} updates require manual selection",
+      "ambiguousCount_one": "{{count}} update requires manual selection",
+      "impactedPacks": "{{count}} packs depend on this model",
+      "impactedPacks_one": "{{count}} pack depends on this model",
+      "new": "new",
+      "applySelected": "Update Selected ({{count}})",
+      "applySuccess": "{{count}} packs updated successfully",
+      "applySuccess_one": "{{count}} pack updated successfully",
+      "applyFailed": "{{count}} packs failed to update",
+      "applyFailed_one": "{{count}} pack failed to update",
+      "updatesFound": "{{count}} packs have updates available",
+      "updatesFound_one": "{{count}} pack has updates available",
+      "allUpToDate": "All packs are up to date",
+      "allUpToDateDesc": "No new versions found on Civitai"
+    },
+    "options": {
+      "title": "Update Options",
+      "modelFiles": "Model Files",
+      "required": "Required",
+      "modelFilesDesc": "Download {{count}} updated model files",
+      "modelFilesDesc_one": "Download {{count}} updated model file",
+      "mergePreviews": "Merge Previews",
+      "mergePreviewsDesc": "Fetch new preview images from Civitai and merge with existing. Your added/removed previews are preserved.",
+      "updateDescription": "Update Description",
+      "updateDescriptionDesc": "Replace description with latest from Civitai. Your edits will be lost.",
+      "updateModelInfo": "Sync Model Info",
+      "updateModelInfoDesc": "Update trigger words, base model, and other metadata from Civitai.",
+      "apply": "Apply Update"
+    }
   }
 }

@@ -1603,5 +1603,56 @@
       "compatibility": "Kompatibilita modelů",
       "compatibilityDesc": "Analyzovat kompatibilitu LoRA a checkpointů"
     }
+  },
+  "updates": {
+    "checkUpdates": "Zkontrolovat aktualizace",
+    "badge": "{{count}} aktualizací",
+    "badge_one": "{{count}} aktualizace",
+    "badge_few": "{{count}} aktualizace",
+    "panel": {
+      "title": "Dostupné aktualizace",
+      "availableCount": "{{count}} packů s aktualizacemi",
+      "availableCount_one": "{{count}} pack s aktualizací",
+      "availableCount_few": "{{count}} packy s aktualizacemi",
+      "noUpdates": "Žádné aktualizace k dispozici",
+      "checkPrompt": "Klikněte na Zkontrolovat aktualizace pro skenování všech packů",
+      "checkAll": "Zkontrolovat všechny packy",
+      "checking": "Kontroluji aktualizace...",
+      "recheck": "Znovu",
+      "selectAll": "Vybrat vše",
+      "deselectAll": "Zrušit výběr",
+      "changesCount": "{{count}} závislostí k aktualizaci",
+      "changesCount_one": "{{count}} závislost k aktualizaci",
+      "changesCount_few": "{{count}} závislosti k aktualizaci",
+      "ambiguousCount": "{{count}} aktualizací vyžaduje ruční výběr",
+      "ambiguousCount_one": "{{count}} aktualizace vyžaduje ruční výběr",
+      "impactedPacks": "{{count}} packů závisí na tomto modelu",
+      "impactedPacks_one": "{{count}} pack závisí na tomto modelu",
+      "impactedPacks_few": "{{count}} packy závisí na tomto modelu",
+      "new": "nový",
+      "applySelected": "Aktualizovat vybrané ({{count}})",
+      "applySuccess": "{{count}} packů úspěšně aktualizováno",
+      "applySuccess_one": "{{count}} pack úspěšně aktualizován",
+      "applyFailed": "{{count}} packů se nepodařilo aktualizovat",
+      "applyFailed_one": "{{count}} pack se nepodařilo aktualizovat",
+      "updatesFound": "{{count}} packů má dostupné aktualizace",
+      "updatesFound_one": "{{count}} pack má dostupnou aktualizaci",
+      "allUpToDate": "Všechny packy jsou aktuální",
+      "allUpToDateDesc": "Na Civitai nebyly nalezeny žádné nové verze"
+    },
+    "options": {
+      "title": "Možnosti aktualizace",
+      "modelFiles": "Soubory modelu",
+      "required": "Povinné",
+      "modelFilesDesc": "Stáhnout {{count}} aktualizovaných souborů modelu",
+      "modelFilesDesc_one": "Stáhnout {{count}} aktualizovaný soubor modelu",
+      "mergePreviews": "Sloučit náhledy",
+      "mergePreviewsDesc": "Stáhnout nové náhledy z Civitai a sloučit se stávajícími. Vaše přidané/odebrané náhledy budou zachovány.",
+      "updateDescription": "Aktualizovat popis",
+      "updateDescriptionDesc": "Nahradit popis nejnovějším z Civitai. Vaše úpravy budou ztraceny.",
+      "updateModelInfo": "Synchronizovat informace o modelu",
+      "updateModelInfoDesc": "Aktualizovat trigger slova, základní model a další metadata z Civitai.",
+      "apply": "Použít aktualizaci"
+    }
   }
 }

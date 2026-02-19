@@ -1,6 +1,6 @@
 # PLAN: Synapse Updates System
 
-**Status:** 🚧 AKTIVNÍ - základ implementován, UI vylepšení čekají
+**Status:** ✅ v1.0.0 DOKONČENO - kompletní update flow (check → select → options → apply)
 **Priority:** 🔴 HIGH - klíčová feature celého balíčkovacího systému
 **Depends on:** Pack Edit (✅ done), Downloads infrastructure
 **Created:** 2026-01-31
@@ -648,47 +648,55 @@ interface ApplyBatchResponse {
 
 ## 8. Implementation Phases
 
-### Phase 1: Update Options Dialog
-- [ ] Add `UpdateOptions` model to backend
-- [ ] Modify `apply_update` to accept options
-- [ ] Add preview merge logic (`_merge_previews_from_civitai`)
-- [ ] Add description/model_info sync logic
-- [ ] Create `UpdateOptionsDialog.tsx` component
-- [ ] Integrate into CivitaiPlugin
+### Phase 1: Update Options Dialog ✅ DONE (v1.0.0)
+- [x] Add `UpdateOptions` model to backend (`src/store/models.py`)
+- [x] Modify `apply_update` to accept options (`update_service.py:update_pack()`)
+- [x] Add preview merge logic (`_merge_previews_from_civitai` - URL dedup, preserves user changes)
+- [x] Add description sync logic (`_update_description_from_civitai`)
+- [x] Add model info sync logic (`_update_model_info_from_civitai` - base_model, trigger_words)
+- [x] Create `UpdateOptionsDialog.tsx` (`apps/web/src/components/modules/packs/`)
+- [x] Integrate into CivitaiPlugin (Apply button → opens options dialog → apply with options)
+- [x] Backend tests: 26 tests in `test_update_options.py`
 
-### Phase 2: Basic Bulk Check
-- [ ] Create `updatesStore.ts`
-- [ ] Create `useUpdates.ts` hook
-- [ ] Add "Check Updates" button to PacksPage header
-- [ ] Add updates count badge
-- [ ] Toast notifications for check completion
+### Phase 2: Basic Bulk Check ✅ DONE (v1.0.0)
+- [x] Create `updatesStore.ts` (Zustand store with check/select/apply state)
+- [x] ~~Create `useUpdates.ts` hook~~ → Integrated directly into updatesStore (simpler)
+- [x] Add "Check Updates" button to PacksPage header
+- [x] Add updates count badge (amber badge on button + sidebar)
+- [x] Toast notifications for check completion
 
-### Phase 3: Updates Panel
-- [ ] Create `UpdatesPanel.tsx` (slide-out)
-- [ ] Create `UpdatesList.tsx` with checkboxes
-- [ ] Create `UpdateItem.tsx` with details
-- [ ] Implement select/deselect functionality
-- [ ] "Update Selected" action with options
+### Phase 3: Updates Panel ✅ DONE (v1.0.0)
+- [x] Create `UpdatesPanel.tsx` (slide-out panel with portal)
+- [x] ~~Create `UpdatesList.tsx` / `UpdateItem.tsx`~~ → Combined into UpdatesPanel (simpler)
+- [x] Per-pack update cards with checkboxes and expandable details
+- [x] Implement select/deselect all functionality
+- [x] "Update Selected" action calls apply-batch endpoint
+- [x] Impacted packs warning per pack
+- [x] Ambiguous count warning
 
-### Phase 4: Downloads Integration
-- [ ] Add `apply-batch` endpoint
-- [ ] Extend Downloads tab for batch updates
-- [ ] Group update downloads visually
-- [ ] Progress tracking per pack
-- [ ] Cancel support
+### Phase 4: Downloads Integration ✅ PARTIAL (v1.0.0)
+- [x] Add `apply-batch` endpoint (`POST /api/updates/apply-batch`)
+- [x] `BatchUpdateResult` model with per-pack results
+- [ ] ~~Extend Downloads tab for batch updates~~ → FUTURE: needs download queue refactoring
+- [ ] ~~Group update downloads visually~~ → FUTURE
+- [ ] ~~Progress tracking per pack~~ → FUTURE: needs WebSocket/SSE
+- [ ] ~~Cancel support~~ → FUTURE
 
-### Phase 5: Polish & UX
-- [ ] Sidebar badge for updates
-- [ ] Keyboard shortcuts (u = check updates)
-- [ ] Remember dismissed updates (localStorage)
-- [ ] "What's new" link to Civitai changelog
-- [ ] Estimated download time
+### Phase 5: Polish & UX ✅ PARTIAL (v1.0.0)
+- [x] Sidebar badge for updates (amber badge on Packs nav item)
+- [ ] ~~Keyboard shortcuts~~ → FUTURE
+- [ ] ~~Remember dismissed updates~~ → FUTURE
+- [ ] ~~"What's new" link~~ → FUTURE
+- [ ] ~~Estimated download time~~ → FUTURE
 
 ### Phase 6: Background Checking (Future)
 - [ ] Configurable auto-check interval
 - [ ] Service worker or polling approach
 - [ ] Desktop notifications (optional)
 - [ ] Auto-dismiss old notifications
+
+> **Note:** Phases 4-6 remaining items are tracked as FUTURE enhancements.
+> The core update flow (check → select → configure options → apply) is complete.
 
 ---
 
@@ -729,59 +737,84 @@ interface ApplyBatchResponse {
 
 ## 10. Testing
 
-### 10.1 Backend Unit Tests
-- [ ] `test_update_options.py` - UpdateOptions model
-- [ ] `test_preview_merge.py` - Preview merge logic
-- [ ] `test_batch_apply.py` - Batch operations
+### 10.1 Backend Unit Tests ✅ DONE
+- [x] `test_update_options.py` - 26 tests:
+  - UpdateOptions model (4 tests: defaults, individual, all, serialization)
+  - BatchUpdateResult model (3 tests: defaults, with results, serialization)
+  - UpdateResult enriched fields (3 tests: defaults, set, backward compat)
+  - Preview merge (7 tests: adds, dedup, preserves, no source, API failure, empty, video type)
+  - Description update (3 tests: updates, no change, no source)
+  - Model info update (2 tests: base model, trigger words)
+  - Batch apply (3 tests: empty list, serialization, error handling)
+  - update_pack with options (1 test: parameter accepted)
+- [x] `test_update_impact.py` - 20 tests (existing, Phase 3)
 
 ### 10.2 Frontend Unit Tests
-- [ ] `updatesStore.test.ts` - Store actions
-- [ ] `useUpdates.test.ts` - Hook behavior
-- [ ] `UpdatesList.test.tsx` - Component rendering
+- [ ] FUTURE: Store/component tests
 
 ### 10.3 Integration Tests
-- [ ] Check all → Apply selected flow
-- [ ] Preview merge with existing customizations
-- [ ] Multi-version update
-- [ ] Error handling and partial failures
+- [x] Preview merge with existing customizations (in test_update_options.py)
+- [x] Error handling and partial failures (in test_update_options.py)
+- [ ] FUTURE: Full E2E with mock Civitai
 
 ### 10.4 E2E Tests
-- [ ] Full update flow with mock Civitai
-- [ ] Bulk update multiple packs
-- [ ] Cancel mid-download
+- [ ] FUTURE: Full update flow
+- [ ] FUTURE: Bulk update multiple packs
 
 ---
 
 ## 11. Related Files
 
 ### Backend
-- `src/store/update_service.py` - Core update logic (✅ exists)
-- `src/store/api.py` - API endpoints, lines 3986-4030 (✅ exists)
-- `src/store/models.py` - UpdatePlan, UpdateResult models (✅ exists)
+- `src/store/update_service.py` - Core update logic (✅ ~700 lines, UpdateOptions, batch, preview merge)
+- `src/store/api.py` - API endpoints (✅ /check, /check-all, /apply, /apply-batch)
+- `src/store/models.py` - Models (✅ UpdatePlan, UpdateResult, UpdateOptions, BatchUpdateResult)
+- `src/store/__init__.py` - Store facade (✅ update(), update_batch())
 
 ### Frontend
-- `apps/web/src/components/modules/pack-detail/plugins/CivitaiPlugin.tsx` - Single pack UI (✅ exists)
-- `apps/web/src/components/modules/PacksPage.tsx` - Will add Check Updates button
-- `apps/web/src/components/modules/downloads/` - Downloads integration
+- `apps/web/src/components/modules/pack-detail/plugins/CivitaiPlugin.tsx` - Single pack UI (✅ with options dialog)
+- `apps/web/src/components/modules/PacksPage.tsx` - ✅ Check Updates button + badge
+- `apps/web/src/components/modules/packs/UpdatesPanel.tsx` - ✅ Bulk updates slide-out panel
+- `apps/web/src/components/modules/packs/UpdateOptionsDialog.tsx` - ✅ Update options dialog
+- `apps/web/src/stores/updatesStore.ts` - ✅ Zustand store for updates state
+- `apps/web/src/components/layout/Sidebar.tsx` - ✅ Amber badge for updates count
+
+### Tests
+- `tests/store/test_update_options.py` - ✅ 26 tests for UpdateOptions, preview merge, batch
+- `tests/store/test_update_impact.py` - ✅ 20 tests for impact analysis
 
 ### Plans
 - `plans/PLAN-Pack-Edit.md` - Pack editing features (✅ done)
 - `plans/PLAN-Model-Inventory.md` - Blob/backup management (✅ done)
-- **🔗 `plans/PLAN-Dependencies.md`** - **Úzce provázáno!** Update packu může ovlivnit pack dependencies ostatních packů. Je potřeba řešit společně:
-  - Dependency impact analysis při updatu (které packy se rozbijí?)
-  - Kaskádový update (updatovat i závislé packy)
-  - Version constraint validace před apply
-  - Upozornění uživatele na breaking changes v závislostech
+- **🔗 `plans/PLAN-Dependencies.md`** - ✅ Provázáno a DOKONČENO
+  - ✅ Dependency impact analysis při updatu (impacted_packs in UpdatePlan)
+  - ~~Kaskádový update~~ → FUTURE: needs careful design
+  - ~~Version constraint validace~~ → FUTURE
+  - ✅ Upozornění uživatele na breaking changes (impacted packs shown in UI)
 
 ---
 
 ## 12. Open Questions
 
-1. **Auto-check frequency?** - 24h? On app start? User configurable?
-2. **Notification persistence?** - How long to show update badge?
-3. **Default options?** - Should "merge previews" be on by default?
-4. **Undo support?** - Can user rollback an update? (Keep old blob?)
+1. ~~**Auto-check frequency?**~~ → FUTURE (Phase 6)
+2. ~~**Notification persistence?**~~ → Badge clears when updates are applied/dismissed
+3. ~~**Default options?**~~ → All options default to OFF (safe default, user opts in)
+4. **Undo support?** - FUTURE: Could keep old blob as backup before update
 
 ---
 
-*Last updated: 2026-02-17 - Zvýšena priorita na HIGH, základ funguje, UI fáze čekají na implementaci*
+## 13. Changelog
+
+### v1.0.0 (2026-02-19)
+- ✅ Phase 1: UpdateOptions model, preview merge, description/model_info sync
+- ✅ Phase 2: Zustand store, Check Updates button, badge
+- ✅ Phase 3: UpdatesPanel slide-out, bulk select/apply
+- ✅ Phase 4 (partial): apply-batch endpoint
+- ✅ Phase 5 (partial): Sidebar badge
+- ✅ UpdateOptionsDialog for single pack updates in CivitaiPlugin
+- ✅ i18n: EN + CS translations for all new UI
+- ✅ 26 backend tests for new features
+
+---
+
+*Last updated: 2026-02-19 - v1.0.0 DOKONČENO, kompletní update flow*

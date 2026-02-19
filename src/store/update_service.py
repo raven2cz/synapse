@@ -22,6 +22,7 @@ from .models import (
     ArtifactDownload,
     ArtifactIntegrity,
     ArtifactProvider,
+    BatchUpdateResult,
     Pack,
     PackLock,
     ProviderName,
@@ -30,6 +31,7 @@ from .models import (
     SelectorStrategy,
     UpdateCandidate,
     UpdateChange,
+    UpdateOptions,
     UpdatePlan,
     UpdatePolicyMode,
     UpdateResult,
@@ -428,23 +430,25 @@ class UpdateService:
         choose: Optional[Dict[str, int]] = None,
         sync: bool = False,
         ui_targets: Optional[List[str]] = None,
+        options: Optional[UpdateOptions] = None,
     ) -> UpdateResult:
         """
         High-level update command.
-        
+
         Args:
             pack_name: Pack to update
             dry_run: If True, only plan without applying
             choose: Optional file selections for ambiguous updates
             sync: If True, download new blobs and rebuild views
             ui_targets: UI targets for sync (required if sync=True)
-        
+            options: Optional update options (merge previews, etc.)
+
         Returns:
             UpdateResult with details
         """
         # Create plan
         plan = self.plan_update(pack_name)
-        
+
         if plan.already_up_to_date:
             return UpdateResult(
                 pack=pack_name,
@@ -454,7 +458,7 @@ class UpdateService:
                 ui_targets=[],
                 already_up_to_date=True,
             )
-        
+
         if dry_run:
             # Return plan as result
             return UpdateResult(
@@ -465,10 +469,10 @@ class UpdateService:
                 ui_targets=[],
                 already_up_to_date=False,
             )
-        
+
         # Apply update
         lock = self.apply_update(pack_name, plan, choose)
-        
+
         result = UpdateResult(
             pack=pack_name,
             applied=True,
@@ -476,12 +480,238 @@ class UpdateService:
             synced=False,
             ui_targets=ui_targets or [],
         )
-        
+
+        # Apply options (merge previews, update description, etc.)
+        if options:
+            self._apply_options(pack_name, options, result)
+
         # Sync if requested
         if sync and ui_targets:
             result.synced = self._sync_after_update(pack_name, lock, ui_targets)
-        
+
         return result
+
+    def _apply_options(
+        self,
+        pack_name: str,
+        options: UpdateOptions,
+        result: UpdateResult,
+    ) -> None:
+        """Apply update options (merge previews, update description, etc.)."""
+        pack = self.layout.load_pack(pack_name)
+        changed = False
+
+        if options.merge_previews:
+            merged_count = self._merge_previews_from_civitai(pack)
+            result.previews_merged = merged_count
+            if merged_count > 0:
+                changed = True
+
+        if options.update_description:
+            updated = self._update_description_from_civitai(pack)
+            result.description_updated = updated
+            if updated:
+                changed = True
+
+        if options.update_model_info:
+            updated = self._update_model_info_from_civitai(pack)
+            result.model_info_updated = updated
+            if updated:
+                changed = True
+
+        if changed:
+            self.layout.save_pack(pack)
+
+    def _merge_previews_from_civitai(self, pack: Pack) -> int:
+        """
+        Merge new previews from Civitai into the pack.
+
+        Keeps existing previews and adds new ones that don't exist yet.
+        Deduplicates by URL.
+
+        Returns:
+            Number of new previews added.
+        """
+        source = pack.source
+        if not source or source.provider != "civitai":
+            return 0
+
+        model_id = source.model_id
+        version_id = source.version_id
+        if not model_id:
+            return 0
+
+        try:
+            model_data = self.civitai.get_model(model_id)
+        except Exception:
+            return 0
+
+        # Find the version
+        target_version = None
+        for v in model_data.get("modelVersions", []):
+            if version_id and v["id"] == version_id:
+                target_version = v
+                break
+        if not target_version:
+            # Use latest version
+            versions = model_data.get("modelVersions", [])
+            if versions:
+                target_version = versions[0]
+
+        if not target_version:
+            return 0
+
+        # Get Civitai images
+        civitai_images = target_version.get("images", [])
+        if not civitai_images:
+            return 0
+
+        # Build set of existing preview URLs for dedup
+        existing_urls = set()
+        for p in pack.previews:
+            if hasattr(p, "url") and p.url:
+                existing_urls.add(p.url)
+
+        # Add new previews
+        added = 0
+        for img in civitai_images:
+            url = img.get("url", "")
+            if not url or url in existing_urls:
+                continue
+
+            # Derive filename from URL
+            filename = url.rsplit("/", 1)[-1].split("?")[0] if "/" in url else "preview"
+
+            # Determine media type from Civitai's type field
+            img_type = img.get("type", "image")
+            if img_type == "video":
+                media_type = "video"
+            else:
+                media_type = "image"
+
+            from .models import PreviewInfo
+            preview = PreviewInfo(
+                filename=filename,
+                url=url,
+                media_type=media_type,
+                width=img.get("width"),
+                height=img.get("height"),
+                nsfw=img.get("nsfwLevel", 0) > 1,
+                meta=img.get("meta"),
+            )
+            pack.previews.append(preview)
+            existing_urls.add(url)
+            added += 1
+
+        return added
+
+    def _update_description_from_civitai(self, pack: Pack) -> bool:
+        """Replace pack description with Civitai's latest."""
+        source = pack.source
+        if not source or source.provider != "civitai" or not source.model_id:
+            return False
+
+        try:
+            model_data = self.civitai.get_model(source.model_id)
+        except Exception:
+            return False
+
+        new_description = model_data.get("description", "")
+        if new_description and new_description != pack.description:
+            pack.description = new_description
+            return True
+        return False
+
+    def _update_model_info_from_civitai(self, pack: Pack) -> bool:
+        """Sync model info fields (trigger words, base model) from Civitai."""
+        source = pack.source
+        if not source or source.provider != "civitai" or not source.model_id:
+            return False
+
+        try:
+            model_data = self.civitai.get_model(source.model_id)
+        except Exception:
+            return False
+
+        changed = False
+        versions = model_data.get("modelVersions", [])
+
+        # Find matching version or use latest
+        target_version = None
+        if source.version_id:
+            for v in versions:
+                if v["id"] == source.version_id:
+                    target_version = v
+                    break
+        if not target_version and versions:
+            target_version = versions[0]
+
+        if not target_version:
+            return False
+
+        # Sync base model
+        new_base = target_version.get("baseModel")
+        if new_base and new_base != pack.base_model:
+            pack.base_model = new_base
+            changed = True
+
+        # Sync trigger words into dependencies that have expose.trigger_words
+        trained_words = target_version.get("trainedWords", [])
+        if trained_words:
+            for dep in pack.dependencies:
+                if dep.expose and hasattr(dep.expose, "trigger_words"):
+                    if set(dep.expose.trigger_words) != set(trained_words):
+                        dep.expose.trigger_words = trained_words
+                        changed = True
+
+        return changed
+
+    def apply_batch(
+        self,
+        pack_names: List[str],
+        choose: Optional[Dict[str, Dict[str, int]]] = None,
+        sync: bool = False,
+        ui_targets: Optional[List[str]] = None,
+        options: Optional[UpdateOptions] = None,
+    ) -> BatchUpdateResult:
+        """
+        Apply updates to multiple packs.
+
+        Args:
+            pack_names: List of packs to update
+            choose: Optional nested dict: pack_name -> dep_id -> file_id
+            sync: If True, download blobs and rebuild views
+            ui_targets: UI targets for sync
+            options: Optional update options
+
+        Returns:
+            BatchUpdateResult with per-pack results
+        """
+        batch_result = BatchUpdateResult()
+
+        for pack_name in pack_names:
+            try:
+                pack_choose = choose.get(pack_name) if choose else None
+                result = self.update_pack(
+                    pack_name,
+                    choose=pack_choose,
+                    sync=sync,
+                    ui_targets=ui_targets,
+                    options=options,
+                )
+                batch_result.results[pack_name] = result.model_dump()
+                if result.applied:
+                    batch_result.total_applied += 1
+                elif result.already_up_to_date:
+                    batch_result.total_skipped += 1
+            except Exception as e:
+                batch_result.results[pack_name] = {
+                    "error": str(e),
+                    "applied": False,
+                }
+                batch_result.total_failed += 1
+
+        return batch_result
     
     def _sync_after_update(
         self,

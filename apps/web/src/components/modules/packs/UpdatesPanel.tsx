@@ -1,0 +1,338 @@
+/**
+ * UpdatesPanel - Slide-out panel showing available pack updates.
+ *
+ * Displays check results from updatesStore with:
+ * - Per-pack update cards with selection checkboxes
+ * - Change details (old → new version per dependency)
+ * - Impacted packs warning
+ * - Select all / Deselect all
+ * - Apply Selected button with options
+ * - Batch progress tracking
+ */
+
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { createPortal } from 'react-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  X,
+  RefreshCw,
+  Download,
+  Loader2,
+  CheckSquare,
+  Square,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+  Layers,
+  Package,
+  Check,
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { Button } from '@/components/ui/Button'
+import { useUpdatesStore, type UpdatePlanEntry } from '@/stores/updatesStore'
+import { toast } from '@/stores/toastStore'
+
+interface UpdatesPanelProps {
+  open: boolean
+  onClose: () => void
+}
+
+function UpdateItem({
+  packName,
+  plan,
+  selected,
+  applying,
+  onToggle,
+}: {
+  packName: string
+  plan: UpdatePlanEntry
+  selected: boolean
+  applying: boolean
+  onToggle: () => void
+}) {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(false)
+  const changesCount = plan.changes.length
+  const ambiguousCount = plan.ambiguous.length
+
+  return (
+    <div
+      className={clsx(
+        'rounded-xl border transition-colors',
+        selected
+          ? 'bg-synapse/5 border-synapse/30'
+          : 'bg-slate-dark/50 border-slate-mid/30',
+        applying && 'opacity-60 pointer-events-none'
+      )}
+    >
+      <div className="flex items-center gap-3 p-4">
+        {/* Checkbox */}
+        <button
+          onClick={onToggle}
+          className="shrink-0 text-text-muted hover:text-synapse transition-colors"
+          disabled={applying}
+        >
+          {selected ? (
+            <CheckSquare className="w-5 h-5 text-synapse" />
+          ) : (
+            <Square className="w-5 h-5" />
+          )}
+        </button>
+
+        {/* Pack info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-text-muted shrink-0" />
+            <span className="font-medium text-text-primary truncate">{packName}</span>
+          </div>
+          <p className="text-sm text-text-muted mt-0.5">
+            {t('updates.panel.changesCount', { count: changesCount + ambiguousCount })}
+          </p>
+        </div>
+
+        {/* Status / loading */}
+        {applying ? (
+          <Loader2 className="w-5 h-5 text-synapse animate-spin shrink-0" />
+        ) : (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1.5 rounded-lg hover:bg-slate-mid/50 text-text-muted transition-colors shrink-0"
+          >
+            {expanded ? (
+              <ChevronDown className="w-4 h-4" />
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </button>
+        )}
+      </div>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="px-4 pb-4 space-y-2 border-t border-slate-mid/20 pt-3">
+          {plan.changes.map((change, idx) => (
+            <div key={idx} className="p-2.5 bg-slate-900/50 rounded-lg text-sm">
+              <p className="font-mono text-synapse text-xs">{change.dependency_id}</p>
+              <div className="flex items-center gap-2 mt-1 text-text-muted text-xs">
+                <span>{String((change.old as Record<string, unknown>)?.provider_version_id || '?')}</span>
+                <span className="text-text-muted/50">→</span>
+                <span className="text-pulse">{String((change.new as Record<string, unknown>)?.provider_version_id || t('updates.panel.new'))}</span>
+              </div>
+            </div>
+          ))}
+
+          {ambiguousCount > 0 && (
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-400">
+                {t('updates.panel.ambiguousCount', { count: ambiguousCount })}
+              </p>
+            </div>
+          )}
+
+          {plan.impacted_packs.length > 0 && (
+            <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-1.5">
+                <Layers className="w-3.5 h-3.5 text-blue-400" />
+                <p className="text-xs font-medium text-blue-400">
+                  {t('updates.panel.impactedPacks', { count: plan.impacted_packs.length })}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {plan.impacted_packs.map((name) => (
+                  <span
+                    key={name}
+                    className="text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const {
+    isChecking,
+    availableUpdates,
+    selectedPacks,
+    applyingPacks,
+    updatesCount,
+    checkAll,
+    selectAll,
+    deselectAll,
+    togglePack,
+    applySelected,
+  } = useUpdatesStore()
+
+  const [isApplying, setIsApplying] = useState(false)
+  const selectedCount = selectedPacks.size
+  const packNames = Object.keys(availableUpdates)
+  const allSelected = selectedCount === packNames.length && packNames.length > 0
+
+  const handleApplySelected = async () => {
+    if (selectedCount === 0) return
+    setIsApplying(true)
+
+    try {
+      const result = await applySelected()
+      if (result.applied > 0) {
+        toast.success(t('updates.panel.applySuccess', { count: result.applied }))
+        queryClient.invalidateQueries({ queryKey: ['packs'] })
+      }
+      if (result.failed > 0) {
+        toast.error(t('updates.panel.applyFailed', { count: result.failed }))
+      }
+    } finally {
+      setIsApplying(false)
+    }
+  }
+
+  const handleCheckAll = async () => {
+    await checkAll()
+    const state = useUpdatesStore.getState()
+    if (state.updatesCount > 0) {
+      toast.info(t('updates.panel.updatesFound', { count: state.updatesCount }))
+    } else {
+      toast.success(t('updates.panel.allUpToDate'))
+    }
+  }
+
+  if (!open) return null
+
+  const panel = (
+    <div className="fixed inset-0 z-[80] flex justify-end">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <div className="relative w-full max-w-md bg-slate-900 border-l border-slate-mid/50 flex flex-col shadow-2xl animate-slide-in-right">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-mid/50">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-synapse/20 rounded-lg">
+              <RefreshCw className="w-5 h-5 text-synapse" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-text-primary">{t('updates.panel.title')}</h2>
+              <p className="text-xs text-text-muted">
+                {updatesCount > 0
+                  ? t('updates.panel.availableCount', { count: updatesCount })
+                  : t('updates.panel.noUpdates')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-slate-mid transition-colors text-text-muted"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Check button when no updates */}
+          {updatesCount === 0 && !isChecking && (
+            <div className="text-center py-8">
+              <RefreshCw className="w-12 h-12 text-slate-mid mx-auto mb-3" />
+              <p className="text-text-muted mb-4">{t('updates.panel.checkPrompt')}</p>
+              <Button variant="primary" onClick={handleCheckAll}>
+                <RefreshCw className="w-4 h-4" />
+                {t('updates.panel.checkAll')}
+              </Button>
+            </div>
+          )}
+
+          {/* Checking spinner */}
+          {isChecking && (
+            <div className="text-center py-8">
+              <Loader2 className="w-8 h-8 text-synapse animate-spin mx-auto mb-3" />
+              <p className="text-text-muted">{t('updates.panel.checking')}</p>
+            </div>
+          )}
+
+          {/* Select all / Deselect all */}
+          {updatesCount > 0 && !isChecking && (
+            <div className="flex items-center justify-between">
+              <button
+                onClick={allSelected ? deselectAll : selectAll}
+                className="flex items-center gap-2 text-sm text-text-muted hover:text-text-primary transition-colors"
+              >
+                {allSelected ? (
+                  <CheckSquare className="w-4 h-4 text-synapse" />
+                ) : (
+                  <Square className="w-4 h-4" />
+                )}
+                {allSelected ? t('updates.panel.deselectAll') : t('updates.panel.selectAll')}
+              </button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleCheckAll}
+                disabled={isChecking}
+              >
+                <RefreshCw className={clsx('w-3.5 h-3.5', isChecking && 'animate-spin')} />
+                {t('updates.panel.recheck')}
+              </Button>
+            </div>
+          )}
+
+          {/* Update items */}
+          {packNames.map((packName) => (
+            <UpdateItem
+              key={packName}
+              packName={packName}
+              plan={availableUpdates[packName]}
+              selected={selectedPacks.has(packName)}
+              applying={applyingPacks.has(packName)}
+              onToggle={() => togglePack(packName)}
+            />
+          ))}
+
+          {/* All up to date after check */}
+          {updatesCount === 0 && !isChecking && useUpdatesStore.getState().lastChecked && (
+            <div className="text-center py-8">
+              <Check className="w-12 h-12 text-green-400 mx-auto mb-3" />
+              <p className="text-text-primary font-medium">{t('updates.panel.allUpToDate')}</p>
+              <p className="text-sm text-text-muted mt-1">{t('updates.panel.allUpToDateDesc')}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer with apply button */}
+        {updatesCount > 0 && (
+          <div className="p-4 border-t border-slate-mid/50 bg-slate-900/95">
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={handleApplySelected}
+              disabled={selectedCount === 0 || isApplying}
+            >
+              {isApplying ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {t('updates.panel.applySelected', { count: selectedCount })}
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  return createPortal(panel, document.body)
+}

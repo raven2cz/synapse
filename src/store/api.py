@@ -77,6 +77,13 @@ class BackRequest(BaseModel):
     sync: bool = False
 
 
+class UpdateOptionsRequest(BaseModel):
+    """Update options for what to sync beyond blobs."""
+    merge_previews: bool = False
+    update_description: bool = False
+    update_model_info: bool = False
+
+
 class UpdateRequest(BaseModel):
     """Request for update command."""
     pack: str
@@ -84,6 +91,16 @@ class UpdateRequest(BaseModel):
     sync: bool = True
     ui_set: Optional[str] = None
     choose: Optional[Dict[str, int]] = None
+    options: Optional[UpdateOptionsRequest] = None
+
+
+class BatchUpdateRequest(BaseModel):
+    """Request for batch update command."""
+    packs: List[str]
+    sync: bool = True
+    ui_set: Optional[str] = None
+    choose: Optional[Dict[str, Dict[str, int]]] = None
+    options: Optional[UpdateOptionsRequest] = None
 
 
 class DoctorRequest(BaseModel):
@@ -4933,12 +4950,51 @@ def apply_update(
 ):
     """Apply update to a pack."""
     try:
+        # Convert options if provided
+        update_options = None
+        if request.options:
+            from .models import UpdateOptions
+            update_options = UpdateOptions(
+                merge_previews=request.options.merge_previews,
+                update_description=request.options.update_description,
+                update_model_info=request.options.update_model_info,
+            )
+
         result = store.update(
             request.pack,
             dry_run=request.dry_run,
             choose=request.choose,
             sync=request.sync,
             ui_set=request.ui_set,
+            options=update_options,
+        )
+        return result.model_dump()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@updates_router.post("/apply-batch", response_model=Dict[str, Any])
+def apply_batch_update(
+    request: BatchUpdateRequest,
+    store=Depends(require_initialized),
+):
+    """Apply updates to multiple packs."""
+    try:
+        update_options = None
+        if request.options:
+            from .models import UpdateOptions
+            update_options = UpdateOptions(
+                merge_previews=request.options.merge_previews,
+                update_description=request.options.update_description,
+                update_model_info=request.options.update_model_info,
+            )
+
+        result = store.update_batch(
+            request.packs,
+            choose=request.choose,
+            sync=request.sync,
+            ui_set=request.ui_set,
+            options=update_options,
         )
         return result.model_dump()
     except Exception as e:
