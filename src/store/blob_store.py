@@ -109,23 +109,32 @@ class BlobStore:
         timeout: int = DEFAULT_TIMEOUT,
         max_workers: int = DEFAULT_MAX_WORKERS,
         api_key: Optional[str] = None,
+        auth_providers: Optional[List] = None,
     ):
         """
         Initialize blob store.
-        
+
         Args:
             layout: Store layout manager
             chunk_size: Download chunk size
             timeout: Download timeout in seconds
             max_workers: Max concurrent downloads
-            api_key: Optional API key for authenticated downloads (Civitai)
+            api_key: Optional API key (deprecated, use auth_providers)
+            auth_providers: List of DownloadAuthProvider instances for URL auth injection
         """
         self.layout = layout
         self.chunk_size = chunk_size
         self.timeout = timeout
         self.max_workers = max_workers
         self.api_key = api_key or os.environ.get("CIVITAI_API_KEY")
-        
+
+        if auth_providers is not None:
+            self._auth_providers = auth_providers
+        else:
+            # Default: create Civitai auth provider for backward compatibility
+            from .download_auth import CivitaiAuthProvider
+            self._auth_providers = [CivitaiAuthProvider(self.api_key)]
+
         self._session: Optional[requests.Session] = None
     
     @property
@@ -246,15 +255,14 @@ class BlobStore:
         
         part_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Add API key for Civitai downloads
+        # Apply auth provider for this URL
         download_url = url
-        if "civitai.com" in url:
-            if self.api_key:
-                separator = "&" if "?" in url else "?"
-                download_url = f"{url}{separator}token={self.api_key}"
-                logger.debug(f"[BlobStore] Using Civitai API key for download")
-            else:
-                logger.warning(f"[BlobStore] No Civitai API key configured! Some downloads may fail.")
+        matched_auth = None
+        for auth_provider in self._auth_providers:
+            if auth_provider.matches(url):
+                download_url = auth_provider.authenticate_url(url)
+                matched_auth = auth_provider
+                break
         
         try:
             # Check for resume
@@ -286,15 +294,16 @@ class BlobStore:
             
             response.raise_for_status()
 
-            # Check Content-Type - Civitai error pages return text/html
+            # Check Content-Type - error pages return text/html instead of binary
             content_type = response.headers.get("content-type", "")
             if "text/html" in content_type.lower():
                 logger.error(f"[BlobStore] Received HTML content-type: {content_type}")
-                raise DownloadError(
-                    f"Download failed: server returned HTML error page instead of file. "
-                    f"This usually means authentication is required. "
-                    f"Please configure your Civitai API key in Settings."
+                error_msg = (
+                    matched_auth.auth_error_message()
+                    if matched_auth
+                    else f"Download failed: server returned HTML instead of file for {url}"
                 )
+                raise DownloadError(error_msg)
 
             # Get total size
             content_length = response.headers.get("content-length")

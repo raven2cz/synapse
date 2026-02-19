@@ -91,9 +91,11 @@ from .models import (
     UseResult,
 )
 from .backup_service import BackupService, BackupError, BackupNotConnectedError, BackupNotEnabledError
+from .civitai_update_provider import CivitaiUpdateProvider
 from .inventory_service import InventoryService
 from .pack_service import PackService
 from .profile_service import ProfileService
+from .update_provider import UpdateCheckResult, UpdateProvider
 from .update_service import UpdateService
 from .view_builder import BuildReport, ViewBuilder, ViewBuildError
 
@@ -112,6 +114,11 @@ __all__ = [
     "ProfileService",
     "UpdateService",
     "InventoryService",
+
+    # Update Provider
+    "UpdateProvider",
+    "UpdateCheckResult",
+    "CivitaiUpdateProvider",
     
     # Models
     "Pack",
@@ -209,11 +216,14 @@ class Store:
             self.blob_store,
             self.view_builder,
         )
+        civitai_provider = CivitaiUpdateProvider(civitai_client)
         self.update_service = UpdateService(
             self.layout,
             self.blob_store,
             self.view_builder,
-            civitai_client,
+            providers={
+                SelectorStrategy.CIVITAI_MODEL_LATEST: civitai_provider,
+            },
         )
         # BackupService initialized with default config, updated when store loads
         self.backup_service = BackupService(

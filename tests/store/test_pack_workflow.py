@@ -35,20 +35,20 @@ def test_e2e_resolve_install_flow(pack_service, mock_layout, mock_blob_store):
     pack_name = "test_pack_workflow"
     dep_id = "main_checkpoint"
     
-    # Mock download to avoid network calls
-    with patch("src.store.pack_service.PackService._resolve_url") as mock_resolve, \
-         patch("src.store.pack_service.PackService._download_previews", return_value=[]):
-        
-        # Setup mock resolution return
-        from src.store.models import ResolvedArtifact, ArtifactProvider, ArtifactDownload, ArtifactIntegrity
-        mock_resolve.return_value = ResolvedArtifact(
-            kind=AssetKind.CHECKPOINT,
-            sha256="test_sha256_hash_123",
-            size_bytes=1024,
-            provider=ArtifactProvider(name=ProviderName.URL),
-            download=ArtifactDownload(urls=["http://example.com/model.safetensors"]),
-            integrity=ArtifactIntegrity(sha256_verified=True)
-        )
+    # Mock download to avoid network calls - inject mock resolver via registry
+    from src.store.models import ResolvedArtifact, ArtifactProvider, ArtifactDownload, ArtifactIntegrity
+    mock_resolver = MagicMock()
+    mock_resolver.resolve.return_value = ResolvedArtifact(
+        kind=AssetKind.CHECKPOINT,
+        sha256="test_sha256_hash_123",
+        size_bytes=1024,
+        provider=ArtifactProvider(name=ProviderName.URL),
+        download=ArtifactDownload(urls=["http://example.com/model.safetensors"]),
+        integrity=ArtifactIntegrity(sha256_verified=True)
+    )
+    pack_service._resolvers = {SelectorStrategy.URL_DOWNLOAD: mock_resolver}
+
+    with patch("src.store.pack_service.PackService._download_previews", return_value=[]):
 
         pack = Pack(
             name=pack_name,

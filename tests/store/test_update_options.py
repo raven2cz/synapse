@@ -8,9 +8,9 @@ Unit tests:
 - URL canonicalization for preview dedup
 
 Integration tests:
-- _merge_previews_from_civitai() with mock Civitai
-- _update_description_from_civitai() with mock Civitai
-- _update_model_info_from_civitai() with mock Civitai
+- CivitaiUpdateProvider.merge_previews() with mock Civitai
+- CivitaiUpdateProvider.update_description() with mock Civitai
+- CivitaiUpdateProvider.update_model_info() with mock Civitai
 - apply_batch() with multiple packs
 - update_pack() with options parameter
 
@@ -48,7 +48,20 @@ from src.store.models import (
     UpdatePolicy,
     UpdateResult,
 )
+from src.store.civitai_update_provider import CivitaiUpdateProvider
 from src.store.update_service import UpdateService
+
+
+def _make_service_with_civitai(mock_civitai=None, mock_layout=None):
+    """Helper: create UpdateService with CivitaiUpdateProvider."""
+    civitai = mock_civitai or MagicMock()
+    provider = CivitaiUpdateProvider(civitai)
+    return UpdateService(
+        layout=mock_layout or MagicMock(),
+        blob_store=MagicMock(),
+        view_builder=MagicMock(),
+        providers={SelectorStrategy.CIVITAI_MODEL_LATEST: provider},
+    ), provider
 
 
 # =============================================================================
@@ -159,12 +172,12 @@ class TestUpdateResultEnriched:
 
 
 # =============================================================================
-# Integration Tests: Preview Merge
+# Integration Tests: Preview Merge (via CivitaiUpdateProvider)
 # =============================================================================
 
 
 class TestPreviewMerge:
-    """Tests for _merge_previews_from_civitai()."""
+    """Tests for CivitaiUpdateProvider.merge_previews()."""
 
     def _make_pack(self, previews=None):
         """Create a test pack with Civitai source."""
@@ -179,10 +192,8 @@ class TestPreviewMerge:
             previews=previews or [],
         )
 
-    def _make_service(self, civitai_response=None):
-        """Create an UpdateService with mocked Civitai client."""
-        from src.store.update_service import UpdateService
-
+    def _make_provider(self, civitai_response=None):
+        """Create a CivitaiUpdateProvider with mocked client."""
         mock_civitai = MagicMock()
         mock_civitai.get_model.return_value = civitai_response or {
             "modelVersions": [
@@ -195,21 +206,14 @@ class TestPreviewMerge:
                 }
             ]
         }
-
-        service = UpdateService(
-            layout=MagicMock(),
-            blob_store=MagicMock(),
-            view_builder=MagicMock(),
-            civitai_client=mock_civitai,
-        )
-        return service
+        return CivitaiUpdateProvider(mock_civitai)
 
     def test_merge_adds_new_previews(self):
         """New previews should be added to pack."""
         pack = self._make_pack()
-        service = self._make_service()
+        provider = self._make_provider()
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 2
         assert len(pack.previews) == 2
 
@@ -218,9 +222,9 @@ class TestPreviewMerge:
         pack = self._make_pack(previews=[
             PreviewInfo(filename="1.jpg", url="https://civitai.com/img/1.jpg"),
         ])
-        service = self._make_service()
+        provider = self._make_provider()
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 1  # Only img/2.jpg is new
         assert len(pack.previews) == 2
 
@@ -229,9 +233,9 @@ class TestPreviewMerge:
         pack = self._make_pack(previews=[
             PreviewInfo(filename="custom.jpg", url="https://example.com/custom.jpg"),
         ])
-        service = self._make_service()
+        provider = self._make_provider()
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 2
         assert len(pack.previews) == 3
         assert pack.previews[0].url == "https://example.com/custom.jpg"
@@ -243,40 +247,34 @@ class TestPreviewMerge:
             pack_type=AssetKind.CHECKPOINT,
             source=PackSource(provider=ProviderName.LOCAL),
         )
-        service = self._make_service()
+        provider = self._make_provider()
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 0
 
     def test_merge_api_failure(self):
         """API failure should return 0 gracefully."""
         pack = self._make_pack()
 
-        from src.store.update_service import UpdateService
         mock_civitai = MagicMock()
         mock_civitai.get_model.side_effect = Exception("API Error")
-        service = UpdateService(
-            layout=MagicMock(),
-            blob_store=MagicMock(),
-            view_builder=MagicMock(),
-            civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 0
 
     def test_merge_empty_images(self):
         """Version with no images should return 0."""
         pack = self._make_pack()
-        service = self._make_service({"modelVersions": [{"id": 100, "images": []}]})
+        provider = self._make_provider({"modelVersions": [{"id": 100, "images": []}]})
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 0
 
     def test_merge_sets_media_type(self):
         """Video previews should get media_type='video'."""
         pack = self._make_pack()
-        service = self._make_service({
+        provider = self._make_provider({
             "modelVersions": [
                 {
                     "id": 100,
@@ -287,22 +285,20 @@ class TestPreviewMerge:
             ]
         })
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 1
         assert pack.previews[0].media_type == "video"
 
 
 # =============================================================================
-# Integration Tests: Description Update
+# Integration Tests: Description Update (via CivitaiUpdateProvider)
 # =============================================================================
 
 
 class TestDescriptionUpdate:
-    """Tests for _update_description_from_civitai()."""
+    """Tests for CivitaiUpdateProvider.update_description()."""
 
     def test_updates_description(self):
-        from src.store.update_service import UpdateService
-
         pack = Pack(
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
@@ -312,18 +308,13 @@ class TestDescriptionUpdate:
 
         mock_civitai = MagicMock()
         mock_civitai.get_model.return_value = {"description": "New description from Civitai"}
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        updated = service._update_description_from_civitai(pack)
+        updated = provider.update_description(pack)
         assert updated is True
         assert pack.description == "New description from Civitai"
 
     def test_no_change_same_description(self):
-        from src.store.update_service import UpdateService
-
         pack = Pack(
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
@@ -333,42 +324,32 @@ class TestDescriptionUpdate:
 
         mock_civitai = MagicMock()
         mock_civitai.get_model.return_value = {"description": "Same description"}
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        updated = service._update_description_from_civitai(pack)
+        updated = provider.update_description(pack)
         assert updated is False
 
     def test_no_source(self):
-        from src.store.update_service import UpdateService
-
         pack = Pack(
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
             source=PackSource(provider=ProviderName.LOCAL),
         )
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=MagicMock(),
-        )
+        provider = CivitaiUpdateProvider(MagicMock())
 
-        updated = service._update_description_from_civitai(pack)
+        updated = provider.update_description(pack)
         assert updated is False
 
 
 # =============================================================================
-# Integration Tests: Model Info Update
+# Integration Tests: Model Info Update (via CivitaiUpdateProvider)
 # =============================================================================
 
 
 class TestModelInfoUpdate:
-    """Tests for _update_model_info_from_civitai()."""
+    """Tests for CivitaiUpdateProvider.update_model_info()."""
 
     def test_updates_base_model(self):
-        from src.store.update_service import UpdateService
-
         pack = Pack(
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
@@ -380,18 +361,13 @@ class TestModelInfoUpdate:
         mock_civitai.get_model.return_value = {
             "modelVersions": [{"id": 100, "baseModel": "SDXL 1.0", "trainedWords": []}]
         }
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        updated = service._update_model_info_from_civitai(pack)
+        updated = provider.update_model_info(pack)
         assert updated is True
         assert pack.base_model == "SDXL 1.0"
 
     def test_updates_trigger_words(self):
-        from src.store.update_service import UpdateService
-
         dep = PackDependency(
             id="lora",
             kind=AssetKind.LORA,
@@ -409,12 +385,9 @@ class TestModelInfoUpdate:
         mock_civitai.get_model.return_value = {
             "modelVersions": [{"id": 100, "baseModel": None, "trainedWords": ["new_word", "another"]}]
         }
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        updated = service._update_model_info_from_civitai(pack)
+        updated = provider.update_model_info(pack)
         assert updated is True
         assert set(pack.dependencies[0].expose.trigger_words) == {"new_word", "another"}
 
@@ -428,8 +401,6 @@ class TestBatchApply:
     """Tests for apply_batch()."""
 
     def test_batch_empty_list(self):
-        from src.store.update_service import UpdateService
-
         service = UpdateService(
             layout=MagicMock(), blob_store=MagicMock(),
             view_builder=MagicMock(),
@@ -451,8 +422,6 @@ class TestBatchApply:
         assert data["total_applied"] == 1
 
     def test_batch_handles_errors_gracefully(self):
-        from src.store.update_service import UpdateService
-
         mock_layout = MagicMock()
         mock_layout.load_pack.side_effect = Exception("Pack not found")
 
@@ -477,8 +446,6 @@ class TestUpdatePackWithOptions:
 
     def test_options_parameter_accepted(self):
         """update_pack() should accept options without error."""
-        from src.store.update_service import UpdateService
-
         mock_layout = MagicMock()
         pack = Pack(
             name="test-pack",
@@ -501,39 +468,39 @@ class TestUpdatePackWithOptions:
 
 
 # =============================================================================
-# Unit Tests: URL Canonicalization
+# Unit Tests: URL Canonicalization (on CivitaiUpdateProvider)
 # =============================================================================
 
 
 class TestURLCanonicalization:
-    """Tests for _canonicalize_url() used in preview dedup."""
+    """Tests for CivitaiUpdateProvider._canonicalize_url() used in preview dedup."""
 
     def test_strips_query_params(self):
-        result = UpdateService._canonicalize_url(
+        result = CivitaiUpdateProvider._canonicalize_url(
             "https://civitai.com/img/1.jpg?width=450&anim=false"
         )
         assert result == "https://civitai.com/img/1.jpg"
 
     def test_strips_fragment(self):
-        result = UpdateService._canonicalize_url(
+        result = CivitaiUpdateProvider._canonicalize_url(
             "https://civitai.com/img/1.jpg#section"
         )
         assert result == "https://civitai.com/img/1.jpg"
 
     def test_strips_both(self):
-        result = UpdateService._canonicalize_url(
+        result = CivitaiUpdateProvider._canonicalize_url(
             "https://civitai.com/img/1.jpg?w=450#top"
         )
         assert result == "https://civitai.com/img/1.jpg"
 
     def test_no_params_unchanged(self):
-        result = UpdateService._canonicalize_url(
+        result = CivitaiUpdateProvider._canonicalize_url(
             "https://civitai.com/img/1.jpg"
         )
         assert result == "https://civitai.com/img/1.jpg"
 
     def test_empty_string(self):
-        assert UpdateService._canonicalize_url("") == ""
+        assert CivitaiUpdateProvider._canonicalize_url("") == ""
 
     def test_dedup_with_query_variants(self):
         """Same base URL with different query params should dedup."""
@@ -567,12 +534,9 @@ class TestURLCanonicalization:
                 ],
             }]
         }
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        provider = CivitaiUpdateProvider(mock_civitai)
 
-        added = service._merge_previews_from_civitai(pack)
+        added = provider.merge_previews(pack)
         assert added == 1  # Only img/2.jpg is new, img/1.jpg deduped
         assert len(pack.previews) == 2
 
@@ -656,10 +620,7 @@ class TestFullUpdateFlow:
             }],
         }
 
-        service = UpdateService(
-            layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        service, _ = _make_service_with_civitai(mock_civitai, mock_layout)
 
         plan = service.plan_update("test-pack")
         assert plan.already_up_to_date is False
@@ -685,10 +646,7 @@ class TestFullUpdateFlow:
             }],
         }
 
-        service = UpdateService(
-            layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        service, _ = _make_service_with_civitai(mock_civitai, mock_layout)
 
         plan = service.plan_update("test-pack")
         assert plan.already_up_to_date is True
@@ -696,15 +654,14 @@ class TestFullUpdateFlow:
 
     def test_apply_updates_lock(self):
         """Apply should update the lock with new version info."""
+        pack = self._make_updatable_pack()
         lock = self._make_lock()
 
         mock_layout = MagicMock()
         mock_layout.load_pack_lock.return_value = lock
+        mock_layout.load_pack.return_value = pack
 
-        service = UpdateService(
-            layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(),
-        )
+        service, _ = _make_service_with_civitai(mock_layout=mock_layout)
 
         plan = UpdatePlan(
             pack="test-pack",
@@ -741,10 +698,7 @@ class TestFullUpdateFlow:
     def test_is_updatable_with_follow_latest(self):
         """Pack with follow_latest policy should be updatable."""
         pack = self._make_updatable_pack()
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(),
-        )
+        service, _ = _make_service_with_civitai()
         assert service.is_updatable(pack) is True
 
     def test_is_not_updatable_without_policy(self):
@@ -765,10 +719,7 @@ class TestFullUpdateFlow:
                 ),
             ],
         )
-        service = UpdateService(
-            layout=MagicMock(), blob_store=MagicMock(),
-            view_builder=MagicMock(),
-        )
+        service, _ = _make_service_with_civitai()
         assert service.is_updatable(pack) is False
 
 
@@ -786,6 +737,14 @@ class TestDescriptionPreservation:
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
             source=PackSource(provider=ProviderName.CIVITAI, model_id=123),
+            dependencies=[
+                PackDependency(
+                    id="main",
+                    kind=AssetKind.CHECKPOINT,
+                    selector=DependencySelector(strategy=SelectorStrategy.CIVITAI_MODEL_LATEST),
+                    expose=ExposeConfig(filename="model.safetensors"),
+                ),
+            ],
             description="My custom description",
         )
 
@@ -796,10 +755,7 @@ class TestDescriptionPreservation:
         mock_civitai.get_model.return_value = {
             "description": "New Civitai description"
         }
-        service = UpdateService(
-            layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        service, _ = _make_service_with_civitai(mock_civitai, mock_layout)
 
         result = UpdateResult(
             pack="test-pack", applied=True, lock_updated=True, synced=False,
@@ -819,6 +775,14 @@ class TestDescriptionPreservation:
             name="test-pack",
             pack_type=AssetKind.CHECKPOINT,
             source=PackSource(provider=ProviderName.CIVITAI, model_id=123),
+            dependencies=[
+                PackDependency(
+                    id="main",
+                    kind=AssetKind.CHECKPOINT,
+                    selector=DependencySelector(strategy=SelectorStrategy.CIVITAI_MODEL_LATEST),
+                    expose=ExposeConfig(filename="model.safetensors"),
+                ),
+            ],
             description="My custom description",
         )
 
@@ -829,10 +793,7 @@ class TestDescriptionPreservation:
         mock_civitai.get_model.return_value = {
             "description": "New Civitai description"
         }
-        service = UpdateService(
-            layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
-        )
+        service, _ = _make_service_with_civitai(mock_civitai, mock_layout)
 
         result = UpdateResult(
             pack="test-pack", applied=True, lock_updated=True, synced=False,
@@ -1083,8 +1044,16 @@ class TestApplyEdgeCases:
             ],
         )
 
+        # Pack with no matching dependency for "nonexistent-dep"
+        pack = Pack(
+            name="test-pack",
+            pack_type=AssetKind.CHECKPOINT,
+            source=PackSource(provider=ProviderName.CIVITAI, model_id=1),
+        )
+
         mock_layout = MagicMock()
         mock_layout.load_pack_lock.return_value = lock
+        mock_layout.load_pack.return_value = pack
 
         service = UpdateService(
             layout=mock_layout, blob_store=MagicMock(),
@@ -1119,6 +1088,11 @@ class TestApplyEdgeCases:
 
         mock_layout = MagicMock()
         mock_layout.load_pack_lock.return_value = None
+        mock_layout.load_pack.return_value = Pack(
+            name="test-pack",
+            pack_type=AssetKind.CHECKPOINT,
+            source=PackSource(provider=ProviderName.LOCAL),
+        )
 
         service = UpdateService(
             layout=mock_layout, blob_store=MagicMock(),

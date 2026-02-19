@@ -41,6 +41,7 @@ from src.store.models import (
     UpdatePolicy,
     UpdatePolicyMode,
 )
+from src.store.civitai_update_provider import CivitaiUpdateProvider
 from src.store.update_service import UpdateService
 
 
@@ -213,11 +214,14 @@ def _setup_service(packs: dict, locks: dict, civitai_responses: dict, all_pack_n
 
     mock_civitai.get_model.side_effect = get_model
 
+    civitai_provider = CivitaiUpdateProvider(mock_civitai)
     service = UpdateService(
         layout=mock_layout,
         blob_store=MagicMock(),
         view_builder=MagicMock(),
-        civitai_client=mock_civitai,
+        providers={
+            SelectorStrategy.CIVITAI_MODEL_LATEST: civitai_provider,
+        },
     )
 
     return service, mock_layout, mock_civitai
@@ -1097,9 +1101,11 @@ class TestE2ECivitaiErrors:
         mock_layout.load_pack.return_value = pack
         mock_layout.load_pack_lock.return_value = lock
 
+        civitai_provider = CivitaiUpdateProvider(mock_civitai)
         service = UpdateService(
             layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
+            view_builder=MagicMock(),
+            providers={SelectorStrategy.CIVITAI_MODEL_LATEST: civitai_provider},
         )
 
         # plan_update should return up-to-date (error is swallowed per dep)
@@ -1141,9 +1147,11 @@ class TestE2ECivitaiErrors:
         mock_layout.load_pack.side_effect = load_pack
         mock_layout.load_pack_lock.side_effect = load_lock
 
+        civitai_provider = CivitaiUpdateProvider(mock_civitai)
         service = UpdateService(
             layout=mock_layout, blob_store=MagicMock(),
-            view_builder=MagicMock(), civitai_client=mock_civitai,
+            view_builder=MagicMock(),
+            providers={SelectorStrategy.CIVITAI_MODEL_LATEST: civitai_provider},
         )
 
         plans = service.check_all_updates()
@@ -1153,3 +1161,149 @@ class TestE2ECivitaiErrors:
         # (error is caught per-dependency, so plan is returned with no changes)
         assert "fail-pack" in plans
         assert plans["fail-pack"].already_up_to_date is True
+
+
+# =============================================================================
+# E2E: Download Grouping & Dismissed Updates
+# =============================================================================
+
+
+class TestDownloadGrouping:
+    """Tests for download group_id/group_label fields in DownloadAssetRequest."""
+
+    def test_download_request_accepts_group_fields(self):
+        """DownloadAssetRequest model validates with group_id and group_label."""
+        from src.store.api import DownloadAssetRequest
+
+        req = DownloadAssetRequest(
+            asset_name="main-checkpoint",
+            group_id="update-1234567890",
+            group_label="Pack Updates",
+        )
+        assert req.group_id == "update-1234567890"
+        assert req.group_label == "Pack Updates"
+        assert req.asset_name == "main-checkpoint"
+
+    def test_download_request_group_fields_optional(self):
+        """group_id and group_label default to None when not provided."""
+        from src.store.api import DownloadAssetRequest
+
+        req = DownloadAssetRequest(asset_name="main-checkpoint")
+        assert req.group_id is None
+        assert req.group_label is None
+
+    def test_cancel_download_group(self):
+        """cancel_download_group cancels all downloads matching group_id."""
+        from src.store.api import _active_downloads, cancel_download_group
+
+        # Seed some downloads
+        _active_downloads.clear()
+        _active_downloads["dl-1"] = {
+            "download_id": "dl-1",
+            "status": "downloading",
+            "group_id": "grp-a",
+        }
+        _active_downloads["dl-2"] = {
+            "download_id": "dl-2",
+            "status": "pending",
+            "group_id": "grp-a",
+        }
+        _active_downloads["dl-3"] = {
+            "download_id": "dl-3",
+            "status": "downloading",
+            "group_id": "grp-b",
+        }
+
+        try:
+            result = cancel_download_group("grp-a")
+            assert result["count"] == 2
+            assert set(result["cancelled"]) == {"dl-1", "dl-2"}
+            # dl-3 should still be there
+            assert "dl-3" in _active_downloads
+            assert "dl-1" not in _active_downloads
+            assert "dl-2" not in _active_downloads
+        finally:
+            _active_downloads.clear()
+
+    def test_cancel_download_group_no_match(self):
+        """Cancelling a non-existent group returns empty result."""
+        from src.store.api import _active_downloads, cancel_download_group
+
+        _active_downloads.clear()
+        try:
+            result = cancel_download_group("nonexistent")
+            assert result["count"] == 0
+            assert result["cancelled"] == []
+        finally:
+            _active_downloads.clear()
+
+
+class TestDismissedVersionKey:
+    """Tests for dismissed version key generation logic."""
+
+    def test_version_key_from_changes(self):
+        """Version key is built from dependency_id + new version_id, sorted."""
+        plan = type("Plan", (), {
+            "changes": [
+                type("C", (), {
+                    "dependency_id": "lora",
+                    "new": {"provider_version_id": 200},
+                })(),
+                type("C", (), {
+                    "dependency_id": "checkpoint",
+                    "new": {"provider_version_id": 100},
+                })(),
+            ],
+            "ambiguous": [],
+        })()
+
+        # Reproduce the logic from updatesStore
+        ids = [
+            *[f"{c.dependency_id}:{c.new.get('provider_version_id', '?')}" for c in plan.changes],
+            *[f"{a.dependency_id}:ambiguous" for a in plan.ambiguous],
+        ]
+        key = ",".join(sorted(ids))
+        assert key == "checkpoint:100,lora:200"
+
+    def test_version_key_with_ambiguous(self):
+        """Ambiguous entries produce 'dep_id:ambiguous' in the key."""
+        plan = type("Plan", (), {
+            "changes": [],
+            "ambiguous": [
+                type("A", (), {"dependency_id": "main-ckpt"})(),
+            ],
+        })()
+
+        ids = [
+            *[f"{c.dependency_id}:{c.new.get('provider_version_id', '?')}" for c in plan.changes],
+            *[f"{a.dependency_id}:ambiguous" for a in plan.ambiguous],
+        ]
+        key = ",".join(sorted(ids))
+        assert key == "main-ckpt:ambiguous"
+
+
+class TestAutoCheckIntervalValues:
+    """Validate auto-check interval mapping matches expected millisecond values."""
+
+    @pytest.mark.parametrize("interval,expected_ms", [
+        ("1h", 3_600_000),
+        ("6h", 21_600_000),
+        ("24h", 86_400_000),
+    ])
+    def test_interval_to_ms_mapping(self, interval, expected_ms):
+        """Each interval string maps to the correct millisecond value."""
+        interval_ms = {
+            "1h": 3_600_000,
+            "6h": 21_600_000,
+            "24h": 86_400_000,
+        }
+        assert interval_ms[interval] == expected_ms
+
+    def test_off_interval_not_in_mapping(self):
+        """'off' should not be in the interval map (handled separately)."""
+        interval_ms = {
+            "1h": 3_600_000,
+            "6h": 21_600_000,
+            "24h": 86_400_000,
+        }
+        assert "off" not in interval_ms

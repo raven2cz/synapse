@@ -159,6 +159,7 @@ class PackService:
         blob_store: BlobStore,
         civitai_client: Optional[Any] = None,
         huggingface_client: Optional[Any] = None,
+        resolvers: Optional[Dict[SelectorStrategy, Any]] = None,
     ):
         """
         Initialize pack service.
@@ -168,11 +169,14 @@ class PackService:
             blob_store: Blob store
             civitai_client: Optional CivitaiClient instance
             huggingface_client: Optional HuggingFaceClient instance
+            resolvers: Optional resolver registry (strategy -> DependencyResolver).
+                       If None, default resolvers are created lazily.
         """
         self.layout = layout
         self.blob_store = blob_store
         self._civitai = civitai_client
         self._huggingface = huggingface_client
+        self._resolvers: Dict[SelectorStrategy, Any] = resolvers or {}
 
     @property
     def civitai(self):
@@ -1117,255 +1121,44 @@ class PackService:
         self.layout.save_pack_lock(lock)
         return lock
 
+    def _ensure_resolvers(self) -> None:
+        """Lazily initialize default resolvers if none were provided."""
+        if self._resolvers:
+            return
+
+        from .dependency_resolver import (
+            BaseModelHintResolver,
+            CivitaiFileResolver,
+            CivitaiLatestResolver,
+            HuggingFaceResolver,
+            LocalFileResolver,
+            UrlResolver,
+        )
+
+        self._resolvers = {
+            SelectorStrategy.CIVITAI_FILE: CivitaiFileResolver(self.civitai),
+            SelectorStrategy.CIVITAI_MODEL_LATEST: CivitaiLatestResolver(self.civitai),
+            SelectorStrategy.BASE_MODEL_HINT: BaseModelHintResolver(self.civitai, self.layout),
+            SelectorStrategy.HUGGINGFACE_FILE: HuggingFaceResolver(),
+            SelectorStrategy.URL_DOWNLOAD: UrlResolver(),
+            SelectorStrategy.LOCAL_FILE: LocalFileResolver(),
+        }
+
     def _resolve_dependency(
         self,
         pack: Pack,
         dep: PackDependency,
         existing_lock: Optional[PackLock],
     ) -> Optional[ResolvedArtifact]:
-        """Resolve a single dependency."""
-        strategy = dep.selector.strategy
+        """Resolve a single dependency via the resolver registry."""
+        self._ensure_resolvers()
 
-        if strategy == SelectorStrategy.CIVITAI_FILE:
-            return self._resolve_civitai_file(dep)
-        elif strategy == SelectorStrategy.CIVITAI_MODEL_LATEST:
-            return self._resolve_civitai_latest(dep)
-        elif strategy == SelectorStrategy.BASE_MODEL_HINT:
-            return self._resolve_base_model_hint(dep)
-        elif strategy == SelectorStrategy.HUGGINGFACE_FILE:
-            return self._resolve_huggingface_file(dep)
-        elif strategy == SelectorStrategy.URL_DOWNLOAD:
-            return self._resolve_url(dep)
-        elif strategy == SelectorStrategy.LOCAL_FILE:
-            return self._resolve_local_file(dep)
-        else:
+        resolver = self._resolvers.get(dep.selector.strategy)
+        if resolver is None:
+            logger.warning("No resolver for strategy %s", dep.selector.strategy)
             return None
 
-    def _resolve_civitai_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve a pinned Civitai file."""
-        if not dep.selector.civitai:
-            return None
-
-        civ = dep.selector.civitai
-        if not civ.version_id:
-            return None
-
-        version_data = self.civitai.get_model_version(civ.version_id)
-        files = version_data.get("files", [])
-
-        target_file = None
-        if civ.file_id:
-            for f in files:
-                if f.get("id") == civ.file_id:
-                    target_file = f
-                    break
-        if not target_file and files:
-            target_file = files[0]
-
-        if not target_file:
-            return None
-
-        hashes = target_file.get("hashes", {})
-        sha256 = hashes.get("SHA256", "").lower() if hashes else None
-
-        download_url = target_file.get("downloadUrl", "")
-        if not download_url:
-            download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
-
-        return ResolvedArtifact(
-            kind=dep.kind,
-            sha256=sha256,
-            size_bytes=target_file.get("sizeKB", 0) * 1024 if target_file.get("sizeKB") else None,
-            provider=ArtifactProvider(
-                name=ProviderName.CIVITAI,
-                model_id=civ.model_id,
-                version_id=civ.version_id,
-                file_id=target_file.get("id"),
-            ),
-            download=ArtifactDownload(urls=[download_url]),
-            integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
-        )
-
-    def _resolve_civitai_latest(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve latest version of a Civitai model."""
-        if not dep.selector.civitai:
-            return None
-
-        civ = dep.selector.civitai
-
-        model_data = self.civitai.get_model(civ.model_id)
-        versions = model_data.get("modelVersions", [])
-        if not versions:
-            return None
-
-        latest = versions[0]
-        files = latest.get("files", [])
-        if not files:
-            return None
-
-        target_file = self._select_file(files, dep.selector.constraints)
-        if not target_file:
-            return None
-
-        hashes = target_file.get("hashes", {})
-        sha256 = hashes.get("SHA256", "").lower() if hashes else None
-
-        download_url = target_file.get("downloadUrl", "")
-        if not download_url:
-            download_url = f"https://civitai.com/api/download/models/{latest['id']}"
-
-        return ResolvedArtifact(
-            kind=dep.kind,
-            sha256=sha256,
-            size_bytes=target_file.get("sizeKB", 0) * 1024 if target_file.get("sizeKB") else None,
-            provider=ArtifactProvider(
-                name=ProviderName.CIVITAI,
-                model_id=civ.model_id,
-                version_id=latest["id"],
-                file_id=target_file.get("id"),
-            ),
-            download=ArtifactDownload(urls=[download_url]),
-            integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
-        )
-
-    def _select_file(
-        self,
-        files: List[Dict[str, Any]],
-        constraints: Optional[Any],
-    ) -> Optional[Dict[str, Any]]:
-        """Select best file from list based on constraints."""
-        if not files:
-            return None
-
-        candidates = files.copy()
-
-        if constraints:
-            if constraints.primary_file_only:
-                primary = [f for f in candidates if f.get("primary")]
-                if primary:
-                    candidates = primary
-
-            if constraints.file_ext:
-                ext_filtered = [
-                    f for f in candidates
-                    if any(f.get("name", "").endswith(ext) for ext in constraints.file_ext)
-                ]
-                if ext_filtered:
-                    candidates = ext_filtered
-
-        return candidates[0] if candidates else None
-
-    def _resolve_base_model_hint(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve a base model hint using config aliases."""
-        if not dep.selector.base_model:
-            return None
-
-        try:
-            config = self.layout.load_config()
-            alias = config.base_model_aliases.get(dep.selector.base_model)
-            if not alias or not alias.selector.civitai:
-                return None
-
-            civ = alias.selector.civitai
-            if civ.version_id:
-                version_data = self.civitai.get_model_version(civ.version_id)
-                files = version_data.get("files", [])
-
-                target_file = None
-                if civ.file_id:
-                    for f in files:
-                        if f.get("id") == civ.file_id:
-                            target_file = f
-                            break
-                if not target_file and files:
-                    target_file = files[0]
-
-                if target_file:
-                    hashes = target_file.get("hashes", {})
-                    sha256 = hashes.get("SHA256", "").lower() if hashes else None
-
-                    download_url = target_file.get("downloadUrl", "")
-                    if not download_url:
-                        download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
-
-                    return ResolvedArtifact(
-                        kind=dep.kind,
-                        sha256=sha256,
-                        size_bytes=target_file.get("sizeKB", 0) * 1024 if target_file.get("sizeKB") else None,
-                        provider=ArtifactProvider(
-                            name=ProviderName.CIVITAI,
-                            model_id=civ.model_id,
-                            version_id=civ.version_id,
-                            file_id=target_file.get("id"),
-                        ),
-                        download=ArtifactDownload(urls=[download_url]),
-                        integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
-                    )
-        except Exception:
-            pass
-
-        return None
-
-    def _resolve_huggingface_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve a HuggingFace file."""
-        if not dep.selector.huggingface:
-            return None
-
-        hf = dep.selector.huggingface
-
-        url = f"https://huggingface.co/{hf.repo_id}/resolve/{hf.revision or 'main'}"
-        if hf.subfolder:
-            url += f"/{hf.subfolder}"
-        url += f"/{hf.filename}"
-
-        return ResolvedArtifact(
-            kind=dep.kind,
-            sha256=None,
-            size_bytes=None,
-            provider=ArtifactProvider(
-                name=ProviderName.HUGGINGFACE,
-                repo_id=hf.repo_id,
-                filename=hf.filename,
-                revision=hf.revision,
-            ),
-            download=ArtifactDownload(urls=[url]),
-            integrity=ArtifactIntegrity(sha256_verified=False),
-        )
-
-    def _resolve_url(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve a direct URL download."""
-        if not dep.selector.url:
-            return None
-
-        return ResolvedArtifact(
-            kind=dep.kind,
-            sha256=None,
-            size_bytes=None,
-            provider=ArtifactProvider(name=ProviderName.URL),
-            download=ArtifactDownload(urls=[dep.selector.url]),
-            integrity=ArtifactIntegrity(sha256_verified=False),
-        )
-
-    def _resolve_local_file(self, dep: PackDependency) -> Optional[ResolvedArtifact]:
-        """Resolve a local file."""
-        if not dep.selector.local_path:
-            return None
-
-        path = Path(dep.selector.local_path)
-        if not path.exists():
-            return None
-
-        from .blob_store import compute_sha256
-        sha256 = compute_sha256(path)
-
-        return ResolvedArtifact(
-            kind=dep.kind,
-            sha256=sha256,
-            size_bytes=path.stat().st_size,
-            provider=ArtifactProvider(name=ProviderName.LOCAL),
-            download=ArtifactDownload(urls=[path.as_uri()]),
-            integrity=ArtifactIntegrity(sha256_verified=True),
-        )
+        return resolver.resolve(dep)
 
     # =========================================================================
     # Installation

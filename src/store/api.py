@@ -2237,6 +2237,8 @@ class DownloadAssetRequest(BaseModel):
     asset_type: Optional[str] = None  # Auto-detected from dependency kind if not provided
     url: Optional[str] = None
     filename: Optional[str] = None
+    group_id: Optional[str] = None  # Group downloads together (e.g. update batch)
+    group_label: Optional[str] = None  # Human-readable group label
 
 
 class DownloadProgress(BaseModel):
@@ -2327,6 +2329,8 @@ async def download_asset(
         "speed_mbps": 0,
         "eta_seconds": 0,
         "error": None,
+        "group_id": request.group_id,
+        "group_label": request.group_label,
     }
     
     def do_download():
@@ -2488,6 +2492,21 @@ def clear_completed_downloads():
     return {"cleared": len(to_remove)}
 
 
+@v2_packs_router.delete("/downloads/group/{group_id}")
+def cancel_download_group(group_id: str):
+    """Cancel and remove all downloads matching the given group_id."""
+    cancelled = []
+    to_remove = [
+        k for k, v in _active_downloads.items()
+        if v.get("group_id") == group_id
+    ]
+    for k in to_remove:
+        _active_downloads[k]["status"] = "cancelled"
+        cancelled.append(k)
+        del _active_downloads[k]
+    return {"cancelled": cancelled, "count": len(cancelled)}
+
+
 @v2_packs_router.delete("/downloads/{download_id}")
 def cancel_download(download_id: str):
     """Cancel a download."""
@@ -2495,7 +2514,6 @@ def cancel_download(download_id: str):
         _active_downloads[download_id]["status"] = "cancelled"
         del _active_downloads[download_id]
     return {"cancelled": download_id}
-    return {"cleared": len(to_remove)}
 
 
 @v2_packs_router.post("/{pack_name}/download-all", response_model=Dict[str, Any])

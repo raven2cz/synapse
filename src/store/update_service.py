@@ -1,20 +1,19 @@
 """
 Synapse Store v2 - Update Service
 
-Manages updates for packs with civitai_model_latest strategy.
+Orchestrates update operations for packs. Provider-specific logic
+(version checking, URL construction, metadata sync) is delegated
+to UpdateProvider implementations registered by SelectorStrategy.
 
-Features:
-- Check for new versions
-- Create update plans
-- Handle ambiguous file selection
-- Apply updates atomically
+The service itself is provider-agnostic — it handles planning,
+lock file updates, batch operations, and post-update sync.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .blob_store import BlobStore
 from .layout import StoreLayout
@@ -28,19 +27,25 @@ from .models import (
     BatchUpdateResult,
     Pack,
     PackLock,
-    PreviewInfo,
     ProviderName,
     ResolvedArtifact,
     ResolvedDependency,
     SelectorStrategy,
-    UpdateCandidate,
     UpdateChange,
     UpdateOptions,
     UpdatePlan,
     UpdatePolicyMode,
     UpdateResult,
 )
+from .update_provider import UpdateCheckResult, UpdateProvider
 from .view_builder import ViewBuilder
+
+
+# Strategies that support automatic updates (follow_latest policy)
+UPDATABLE_STRATEGIES = frozenset({
+    SelectorStrategy.CIVITAI_MODEL_LATEST,
+    # Future: SelectorStrategy.HUGGINGFACE_LATEST, etc.
+})
 
 
 class UpdateError(Exception):
@@ -50,7 +55,7 @@ class UpdateError(Exception):
 
 class AmbiguousSelectionError(UpdateError):
     """Error when update requires explicit file selection."""
-    
+
     def __init__(self, pack: str, ambiguous: List[AmbiguousUpdate]):
         self.pack = pack
         self.ambiguous = ambiguous
@@ -60,70 +65,74 @@ class AmbiguousSelectionError(UpdateError):
 class UpdateService:
     """
     Service for managing pack updates.
+
+    Provider-agnostic orchestrator that delegates provider-specific
+    operations to registered UpdateProvider implementations.
     """
-    
+
     def __init__(
         self,
         layout: StoreLayout,
         blob_store: BlobStore,
         view_builder: ViewBuilder,
-        civitai_client: Optional[Any] = None,
+        providers: Optional[Dict[SelectorStrategy, UpdateProvider]] = None,
     ):
         """
         Initialize update service.
-        
+
         Args:
             layout: Store layout manager
             blob_store: Blob store
             view_builder: View builder
-            civitai_client: Optional CivitaiClient instance
+            providers: Registry mapping SelectorStrategy -> UpdateProvider
         """
         self.layout = layout
         self.blob_store = blob_store
         self.view_builder = view_builder
-        self._civitai = civitai_client
-    
-    @property
-    def civitai(self):
-        """Lazy-load Civitai client."""
-        if self._civitai is None:
-            from ..clients.civitai_client import CivitaiClient
-            self._civitai = CivitaiClient()
-        return self._civitai
-    
+        self._providers: Dict[SelectorStrategy, UpdateProvider] = providers or {}
+
+    def register_provider(self, strategy: SelectorStrategy, provider: UpdateProvider) -> None:
+        """Register an update provider for a selector strategy."""
+        self._providers[strategy] = provider
+
+    def _get_provider(self, strategy: SelectorStrategy) -> Optional[UpdateProvider]:
+        """Get the provider for a given selector strategy."""
+        return self._providers.get(strategy)
+
     # =========================================================================
     # Update Planning
     # =========================================================================
-    
+
     def is_updatable(self, pack: Pack) -> bool:
         """
         Check if a pack has any updatable dependencies.
-        
+
         A pack is updatable if it has at least one dependency with:
-        - selector.strategy = civitai_model_latest
+        - A registered provider for its selector strategy
         - update_policy.mode = follow_latest
         """
         for dep in pack.dependencies:
-            if (dep.selector.strategy == SelectorStrategy.CIVITAI_MODEL_LATEST and
-                dep.update_policy.mode == UpdatePolicyMode.FOLLOW_LATEST):
+            if (dep.update_policy.mode == UpdatePolicyMode.FOLLOW_LATEST and
+                    dep.selector.strategy in self._providers):
                 return True
         return False
-    
+
     def plan_update(self, pack_name: str) -> UpdatePlan:
         """
         Create an update plan for a pack.
-        
-        Checks each updatable dependency for new versions.
-        
+
+        Checks each updatable dependency for new versions by delegating
+        to the appropriate provider.
+
         Args:
             pack_name: Pack to check for updates
-        
+
         Returns:
             UpdatePlan with changes and ambiguous selections
         """
         pack = self.layout.load_pack(pack_name)
         lock = self.layout.load_pack_lock(pack_name)
-        
+
         if not lock:
             return UpdatePlan(
                 pack=pack_name,
@@ -132,52 +141,61 @@ class UpdateService:
                 ambiguous=[],
                 impacted_packs=self._find_reverse_dependencies(pack_name),
             )
-        
+
         changes = []
         ambiguous = []
-        
+
         for dep in pack.dependencies:
             # Skip non-updatable dependencies
             if dep.update_policy.mode != UpdatePolicyMode.FOLLOW_LATEST:
                 continue
-            if dep.selector.strategy != SelectorStrategy.CIVITAI_MODEL_LATEST:
+
+            # Find provider for this strategy
+            provider = self._get_provider(dep.selector.strategy)
+            if not provider:
                 continue
-            
+
             # Get current lock entry
             current = lock.get_resolved(dep.id)
             if not current:
                 continue
-            
-            # Check for updates
+
+            # Check for updates via provider
             try:
-                update_info = self._check_dependency_update(dep, current)
-                if update_info:
-                    if update_info["ambiguous"]:
-                        ambiguous.append(AmbiguousUpdate(
-                            dependency_id=dep.id,
-                            candidates=update_info["candidates"],
-                        ))
-                    elif update_info["has_update"]:
-                        changes.append(UpdateChange(
-                            dependency_id=dep.id,
-                            old={
-                                "provider": "civitai",
-                                "provider_model_id": current.artifact.provider.model_id,
-                                "provider_version_id": current.artifact.provider.version_id,
-                                "provider_file_id": current.artifact.provider.file_id,
-                                "sha256": current.artifact.sha256,
-                            },
-                            new={
-                                "provider": "civitai",
-                                "provider_model_id": update_info["model_id"],
-                                "provider_version_id": update_info["version_id"],
-                                "provider_file_id": update_info["file_id"],
-                                "sha256": update_info["sha256"],
-                            },
-                        ))
+                result = provider.check_update(dep, current)
+                if result is None:
+                    continue
+
+                if result.ambiguous:
+                    ambiguous.append(AmbiguousUpdate(
+                        dependency_id=dep.id,
+                        candidates=result.candidates,
+                    ))
+                elif result.has_update:
+                    changes.append(UpdateChange(
+                        dependency_id=dep.id,
+                        old={
+                            "provider": current.artifact.provider.name.value
+                                if hasattr(current.artifact.provider.name, 'value')
+                                else str(current.artifact.provider.name),
+                            "provider_model_id": current.artifact.provider.model_id,
+                            "provider_version_id": current.artifact.provider.version_id,
+                            "provider_file_id": current.artifact.provider.file_id,
+                            "sha256": current.artifact.sha256,
+                        },
+                        new={
+                            "provider": current.artifact.provider.name.value
+                                if hasattr(current.artifact.provider.name, 'value')
+                                else str(current.artifact.provider.name),
+                            "provider_model_id": result.model_id,
+                            "provider_version_id": result.version_id,
+                            "provider_file_id": result.file_id,
+                            "sha256": result.sha256,
+                        },
+                    ))
             except Exception as e:
                 logger.warning("Failed to check updates for %s dep %s: %s", pack_name, dep.id, e)
-        
+
         already_up_to_date = len(changes) == 0 and len(ambiguous) == 0
 
         # Scan for reverse dependencies (which packs depend on this one)
@@ -190,7 +208,7 @@ class UpdateService:
             ambiguous=ambiguous,
             impacted_packs=impacted_packs,
         )
-    
+
     def _find_reverse_dependencies(self, pack_name: str) -> List[str]:
         """
         Find all packs that depend on the given pack via pack_dependencies.
@@ -211,108 +229,10 @@ class UpdateService:
                 continue
         return sorted(reverse_deps)
 
-    def _check_dependency_update(
-        self,
-        dep: "PackDependency",
-        current: ResolvedDependency,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Check if a dependency has an update available.
-        
-        Returns:
-            Dict with update info or None if no update
-        """
-        if not dep.selector.civitai:
-            return None
-        
-        model_id = dep.selector.civitai.model_id
-        
-        # Get latest version from Civitai
-        model_data = self.civitai.get_model(model_id)
-        versions = model_data.get("modelVersions", [])
-        if not versions:
-            return None
-        
-        latest = versions[0]
-        latest_version_id = latest["id"]
-        
-        # Check if we're already on latest version
-        current_version_id = current.artifact.provider.version_id
-        if current_version_id == latest_version_id:
-            return {"has_update": False}
-        
-        # Find suitable files in latest version
-        files = latest.get("files", [])
-        candidates = self._filter_files(files, dep.selector.constraints)
-        
-        if not candidates:
-            return None
-        
-        if len(candidates) > 1:
-            # Ambiguous selection needed
-            return {
-                "ambiguous": True,
-                "candidates": [
-                    UpdateCandidate(
-                        provider="civitai",
-                        provider_model_id=model_id,
-                        provider_version_id=latest_version_id,
-                        provider_file_id=f.get("id"),
-                        sha256=f.get("hashes", {}).get("SHA256", "").lower() if f.get("hashes") else None,
-                    )
-                    for f in candidates
-                ],
-            }
-        
-        # Single candidate - update available
-        target = candidates[0]
-        hashes = target.get("hashes", {})
-        sha256 = hashes.get("SHA256", "").lower() if hashes else None
-        
-        return {
-            "has_update": True,
-            "ambiguous": False,
-            "model_id": model_id,
-            "version_id": latest_version_id,
-            "file_id": target.get("id"),
-            "sha256": sha256,
-            "download_url": target.get("downloadUrl") or f"https://civitai.com/api/download/models/{latest_version_id}",
-            "size_bytes": target.get("sizeKB", 0) * 1024 if target.get("sizeKB") else None,
-        }
-    
-    def _filter_files(
-        self,
-        files: List[Dict[str, Any]],
-        constraints: Optional["SelectorConstraints"],
-    ) -> List[Dict[str, Any]]:
-        """Filter files based on constraints."""
-        if not files:
-            return []
-        
-        candidates = files.copy()
-        
-        if constraints:
-            # Filter by primary file
-            if constraints.primary_file_only:
-                primary = [f for f in candidates if f.get("primary")]
-                if primary:
-                    candidates = primary
-            
-            # Filter by extension
-            if constraints.file_ext:
-                ext_filtered = [
-                    f for f in candidates
-                    if any(f.get("name", "").endswith(ext) for ext in constraints.file_ext)
-                ]
-                if ext_filtered:
-                    candidates = ext_filtered
-        
-        return candidates
-    
     # =========================================================================
     # Update Application
     # =========================================================================
-    
+
     def apply_update(
         self,
         pack_name: str,
@@ -321,15 +241,17 @@ class UpdateService:
     ) -> PackLock:
         """
         Apply an update plan to a pack.
-        
+
+        Uses the appropriate provider to build download URLs.
+
         Args:
             pack_name: Pack to update
             plan: Update plan from plan_update()
             choose: Optional dict mapping dep_id -> file_id for ambiguous selections
-        
+
         Returns:
             Updated PackLock
-        
+
         Raises:
             AmbiguousSelectionError: If plan has ambiguous entries without choose
         """
@@ -339,31 +261,42 @@ class UpdateService:
             for amb in plan.ambiguous:
                 if choose is None or amb.dependency_id not in choose:
                     unresolved.append(amb)
-            
+
             if unresolved:
                 raise AmbiguousSelectionError(pack_name, unresolved)
-        
-        # Load current lock
+
+        # Load current lock and pack
         lock = self.layout.load_pack_lock(pack_name)
         if not lock:
             raise UpdateError(f"No lock file for pack: {pack_name}")
-        
+
+        pack = self.layout.load_pack(pack_name)
+
         # Apply changes
         for change in plan.changes:
             dep_id = change.dependency_id
             new_data = change.new
 
+            # Find the provider for this dependency
+            dep = pack.get_dependency(dep_id)
+            provider = self._get_provider(dep.selector.strategy) if dep else None
+
+            # Build download URL via provider
+            version_id = new_data.get("provider_version_id")
+            file_id = new_data.get("provider_file_id")
+            if not provider:
+                logger.warning("No provider for dependency %s (strategy=%s), skipping",
+                              dep_id, dep.selector.strategy if dep else "unknown")
+                continue
+            download_url = provider.build_download_url(version_id, file_id)
+
+            # Resolve provider name from current lock entry
+            provider_name = self._resolve_provider_name(new_data.get("provider"))
+
             # Find and update resolved entry
             found = False
             for i, resolved in enumerate(lock.resolved):
                 if resolved.dependency_id == dep_id:
-                    file_id = new_data.get("provider_file_id")
-                    version_id = new_data.get("provider_version_id")
-                    download_url = (
-                        f"https://civitai.com/api/download/models/{version_id}"
-                        + (f"?type=Model&format=SafeTensor" if file_id else "")
-                    )
-
                     lock.resolved[i] = ResolvedDependency(
                         dependency_id=dep_id,
                         artifact=ResolvedArtifact(
@@ -371,7 +304,7 @@ class UpdateService:
                             sha256=new_data.get("sha256"),
                             size_bytes=resolved.artifact.size_bytes,
                             provider=ArtifactProvider(
-                                name=ProviderName.CIVITAI,
+                                name=provider_name,
                                 model_id=new_data.get("provider_model_id"),
                                 version_id=version_id,
                                 file_id=file_id,
@@ -384,31 +317,39 @@ class UpdateService:
                     break
             if not found:
                 logger.warning("Dependency %s not found in lock for pack %s, skipping", dep_id, pack_name)
-        
+
         # Apply ambiguous selections
         if choose:
-            pack = self.layout.load_pack(pack_name)
             for amb in plan.ambiguous:
                 if amb.dependency_id in choose:
-                    file_id = choose[amb.dependency_id]
-                    
+                    selected_file_id = choose[amb.dependency_id]
+
                     # Find the selected candidate
                     selected = None
                     for cand in amb.candidates:
-                        if cand.provider_file_id == file_id:
+                        if cand.provider_file_id == selected_file_id:
                             selected = cand
                             break
-                    
+
                     if selected:
-                        # Find and update resolved entry
+                        # Find provider for this dependency
                         dep = pack.get_dependency(amb.dependency_id)
+                        provider = self._get_provider(dep.selector.strategy) if dep else None
+
+                        if not provider:
+                            logger.warning("No provider for dependency %s, skipping ambiguous selection",
+                                          amb.dependency_id)
+                            continue
+                        download_url = provider.build_download_url(
+                            selected.provider_version_id,
+                            selected.provider_file_id,
+                        )
+
+                        provider_name = self._resolve_provider_name(selected.provider)
+
+                        # Find and update resolved entry
                         for i, resolved in enumerate(lock.resolved):
                             if resolved.dependency_id == amb.dependency_id:
-                                download_url = (
-                                    f"https://civitai.com/api/download/models/{selected.provider_version_id}"
-                                    + (f"?type=Model&format=SafeTensor" if selected.provider_file_id else "")
-                                )
-                                
                                 lock.resolved[i] = ResolvedDependency(
                                     dependency_id=amb.dependency_id,
                                     artifact=ResolvedArtifact(
@@ -416,7 +357,7 @@ class UpdateService:
                                         sha256=selected.sha256,
                                         size_bytes=None,
                                         provider=ArtifactProvider(
-                                            name=ProviderName.CIVITAI,
+                                            name=provider_name,
                                             model_id=selected.provider_model_id,
                                             version_id=selected.provider_version_id,
                                             file_id=selected.provider_file_id,
@@ -426,19 +367,29 @@ class UpdateService:
                                     ),
                                 )
                                 break
-        
+
         # Update timestamp
         lock.resolved_at = datetime.now().isoformat()
-        
+
         # Save updated lock
         self.layout.save_pack_lock(lock)
-        
+
         return lock
-    
+
+    @staticmethod
+    def _resolve_provider_name(provider_str: Optional[str]) -> ProviderName:
+        """Resolve a provider string to ProviderName enum."""
+        if not provider_str:
+            return ProviderName.CIVITAI
+        try:
+            return ProviderName(provider_str)
+        except ValueError:
+            return ProviderName.CIVITAI
+
     # =========================================================================
     # High-Level Update Command
     # =========================================================================
-    
+
     def update_pack(
         self,
         pack_name: str,
@@ -476,7 +427,6 @@ class UpdateService:
             )
 
         if dry_run:
-            # Return plan as result
             return UpdateResult(
                 pack=pack_name,
                 applied=False,
@@ -513,24 +463,28 @@ class UpdateService:
         options: UpdateOptions,
         result: UpdateResult,
     ) -> None:
-        """Apply update options (merge previews, update description, etc.)."""
+        """Apply update options by delegating to the pack's provider."""
         pack = self.layout.load_pack(pack_name)
+        provider = self._get_provider_for_pack(pack)
+        if not provider:
+            return
+
         changed = False
 
         if options.merge_previews:
-            merged_count = self._merge_previews_from_civitai(pack)
+            merged_count = provider.merge_previews(pack)
             result.previews_merged = merged_count
             if merged_count > 0:
                 changed = True
 
         if options.update_description:
-            updated = self._update_description_from_civitai(pack)
+            updated = provider.update_description(pack)
             result.description_updated = updated
             if updated:
                 changed = True
 
         if options.update_model_info:
-            updated = self._update_model_info_from_civitai(pack)
+            updated = provider.update_model_info(pack)
             result.model_info_updated = updated
             if updated:
                 changed = True
@@ -538,153 +492,13 @@ class UpdateService:
         if changed:
             self.layout.save_pack(pack)
 
-    @staticmethod
-    def _canonicalize_url(url: str) -> str:
-        """Strip query params and fragments for URL dedup comparison."""
-        return url.split("?")[0].split("#")[0]
-
-    def _merge_previews_from_civitai(self, pack: Pack) -> int:
-        """
-        Merge new previews from Civitai into the pack.
-
-        Keeps existing previews and adds new ones that don't exist yet.
-        Deduplicates by canonical URL (ignoring query params).
-
-        Returns:
-            Number of new previews added.
-        """
-        source = pack.source
-        if not source or source.provider != "civitai":
-            return 0
-
-        model_id = source.model_id
-        version_id = source.version_id
-        if not model_id:
-            return 0
-
-        try:
-            model_data = self.civitai.get_model(model_id)
-        except Exception:
-            return 0
-
-        # Find the version
-        target_version = None
-        for v in model_data.get("modelVersions", []):
-            if version_id and v["id"] == version_id:
-                target_version = v
-                break
-        if not target_version:
-            # Use latest version
-            versions = model_data.get("modelVersions", [])
-            if versions:
-                target_version = versions[0]
-
-        if not target_version:
-            return 0
-
-        # Get Civitai images
-        civitai_images = target_version.get("images", [])
-        if not civitai_images:
-            return 0
-
-        # Build set of existing preview URLs for dedup (canonical form)
-        existing_urls = set()
-        for p in pack.previews:
-            if p.url:
-                existing_urls.add(self._canonicalize_url(p.url))
-
-        # Add new previews
-        added = 0
-        for img in civitai_images:
-            url = img.get("url", "")
-            if not url or self._canonicalize_url(url) in existing_urls:
-                continue
-
-            # Derive filename from URL
-            filename = url.rsplit("/", 1)[-1].split("?")[0] if "/" in url else "preview"
-
-            # Determine media type from Civitai's type field
-            img_type = img.get("type", "image")
-            if img_type == "video":
-                media_type = "video"
-            else:
-                media_type = "image"
-
-            preview = PreviewInfo(
-                filename=filename,
-                url=url,
-                media_type=media_type,
-                width=img.get("width"),
-                height=img.get("height"),
-                nsfw=img.get("nsfwLevel", 0) > 1,
-                meta=img.get("meta"),
-            )
-            pack.previews.append(preview)
-            existing_urls.add(self._canonicalize_url(url))
-            added += 1
-
-        return added
-
-    def _update_description_from_civitai(self, pack: Pack) -> bool:
-        """Replace pack description with Civitai's latest."""
-        source = pack.source
-        if not source or source.provider != "civitai" or not source.model_id:
-            return False
-
-        try:
-            model_data = self.civitai.get_model(source.model_id)
-        except Exception:
-            return False
-
-        new_description = model_data.get("description", "")
-        if new_description and new_description != pack.description:
-            pack.description = new_description
-            return True
-        return False
-
-    def _update_model_info_from_civitai(self, pack: Pack) -> bool:
-        """Sync model info fields (trigger words, base model) from Civitai."""
-        source = pack.source
-        if not source or source.provider != "civitai" or not source.model_id:
-            return False
-
-        try:
-            model_data = self.civitai.get_model(source.model_id)
-        except Exception:
-            return False
-
-        changed = False
-        versions = model_data.get("modelVersions", [])
-
-        # Find matching version or use latest
-        target_version = None
-        if source.version_id:
-            for v in versions:
-                if v["id"] == source.version_id:
-                    target_version = v
-                    break
-        if not target_version and versions:
-            target_version = versions[0]
-
-        if not target_version:
-            return False
-
-        # Sync base model
-        new_base = target_version.get("baseModel")
-        if new_base and new_base != pack.base_model:
-            pack.base_model = new_base
-            changed = True
-
-        # Sync trigger words into dependencies that have expose.trigger_words
-        trained_words = target_version.get("trainedWords", [])
-        if trained_words:
-            for dep in pack.dependencies:
-                if dep.expose and dep.expose.trigger_words is not None:
-                    if set(dep.expose.trigger_words) != set(trained_words):
-                        dep.expose.trigger_words = trained_words
-                        changed = True
-
-        return changed
+    def _get_provider_for_pack(self, pack: Pack) -> Optional[UpdateProvider]:
+        """Find the appropriate provider for a pack based on its dependencies."""
+        for dep in pack.dependencies:
+            provider = self._get_provider(dep.selector.strategy)
+            if provider:
+                return provider
+        return None
 
     def apply_batch(
         self,
@@ -732,7 +546,7 @@ class UpdateService:
                 batch_result.total_failed += 1
 
         return batch_result
-    
+
     def _sync_after_update(
         self,
         pack_name: str,
@@ -745,17 +559,16 @@ class UpdateService:
             for resolved in lock.resolved:
                 sha256 = resolved.artifact.sha256
                 urls = resolved.artifact.download.urls
-                
+
                 if sha256 and not self.blob_store.blob_exists(sha256) and urls and len(urls) > 0:
                     try:
                         self.blob_store.download(urls[0], sha256)
                     except Exception as e:
                         logger.warning("Failed to download blob %s: %s", sha256[:12], e)
-            
+
             # Rebuild views for each UI
-            # Need to determine which profile to rebuild
             runtime = self.layout.load_runtime()
-            
+
             for ui in ui_targets:
                 active_profile = runtime.get_active_profile(ui)
                 if active_profile:
@@ -770,29 +583,29 @@ class UpdateService:
                                 packs_data[p.name] = (pack, pack_lock)
                             except Exception:
                                 continue
-                        
+
                         self.view_builder.build(ui, profile, packs_data)
                         self.view_builder.activate(ui, active_profile)
                     except Exception as e:
                         logger.warning("Failed to rebuild views for UI %s: %s", ui, e)
-            
+
             return True
         except Exception:
             return False
-    
+
     # =========================================================================
     # Batch Operations
     # =========================================================================
-    
+
     def check_all_updates(self) -> Dict[str, UpdatePlan]:
         """
         Check for updates on all packs.
-        
+
         Returns:
             Dict mapping pack_name -> UpdatePlan
         """
         plans = {}
-        
+
         for pack_name in self.layout.list_packs():
             try:
                 pack = self.layout.load_pack(pack_name)
@@ -800,21 +613,21 @@ class UpdateService:
                     plans[pack_name] = self.plan_update(pack_name)
             except Exception as e:
                 logger.debug("Skipping pack %s during update check: %s", pack_name, e)
-        
+
         return plans
-    
+
     def get_updatable_packs(self) -> List[str]:
         """
         Get list of packs that have updates available.
-        
+
         Returns:
             List of pack names with available updates
         """
         updatable = []
-        
+
         plans = self.check_all_updates()
         for pack_name, plan in plans.items():
             if not plan.already_up_to_date:
                 updatable.append(pack_name)
-        
+
         return updatable
