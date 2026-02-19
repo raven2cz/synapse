@@ -1,6 +1,6 @@
 # PLAN: Synapse Updates System
 
-**Status:** ✅ v1.0.0 DOKONČENO - kompletní update flow (check → select → options → apply)
+**Status:** ✅ v1.0.2 DOKONČENO - kompletní update flow (check → select → options → apply) + E2E testy
 **Priority:** 🔴 HIGH - klíčová feature celého balíčkovacího systému
 **Depends on:** Pack Edit (✅ done), Downloads infrastructure
 **Created:** 2026-01-31
@@ -765,11 +765,17 @@ interface ApplyBatchResponse {
 - [x] Full plan→apply cycle with mocked Civitai (in test_update_options.py)
 - [x] Description preservation logic (in test_update_options.py)
 - [x] Batch apply with mixed outcomes (in test_update_options.py)
-- [ ] FUTURE: Full E2E with real file downloads
 
-### 10.4 E2E Tests
-- [ ] FUTURE: Full update flow with download integration
-- [ ] FUTURE: Bulk update multiple packs with Downloads tab tracking
+### 10.4 E2E Integration Tests ✅ DONE
+- [x] `test_update_e2e.py` - 18 tests covering full flow:
+  - Single pack flow (3 tests: check→apply→lock updated, already up-to-date, dry run)
+  - Batch flow (2 tests: check-all→apply-batch, broken pack doesn't block others)
+  - With options (4 tests: merge previews, update description, preserve description, model info sync)
+  - Multi-dependency (2 tests: one updated + one pinned, both updated)
+  - Ambiguous selection (2 tests: resolved with choose, raises without choose)
+  - Impacted packs (1 test: reverse deps shown in plan)
+  - Full frontend workflow (2 tests: 5-pack scenario with select/deselect, batch with options)
+  - Civitai API errors (2 tests: unreachable skipped, partial failures handled)
 
 ---
 
@@ -790,8 +796,9 @@ interface ApplyBatchResponse {
 - `apps/web/src/components/layout/Sidebar.tsx` - ✅ Amber badge for updates count
 
 ### Tests
-- `tests/store/test_update_options.py` - ✅ 26 tests for UpdateOptions, preview merge, batch
+- `tests/store/test_update_options.py` - ✅ 49 tests for UpdateOptions, preview merge, batch, edge cases
 - `tests/store/test_update_impact.py` - ✅ 20 tests for impact analysis
+- `tests/store/test_update_e2e.py` - ✅ 18 E2E tests for full update flow
 
 ### Plans
 - `plans/PLAN-Pack-Edit.md` - Pack editing features (✅ done)
@@ -813,95 +820,56 @@ interface ApplyBatchResponse {
 
 ---
 
-## 13. ⚠️ Known Gap: Download Integration
+## 13. Download Integration ✅ FIXED (v1.0.1)
 
-### 13.1 Problem (pre-existing, NOT introduced by v1.0.0)
+### 13.1 Background
 
 `_sync_after_update()` (update_service.py, existed on main since first commit) does
-**synchronous** `blob_store.download()` directly in the API request handler. This is a
-**parallel download path** that bypasses the existing download infrastructure.
+**synchronous** `blob_store.download()` directly in the API request handler. This was a
+parallel download path bypassing the existing download infrastructure (no progress, no
+Downloads tab, no validation, no ComfyUI symlinks).
 
-### 13.2 Two Download Paths Exist (BAD — must be unified)
+### 13.2 Fix Applied (commit 33df068)
 
-```
-PATH A: Existing download system (CORRECT, used by UI "Download" button)
-═══════════════════════════════════════════════════════════════════════
-  POST /api/packs/{name}/download-asset
-  → Background thread (threading.Thread)
-  → blob_store.download(url, progress_callback=...)
-  → _active_downloads dict tracks state
-  → GET /api/packs/downloads/{id}/progress ← Frontend polls this
-  → downloadsStore.ts updates UI
-  → Downloads tab shows: progress bar, speed, ETA
-  → Validates downloaded file (HTML check, min size)
-  → Creates symlink to ComfyUI models folder
-  → Updates lock.json with verified SHA256
-
-PATH B: _sync_after_update (BROKEN, used by updates apply)
-═══════════════════════════════════════════════════════════
-  POST /api/updates/apply { sync: true }
-  → _sync_after_update() called synchronously
-  → blob_store.download(url) ← NO progress callback
-  → BLOCKS the HTTP request for entire download (2-10 GB!)
-  → _active_downloads NOT updated → Downloads tab shows NOTHING
-  → NO HTML validation
-  → NO symlink creation to ComfyUI
-  → NO proper error handling (was silent `except: pass` before v1.0.1)
-```
-
-### 13.3 Correct Fix
-
-After `apply_update()` updates lock.json, the frontend should call the **existing**
-`download-asset` endpoint for each changed dependency — NOT rely on `sync: true`.
+Frontend now uses `sync: false` and routes all downloads through the existing
+`download-asset` endpoint:
 
 ```
 STEP 1: Apply (lock only, no download)
   POST /api/updates/apply { sync: false }
   → Updates lock.json with new version_id, sha256, URLs
-  → Returns immediately: { applied: true, changes: [...] }
+  → Returns immediately: { applied: true }
 
-STEP 2: Download via existing system
-  For each change in result.changes:
-    POST /api/packs/{name}/download-asset
-      { asset_name: change.dependency_id, url: change.download_url }
+STEP 2: Frontend queues downloads via existing system
+  updatesStore.ts → queueDownloadsForPack():
+  For each changed dependency:
+    POST /api/packs/{name}/download-asset { asset_name: dep_id }
     → Background thread, progress tracking, Downloads tab ✅
-
-STEP 3: Frontend bridges the two
-  updatesStore.applyUpdate() {
-    // 1. Apply lock changes
-    const result = await fetch('/api/updates/apply', { sync: false })
-    // 2. Queue downloads via existing download system
-    for (const change of result.changes) {
-      await fetch(`/api/packs/${packName}/download-asset`, {
-        body: { asset_name: change.dep_id, ... }
-      })
-    }
-    // 3. Downloads tab picks up automatically
-  }
+    → File validation, ComfyUI symlinks, SHA256 verification ✅
 ```
 
-### 13.4 What Needs to Change
+### 13.3 Changes Made
 
-| Change | File | Description |
-|--------|------|-------------|
-| Frontend: `sync: false` | `updatesStore.ts` | Stop using sync:true, call download-asset instead |
-| Frontend: bridge to downloads | `updatesStore.ts` | After apply, call download-asset per changed dep |
-| Backend: return download URLs | `api.py /apply` | Return changed dep URLs in response for frontend |
-| Backend: ~~remove~~ deprecate `_sync_after_update` | `update_service.py` | Keep for CLI use, but frontend should not use it |
-| Backend: apply response enrichment | `update_service.py` | `UpdateResult` should include changed dep download info |
+| File | Change |
+|------|--------|
+| `updatesStore.ts` | `sync: false` in applyUpdate + applySelected |
+| `updatesStore.ts` | Added `queueDownloadsForPack()` helper |
+| `api.py` | `DownloadAssetRequest.asset_type` now optional (falls back to dep.kind) |
 
-### 13.5 Interim: `_sync_after_update` kept for CLI
+### 13.4 `_sync_after_update` kept for CLI
 
-The CLI (`synapse update <pack> --sync`) can still use `_sync_after_update` because
-CLI doesn't have a Downloads tab. But the web frontend MUST use Path A (download-asset).
-
-> **Priority:** HIGH. This is the NEXT task before updates are production-ready.
-> Without this fix, applying updates with `sync: true` from the web UI will either
-> timeout (large files) or download without any progress tracking.
+The CLI (`synapse update <pack> --sync`) still uses `_sync_after_update` because
+CLI doesn't have a Downloads tab. The web frontend MUST NOT use it.
 
 ---
 
 ## 14. Changelog
+
+### v1.0.2 (2026-02-19) - E2E Tests
+- ✅ 18 E2E integration tests in `test_update_e2e.py` covering full flow:
+  single pack, batch, options, multi-dep, ambiguous, impacted packs, error handling
+- 📝 Section 13 updated: download integration marked as FIXED
+- Total backend test coverage: 87 tests (49 + 20 + 18)
 
 ### v1.0.1 (2026-02-19) - Stabilization
 - 🔧 Fix Zustand Set<string> → string[] for reliable React re-renders
@@ -925,4 +893,4 @@ CLI doesn't have a Downloads tab. But the web frontend MUST use Path A (download
 
 ---
 
-*Last updated: 2026-02-19 - v1.0.1 stabilizace, download gap zdokumentován*
+*Last updated: 2026-02-19 - v1.0.2 E2E testy, Section 13 opravena*
