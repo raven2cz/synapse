@@ -124,6 +124,7 @@ class UpdateService:
                 already_up_to_date=False,
                 changes=[],
                 ambiguous=[],
+                impacted_packs=self._find_reverse_dependencies(pack_name),
             )
         
         changes = []
@@ -172,14 +173,38 @@ class UpdateService:
                 pass  # Log error, continue
         
         already_up_to_date = len(changes) == 0 and len(ambiguous) == 0
-        
+
+        # Scan for reverse dependencies (which packs depend on this one)
+        impacted_packs = self._find_reverse_dependencies(pack_name)
+
         return UpdatePlan(
             pack=pack_name,
             already_up_to_date=already_up_to_date,
             changes=changes,
             ambiguous=ambiguous,
+            impacted_packs=impacted_packs,
         )
     
+    def _find_reverse_dependencies(self, pack_name: str) -> List[str]:
+        """
+        Find all packs that depend on the given pack via pack_dependencies.
+
+        Returns:
+            List of pack names that have pack_name in their pack_dependencies.
+        """
+        reverse_deps = []
+        for other_name in self.layout.list_packs():
+            if other_name == pack_name:
+                continue
+            try:
+                other_pack = self.layout.load_pack(other_name)
+                dep_names = [ref.pack_name for ref in other_pack.pack_dependencies]
+                if pack_name in dep_names:
+                    reverse_deps.append(other_name)
+            except Exception:
+                continue
+        return sorted(reverse_deps)
+
     def _check_dependency_update(
         self,
         dep: Any,

@@ -1169,6 +1169,7 @@ class UpdatePlan(BaseModel):
     already_up_to_date: bool = False
     changes: List[UpdateChange] = Field(default_factory=list)
     ambiguous: List[AmbiguousUpdate] = Field(default_factory=list)
+    impacted_packs: List[str] = Field(default_factory=list)
 
 
 class UpdateResult(BaseModel):

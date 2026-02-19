@@ -275,6 +275,7 @@ export interface UpdatePlan {
   already_up_to_date: boolean
   changes: UpdateChange[]
   ambiguous: AmbiguousUpdate[]
+  impacted_packs: string[]
 }
 
 /**

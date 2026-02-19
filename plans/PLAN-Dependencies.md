@@ -1,7 +1,7 @@
 # PLAN: Dependencies - Rework & Updates Integration
 
-**Version:** v0.5.0
-**Status:** 🚧 AKTIVNÍ
+**Version:** v0.7.0
+**Status:** ✅ Phase 1-3 DOKONČENY
 **Priority:** 🔴 HIGH
 **Created:** 2026-02-03
 **Updated:** 2026-02-19
@@ -244,39 +244,38 @@ DELETE /api/packs/{name}/pack-dependencies/{dep}    (api.py:2725-2758)
 
 ---
 
-### Phase 3: Updates + Dependency Impact
+### Phase 3: Updates + Dependency Impact ✅ IMPL+INTEG
 
 **Cíl:** Při updatu packu ukázat jaké jiné packy na něm závisí. Jednoduchý impact analysis.
 
 #### Backend změny:
 
-**3a) `models.py:1156-1161` → rozšířit UpdatePlan**
-```python
-class UpdatePlan(BaseModel):
-    pack: str
-    already_up_to_date: bool = False
-    changes: List[UpdateChange] = Field(default_factory=list)
-    ambiguous: List[AmbiguousUpdate] = Field(default_factory=list)
-    impacted_packs: List[str] = Field(default_factory=list)  # NEW
-```
+**3a) `models.py:1166-1172` → rozšířit UpdatePlan** ✅
+- Přidán `impacted_packs: List[str] = Field(default_factory=list)`
 
-**3b) `update_service.py` → scan reverse dependencies v plan_update()**
-- Po sestavení changes, před returnem:
-- Scan všech packů: `for other_pack in store.list_packs()`
-- Pokud `pack_name in [ref.pack_name for ref in other.pack_dependencies]` → add to impacted
-- O(n) scan - ok pro <1000 packů
+**3b) `update_service.py` → `_find_reverse_dependencies()` + scan v `plan_update()`** ✅
+- Nová metoda `_find_reverse_dependencies(pack_name)` - O(n) scan všech packů
+- Volána v obou return paths `plan_update()` (s lock i bez lock)
+- Výsledky sorted alphabetically
 
 #### Frontend změny:
 
-**3c) `CivitaiPlugin.tsx` → zobrazit impacted packs**
-- V update details section (po řádku ~215):
-- Pokud `updateCheck.plan.impacted_packs.length > 0`:
-  - Info box: "These packs depend on this model: Pack_A, Pack_B"
-  - Neblokovat update - jen informace
+**3c) `CivitaiPlugin.tsx` → impacted packs info box** ✅
+- Blue info box v update details section (po changes a ambiguous)
+- Layers icon + "N pack(s) depend on this model"
+- Clickable pack name links to `/pack/{name}`
+- Non-blocking - jen informace
+
+**3d) Frontend types + i18n** ✅
+- `plugins/types.ts` UpdatePlan: přidán `impacted_packs: string[]`
+- i18n: `pack.plugins.civitai.impactedPacks` (EN + CS s plural forms)
 
 #### Testy:
-- [ ] Backend: impact detection vrací správné packy
-- [ ] Backend: prázdný impacted_packs když žádné závislosti
+- [x] Unit: UpdatePlan model (5 testů) - defaults, serialization, backward compat
+- [x] Unit: `_find_reverse_dependencies()` (7 testů) - no deps, single, multiple, self-exclude, indirect, sorted
+- [x] Integration: `plan_update()` with impacts (4 testy) - includes, empty, multiple, up-to-date
+- [x] Smoke: API response format (4 testy) - JSON, empty, full response, backward compat
+- [x] `tests/store/test_update_impact.py` - 20 testů, all passing
 
 **⚠️ Opatrnost:** `update_service.py` je 550 řádků fungujícího kódu. Přidáváme, neměníme.
 
@@ -382,6 +381,13 @@ ADD     tests/store/test_update_impact.py
 ---
 
 ## Changelog
+
+### 2026-02-19 - v0.7.0: Phase 3 complete
+- ✅ Phase 3: Updates + Dependency Impact
+- ✅ UpdatePlan.impacted_packs field + _find_reverse_dependencies() scan
+- ✅ CivitaiPlugin: blue info box with clickable pack links
+- ✅ 20 nových testů (unit + integration + smoke), all passing
+- ✅ Backward compatible (default=[])
 
 ### 2026-02-19 - v0.6.0: Phase 1 + Phase 2 complete
 - ✅ Phase 1: Base Model Fix - `required: false`, `is_base_model` field, set-base-model endpoint, suggestions UI

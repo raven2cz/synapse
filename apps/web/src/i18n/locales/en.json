@@ -489,6 +489,8 @@
         "unknown": "unknown",
         "new": "new",
         "manualSelection": "{{count}} update(s) require manual selection",
+        "impactedPacks": "{{count}} pack(s) depend on this model",
+        "impactedPacks_one": "{{count}} pack depends on this model",
         "source": "Civitai Source",
         "provider": "Provider",
         "modelId": "Model ID",

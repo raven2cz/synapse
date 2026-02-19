@@ -29,6 +29,7 @@ import {
   Download,
   Info,
   Globe,
+  Layers,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -209,6 +210,31 @@ function UpdateCheckSection({ context }: UpdateCheckSectionProps) {
                   <p className="text-sm text-amber-400">
                     {t('pack.plugins.civitai.manualSelection', { count: ambiguousCount })}
                   </p>
+                </div>
+              )}
+
+              {/* Impacted packs */}
+              {(updateCheck.plan.impacted_packs?.length ?? 0) > 0 && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Layers className="w-4 h-4 text-blue-400" />
+                    <p className="text-sm font-medium text-blue-400">
+                      {t('pack.plugins.civitai.impactedPacks', {
+                        count: updateCheck.plan.impacted_packs.length,
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {updateCheck.plan.impacted_packs.map((name) => (
+                      <a
+                        key={name}
+                        href={`/pack/${encodeURIComponent(name)}`}
+                        className="text-xs px-2 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors"
+                      >
+                        {name}
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
