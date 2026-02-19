@@ -58,6 +58,32 @@ interface UpdatesState {
   clearAll: () => void
 }
 
+/**
+ * Queue downloads for changed dependencies via the existing download-asset endpoint.
+ * This gives us progress tracking, Downloads tab integration, proper symlinks, etc.
+ */
+async function queueDownloadsForPack(packName: string, plan: UpdatePlanEntry): Promise<void> {
+  const changedDeps = [
+    ...plan.changes.map(c => c.dependency_id),
+    ...plan.ambiguous.map(a => a.dependency_id),
+  ]
+
+  for (const depId of changedDeps) {
+    try {
+      await fetch(`/api/packs/${encodeURIComponent(packName)}/download-asset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          asset_name: depId,
+          // URL and asset_type auto-detected from lock + dependency
+        }),
+      })
+    } catch {
+      // Download queue failure is non-fatal - user can retry from Downloads tab
+    }
+  }
+}
+
 export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   isChecking: false,
   lastChecked: null,
@@ -122,9 +148,10 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
     }))
 
     try {
+      // Step 1: Apply lock changes only (no sync - downloads go through download-asset)
       const body: Record<string, unknown> = {
         pack: packName,
-        sync: true,
+        sync: false,
       }
       if (options) {
         body.options = options
@@ -140,6 +167,13 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
       const result = await res.json()
 
       if (result.applied) {
+        // Step 2: Queue downloads via existing download-asset endpoint
+        // This gives us progress tracking, Downloads tab, etc.
+        const plan = get().availableUpdates[packName]
+        if (plan) {
+          await queueDownloadsForPack(packName, plan)
+        }
+
         set((state) => {
           const updates = { ...state.availableUpdates }
           delete updates[packName]
@@ -166,7 +200,7 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   },
 
   applySelected: async (options?: Partial<UpdateOptions>) => {
-    const { selectedPacks } = get()
+    const { selectedPacks, availableUpdates } = get()
     const packs = [...selectedPacks]
 
     if (packs.length === 0) return { applied: 0, failed: 0 }
@@ -177,9 +211,10 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
     }))
 
     try {
+      // Step 1: Apply all lock changes (no sync)
       const body: Record<string, unknown> = {
         packs,
-        sync: true,
+        sync: false,
       }
       if (options) {
         body.options = options
@@ -194,15 +229,25 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
       if (!res.ok) throw new Error('Failed to apply batch update')
       const result = await res.json()
 
+      // Step 2: Queue downloads for each successfully applied pack
+      const appliedPacks: string[] = []
+      for (const [packName, packResult] of Object.entries(result.results || {})) {
+        if ((packResult as Record<string, unknown>).applied) {
+          appliedPacks.push(packName)
+          const plan = availableUpdates[packName]
+          if (plan) {
+            await queueDownloadsForPack(packName, plan)
+          }
+        }
+      }
+
       // Remove applied packs from available updates
       set((state) => {
         const updates = { ...state.availableUpdates }
         let selected = [...state.selectedPacks]
-        for (const [packName, packResult] of Object.entries(result.results || {})) {
-          if ((packResult as Record<string, unknown>).applied) {
-            delete updates[packName]
-            selected = selected.filter(n => n !== packName)
-          }
+        for (const packName of appliedPacks) {
+          delete updates[packName]
+          selected = selected.filter(n => n !== packName)
         }
         return {
           availableUpdates: updates,

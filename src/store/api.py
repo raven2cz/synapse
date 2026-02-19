@@ -2234,7 +2234,7 @@ _active_downloads: Dict[str, dict] = {}
 class DownloadAssetRequest(BaseModel):
     """Request to download a specific asset."""
     asset_name: str
-    asset_type: str = "checkpoint"
+    asset_type: Optional[str] = None  # Auto-detected from dependency kind if not provided
     url: Optional[str] = None
     filename: Optional[str] = None
 
@@ -2413,7 +2413,7 @@ async def download_asset(
                 'text_encoder': 'text_encoders',
                 'diffusion_model': 'diffusion_models',
             }
-            asset_type = request.asset_type.lower()
+            asset_type = (request.asset_type or (dep.kind.value if dep else "checkpoint")).lower()
             model_dir = type_map.get(asset_type, 'checkpoints')
             
             # Get ComfyUI path from config
