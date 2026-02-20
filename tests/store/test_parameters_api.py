@@ -214,17 +214,27 @@ class TestExtractFromDescription:
 
     def test_extract_from_description(self, client):
         """Should extract parameters from pack description."""
-        response = client.post(
-            "/api/packs/test-pack/parameters/extract",
-            json={"source": "description"},
-        )
+        # Mock AIService to avoid real network calls to Ollama/etc.
+        mock_ai_result = MagicMock()
+        mock_ai_result.success = True
+        mock_ai_result.output = {"cfg_scale": 7.0, "steps": 25, "clip_skip": 2}
+        mock_ai_result.provider = "mock"
+
+        mock_ai_service = MagicMock()
+        mock_ai_service.extract_parameters.return_value = mock_ai_result
+
+        with patch('src.ai.AIService', return_value=mock_ai_service):
+            response = client.post(
+                "/api/packs/test-pack/parameters/extract",
+                json={"source": "description"},
+            )
 
         assert response.status_code == 200
         data = response.json()
 
         # Source is 'description' or 'description:provider' if AI was used
         assert data["source"].startswith("description")
-        # Description contains "CFG 7, Steps 25, Clip Skip 2"
+        # Values from mocked AI response
         assert data["parameters"].get("cfg_scale") == 7.0
         assert data["parameters"].get("steps") == 25
         assert data["parameters"].get("clip_skip") == 2

@@ -252,9 +252,9 @@ class BlobStore:
             import uuid
             temp_name = f"download_{uuid.uuid4().hex}"
             part_path = self.layout.tmp_path / temp_name
-        
+
         part_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Apply auth provider for this URL
         download_url = url
         matched_auth = None
@@ -263,24 +263,39 @@ class BlobStore:
                 download_url = auth_provider.authenticate_url(url)
                 matched_auth = auth_provider
                 break
-        
+
+        # Log auth status for debugging download failures
+        if "civitai.com" in url:
+            has_token = "token=" in download_url
+            logger.info(f"[BlobStore] Civitai download: token_injected={has_token}, url={url[:100]}")
+            if not has_token:
+                logger.warning(f"[BlobStore] NO AUTH TOKEN for Civitai download! api_key={'set' if self.api_key else 'MISSING'}")
+
+        # Create per-request session (requests.Session is NOT thread-safe,
+        # and download-asset runs multiple downloads in parallel threads)
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": "Mozilla/5.0 (compatible; Synapse/2.0)",
+        })
+
         try:
             # Check for resume
             headers = {}
             mode = "wb"
             initial_size = 0
-            
+
             if part_path.exists():
                 initial_size = part_path.stat().st_size
                 headers["Range"] = f"bytes={initial_size}-"
                 mode = "ab"
-            
-            # Start download
-            response = self.session.get(
+
+            # Start download with split timeout: (connect, read)
+            # Connect timeout 15s, read timeout 60s per chunk
+            response = session.get(
                 download_url,
                 headers=headers,
                 stream=True,
-                timeout=self.timeout,
+                timeout=(15, 60),
             )
             
             # Handle range response
@@ -347,6 +362,8 @@ class BlobStore:
             # Clean up on other errors
             part_path.unlink(missing_ok=True)
             raise
+        finally:
+            session.close()
     
     def _finalize_download(self, part_path: Path, sha256: str) -> str:
         """Move completed download to final blob location."""

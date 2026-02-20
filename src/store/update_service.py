@@ -27,6 +27,7 @@ from .models import (
     BatchUpdateResult,
     Pack,
     PackLock,
+    PendingDownload,
     ProviderName,
     ResolvedArtifact,
     ResolvedDependency,
@@ -191,12 +192,42 @@ class UpdateService:
                             "provider_version_id": result.version_id,
                             "provider_file_id": result.file_id,
                             "sha256": result.sha256,
+                            "download_url": result.download_url,
                         },
                     ))
             except Exception as e:
                 logger.warning("Failed to check updates for %s dep %s: %s", pack_name, dep.id, e)
 
-        already_up_to_date = len(changes) == 0 and len(ambiguous) == 0
+        # Check for pending downloads (lock updated but blob not on disk)
+        # Uses lock metadata only — NO API calls (those were already made above)
+        pending_downloads = []
+        for dep in pack.dependencies:
+            resolved = lock.get_resolved(dep.id)
+            if resolved and resolved.artifact.sha256:
+                if not self.blob_store.blob_exists(resolved.artifact.sha256):
+                    # Get download URL from lock (set during apply_update)
+                    urls = resolved.artifact.download.urls if resolved.artifact.download else []
+                    download_url = urls[0] if urls else ""
+                    # Fallback: build URL from lock provider metadata
+                    if not download_url:
+                        prov = self._get_provider(dep.selector.strategy)
+                        if prov:
+                            download_url = prov.build_download_url(
+                                resolved.artifact.provider.version_id,
+                                resolved.artifact.provider.file_id,
+                            )
+                    pending_downloads.append(PendingDownload(
+                        dependency_id=dep.id,
+                        sha256=resolved.artifact.sha256,
+                        download_url=download_url,
+                        size_bytes=resolved.artifact.size_bytes,
+                    ))
+
+        already_up_to_date = (
+            len(changes) == 0
+            and len(ambiguous) == 0
+            and len(pending_downloads) == 0
+        )
 
         # Scan for reverse dependencies (which packs depend on this one)
         impacted_packs = self._find_reverse_dependencies(pack_name)
@@ -206,6 +237,7 @@ class UpdateService:
             already_up_to_date=already_up_to_date,
             changes=changes,
             ambiguous=ambiguous,
+            pending_downloads=pending_downloads,
             impacted_packs=impacted_packs,
         )
 
@@ -281,14 +313,14 @@ class UpdateService:
             dep = pack.get_dependency(dep_id)
             provider = self._get_provider(dep.selector.strategy) if dep else None
 
-            # Build download URL via provider
+            # Get download URL - prefer URL from check result, fallback to building
             version_id = new_data.get("provider_version_id")
             file_id = new_data.get("provider_file_id")
             if not provider:
                 logger.warning("No provider for dependency %s (strategy=%s), skipping",
                               dep_id, dep.selector.strategy if dep else "unknown")
                 continue
-            download_url = provider.build_download_url(version_id, file_id)
+            download_url = new_data.get("download_url") or provider.build_download_url(version_id, file_id)
 
             # Resolve provider name from current lock entry
             provider_name = self._resolve_provider_name(new_data.get("provider"))
@@ -308,6 +340,7 @@ class UpdateService:
                                 model_id=new_data.get("provider_model_id"),
                                 version_id=version_id,
                                 file_id=file_id,
+                                filename=resolved.artifact.provider.filename,
                             ),
                             download=ArtifactDownload(urls=[download_url]),
                             integrity=ArtifactIntegrity(sha256_verified=new_data.get("sha256") is not None),
@@ -361,6 +394,7 @@ class UpdateService:
                                             model_id=selected.provider_model_id,
                                             version_id=selected.provider_version_id,
                                             file_id=selected.provider_file_id,
+                                            filename=resolved.artifact.provider.filename,
                                         ),
                                         download=ArtifactDownload(urls=[download_url]),
                                         integrity=ArtifactIntegrity(sha256_verified=selected.sha256 is not None),

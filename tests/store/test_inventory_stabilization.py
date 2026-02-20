@@ -215,7 +215,6 @@ class TestBug23HtmlErrorPageRejection:
         """Verify that responses with text/html content-type are rejected."""
         from src.store.blob_store import BlobStore, DownloadError, StoreLayout
         from unittest.mock import Mock, patch
-        import requests
 
         # Create a mock store layout
         with tempfile.TemporaryDirectory() as tmp:
@@ -228,14 +227,13 @@ class TestBug23HtmlErrorPageRejection:
             mock_response.headers = {"content-type": "text/html; charset=utf-8"}
             mock_response.raise_for_status = Mock()
 
-            # Create mock session and assign to _session (since session is a property)
+            # Patch requests.Session so per-request session uses our mock
             mock_session = Mock()
             mock_session.get.return_value = mock_response
-            blob_store._session = mock_session
-
-            # Should raise DownloadError for HTML content
-            with pytest.raises(DownloadError) as exc_info:
-                blob_store.download("https://civitai.com/api/download/models/123")
+            with patch("requests.Session", return_value=mock_session):
+                # Should raise DownloadError for HTML content
+                with pytest.raises(DownloadError) as exc_info:
+                    blob_store.download("https://civitai.com/api/download/models/123")
 
             # Error message should mention HTML and authentication
             assert "HTML" in str(exc_info.value)
@@ -244,7 +242,7 @@ class TestBug23HtmlErrorPageRejection:
     def test_binary_content_type_accepted(self):
         """Verify that responses with binary content-type are accepted."""
         from src.store.blob_store import BlobStore, StoreLayout
-        from unittest.mock import Mock
+        from unittest.mock import Mock, patch
         import hashlib
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -265,13 +263,12 @@ class TestBug23HtmlErrorPageRejection:
             mock_response.raise_for_status = Mock()
             mock_response.iter_content = Mock(return_value=[test_content])
 
-            # Create mock session and assign to _session
+            # Patch requests.Session so per-request session uses our mock
             mock_session = Mock()
             mock_session.get.return_value = mock_response
-            blob_store._session = mock_session
-
-            # Should succeed for binary content
-            sha256 = blob_store.download("https://example.com/model.safetensors")
+            with patch("requests.Session", return_value=mock_session):
+                # Should succeed for binary content
+                sha256 = blob_store.download("https://example.com/model.safetensors")
             assert sha256 == expected_sha256
 
     def test_missing_api_key_warning_logged(self):

@@ -259,9 +259,10 @@ async def update_settings(update: SettingsUpdate):
         config.store.ui_sets = update.store_ui_sets
     
     config.save()
-    
-    # Reset store singleton if store settings changed
-    if store_changed:
+
+    # Reset store singleton if store settings or API keys changed
+    api_key_changed = update.civitai_token is not None or update.huggingface_token is not None
+    if store_changed or api_key_changed:
         reset_store()
     
     return await get_settings()

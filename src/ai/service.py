@@ -64,10 +64,10 @@ class AIService:
             logger.info("[ai-service] AI services disabled, using rule-based fallback")
             return self._execute_rule_based(task, input_data)
 
-        # Check cache first
+        # Check cache first (include task_type to prevent cross-task contamination)
         if use_cache and self.settings.cache_enabled:
-            cache_key = task.get_cache_key(input_data)
-            cached = self.cache.get(str(input_data))
+            cache_content = f"{task.task_type}:{input_data}"
+            cached = self.cache.get(cache_content)
             if cached:
                 logger.info(
                     f"[ai-service] Cache hit for key: {cached.key} "
@@ -106,10 +106,10 @@ class AIService:
 
             result = self._try_provider(task, input_data, provider_id)
             if result.success:
-                # Cache successful result
+                # Cache successful result (include task_type in key)
                 if use_cache and self.settings.cache_enabled and result.output:
                     self.cache.set(
-                        content=str(input_data),
+                        content=f"{task.task_type}:{input_data}",
                         result=result.output,
                         provider_id=result.provider_id,
                         model=result.model,

@@ -66,14 +66,53 @@ class CivitaiUpdateProvider:
 
         latest = versions[0]
         latest_version_id = latest["id"]
+        files = latest.get("files", [])
 
         # Check if we're already on latest version
         current_version_id = current.artifact.provider.version_id
         if current_version_id == latest_version_id:
+            # Same version - still resolve the correct file and download URL.
+            # This is needed for pending downloads where lock was updated
+            # but blob is missing (e.g. download failed after apply).
+            target = self._match_file_for_dep(files, dep, current)
+            if not target:
+                candidates = self._filter_files(files, dep.selector.constraints)
+                if len(candidates) == 1:
+                    target = candidates[0]
+
+            if target:
+                hashes = target.get("hashes", {})
+                sha256 = hashes.get("SHA256", "").lower() if hashes else None
+                return UpdateCheckResult(
+                    has_update=False,
+                    model_id=model_id,
+                    version_id=latest_version_id,
+                    file_id=target.get("id"),
+                    sha256=sha256,
+                    download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
+                )
+
             return UpdateCheckResult(has_update=False)
 
-        # Find suitable files in latest version
-        files = latest.get("files", [])
+        # For multi-file models, try to match by filename from current lock
+        # (each dep originally came from a specific file)
+        target = self._match_file_for_dep(files, dep, current)
+
+        if target:
+            hashes = target.get("hashes", {})
+            sha256 = hashes.get("SHA256", "").lower() if hashes else None
+            return UpdateCheckResult(
+                has_update=True,
+                ambiguous=False,
+                model_id=model_id,
+                version_id=latest_version_id,
+                file_id=target.get("id"),
+                sha256=sha256,
+                download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
+                size_bytes=target.get("sizeKB", 0) * 1024 if target.get("sizeKB") else None,
+            )
+
+        # Fallback: generic filtering by constraints
         candidates = self._filter_files(files, dep.selector.constraints)
 
         if not candidates:
@@ -108,7 +147,7 @@ class CivitaiUpdateProvider:
             version_id=latest_version_id,
             file_id=target.get("id"),
             sha256=sha256,
-            download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, None),
+            download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
             size_bytes=target.get("sizeKB", 0) * 1024 if target.get("sizeKB") else None,
         )
 
@@ -120,7 +159,7 @@ class CivitaiUpdateProvider:
         """Build a Civitai download URL for a specific version/file."""
         url = f"https://civitai.com/api/download/models/{version_id}"
         if file_id:
-            url += "?type=Model&format=SafeTensor"
+            url += f"?id={file_id}"
         return url
 
     def merge_previews(self, pack: Pack) -> int:
@@ -258,6 +297,48 @@ class CivitaiUpdateProvider:
     # =========================================================================
     # Internal helpers
     # =========================================================================
+
+    @staticmethod
+    def _match_file_for_dep(
+        files: List[Dict[str, Any]],
+        dep: PackDependency,
+        current: ResolvedDependency,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Try to match a specific file in the new version for this dependency.
+
+        Uses filename matching: the current lock entry has provider.filename
+        from the original import. Find the file with the same name in the
+        new version's file list.
+
+        This is critical for multi-file model versions (e.g. lora bundles)
+        where each dependency corresponds to a different file.
+        """
+        current_filename = current.artifact.provider.filename
+        if not current_filename or not files:
+            return None
+
+        # Strip path prefixes for comparison
+        current_base = current_filename.rsplit("/", 1)[-1].lower()
+
+        # Exact filename match
+        for f in files:
+            fname = f.get("name", "")
+            if fname.lower() == current_base:
+                return f
+
+        # Partial match: same base name without version suffix
+        # e.g. "ExtremeFrenchKissV1.safetensors" → "ExtremeFrenchKissV2.safetensors"
+        import re
+        current_stem = re.sub(r'[Vv]\d+', '', current_base.rsplit(".", 1)[0]).strip("_- ")
+        if current_stem:
+            for f in files:
+                fname = f.get("name", "")
+                candidate_stem = re.sub(r'[Vv]\d+', '', fname.rsplit(".", 1)[0]).strip("_- ").lower()
+                if candidate_stem == current_stem:
+                    return f
+
+        return None
 
     @staticmethod
     def _filter_files(

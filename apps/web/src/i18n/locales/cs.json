@@ -1657,7 +1657,14 @@
       "calculatingEta": "Počítám...",
       "cancelBatch": "Zrušit všechna stahování",
       "downloadComplete": "Všechna stahování dokončena",
-      "whatsNew": "Co je nového"
+      "whatsNew": "Co je nového",
+      "pendingDownloads": "{{count}} čekajících stahování",
+      "pendingDownloads_one": "{{count}} čekající stahování",
+      "pendingDownloadsDetail": "{{count}} blobů nebylo staženo",
+      "pendingDownloadsDetail_one": "{{count}} blob nebyl stažen",
+      "retrySelected": "Opakovat stahování ({{count}})",
+      "retrySuccess": "{{count}} stahování zařazeno do fronty",
+      "retrySuccess_one": "{{count}} stahování zařazeno do fronty"
     },
     "autoCheck": {
       "found": "{{count}} packů má dostupné aktualizace",

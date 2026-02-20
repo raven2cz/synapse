@@ -1,5 +1,12 @@
 import { create } from 'zustand'
 
+export interface PendingDownloadEntry {
+  dependency_id: string
+  sha256: string
+  download_url: string
+  size_bytes?: number | null
+}
+
 export interface UpdatePlanEntry {
   pack: string
   already_up_to_date: boolean
@@ -18,6 +25,7 @@ export interface UpdatePlanEntry {
       sha256?: string
     }>
   }>
+  pending_downloads: PendingDownloadEntry[]
   impacted_packs: string[]
 }
 
@@ -89,6 +97,8 @@ interface UpdatesState {
   togglePack: (name: string) => void
   applyUpdate: (packName: string, options?: Partial<UpdateOptions>) => Promise<boolean>
   applySelected: (options?: Partial<UpdateOptions>) => Promise<{ applied: number; failed: number }>
+  retryDownloads: (packName: string) => Promise<boolean>
+  retryAllPending: () => Promise<{ queued: number; failed: number }>
   dismissUpdate: (packName: string) => void
   cancelBatch: () => Promise<void>
   clearAll: () => void
@@ -159,12 +169,18 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
         saveDismissed(dismissed)
       }
 
-      // Filter out dismissed updates
+      // Filter out dismissed updates (but never dismiss pending downloads)
       const filtered: Record<string, UpdatePlanEntry> = {}
       for (const [name, plan] of Object.entries(plans)) {
-        const key = versionKeyFromPlan(plan)
-        if (!dismissed[name] || dismissed[name] !== key) {
+        const hasPending = (plan.pending_downloads?.length ?? 0) > 0
+        if (hasPending) {
+          // Always show packs with pending downloads - can't dismiss missing blobs
           filtered[name] = plan
+        } else {
+          const key = versionKeyFromPlan(plan)
+          if (!dismissed[name] || dismissed[name] !== key) {
+            filtered[name] = plan
+          }
         }
       }
 
@@ -359,6 +375,135 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
       dismissedVersions: dismissed,
     }
   }),
+
+  retryDownloads: async (packName: string) => {
+    const plan = get().availableUpdates[packName]
+    if (!plan || !plan.pending_downloads?.length) return false
+
+    const groupId = `retry-${Date.now()}`
+
+    set((state) => ({
+      applyingPacks: [...state.applyingPacks, packName],
+    }))
+
+    try {
+      // Queue downloads for each pending dep via download-asset
+      // Pass the rebuilt URL from plan to override stale lock URLs
+      for (const pending of plan.pending_downloads) {
+        try {
+          await fetch(`/api/packs/${encodeURIComponent(packName)}/download-asset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              asset_name: pending.dependency_id,
+              ...(pending.download_url ? { url: pending.download_url } : {}),
+              group_id: groupId,
+              group_label: 'Retry Downloads',
+            }),
+          })
+        } catch {
+          // Non-fatal per-dep failure
+        }
+      }
+
+      // Also queue downloads for regular changes if any
+      if (plan.changes.length > 0) {
+        await queueDownloadsForPack(packName, plan, groupId)
+      }
+
+      set((state) => {
+        const updates = { ...state.availableUpdates }
+        delete updates[packName]
+        return {
+          availableUpdates: updates,
+          updatesCount: Object.keys(updates).length,
+          selectedPacks: state.selectedPacks.filter(n => n !== packName),
+          applyingPacks: state.applyingPacks.filter(n => n !== packName),
+          activeGroupId: groupId,
+        }
+      })
+      return true
+    } catch {
+      set((state) => ({
+        applyingPacks: state.applyingPacks.filter(n => n !== packName),
+      }))
+      return false
+    }
+  },
+
+  retryAllPending: async () => {
+    const { selectedPacks, availableUpdates } = get()
+    const groupId = `retry-${Date.now()}`
+    let queued = 0
+    let failed = 0
+
+    // Mark all as applying
+    set((state) => ({
+      applyingPacks: [...new Set([...state.applyingPacks, ...selectedPacks])],
+    }))
+
+    for (const packName of selectedPacks) {
+      const plan = availableUpdates[packName]
+      if (!plan) continue
+
+      const hasPending = (plan.pending_downloads?.length ?? 0) > 0
+      const hasChanges = plan.changes.length > 0 || plan.ambiguous.length > 0
+
+      try {
+        if (hasPending) {
+          for (const pending of plan.pending_downloads) {
+            await fetch(`/api/packs/${encodeURIComponent(packName)}/download-asset`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                asset_name: pending.dependency_id,
+                ...(pending.download_url ? { url: pending.download_url } : {}),
+                group_id: groupId,
+                group_label: 'Retry Downloads',
+              }),
+            })
+          }
+        }
+
+        if (hasChanges) {
+          // Apply lock changes first, then queue downloads
+          const body: Record<string, unknown> = { pack: packName, sync: false }
+          const res = await fetch('/api/updates/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (res.ok) {
+            const result = await res.json()
+            if (result.applied) {
+              await queueDownloadsForPack(packName, plan, groupId)
+            }
+          }
+        }
+
+        queued++
+      } catch {
+        failed++
+      }
+    }
+
+    // Remove processed packs
+    set((state) => {
+      const updates = { ...state.availableUpdates }
+      for (const name of selectedPacks) {
+        delete updates[name]
+      }
+      return {
+        availableUpdates: updates,
+        updatesCount: Object.keys(updates).length,
+        selectedPacks: [],
+        applyingPacks: [],
+        activeGroupId: queued > 0 ? groupId : null,
+      }
+    })
+
+    return { queued, failed }
+  },
 
   cancelBatch: async () => {
     const { activeGroupId } = get()

@@ -1648,7 +1648,14 @@
       "calculatingEta": "Calculating...",
       "cancelBatch": "Cancel All Downloads",
       "downloadComplete": "All downloads completed",
-      "whatsNew": "What's new"
+      "whatsNew": "What's new",
+      "pendingDownloads": "{{count}} downloads pending",
+      "pendingDownloads_one": "{{count}} download pending",
+      "pendingDownloadsDetail": "{{count}} blobs not yet downloaded",
+      "pendingDownloadsDetail_one": "{{count}} blob not yet downloaded",
+      "retrySelected": "Retry Downloads ({{count}})",
+      "retrySuccess": "{{count}} download(s) queued successfully",
+      "retrySuccess_one": "{{count}} download queued successfully"
     },
     "autoCheck": {
       "found": "{{count}} packs have updates available",

@@ -205,6 +205,13 @@ class Store:
         self.layout = StoreLayout(root)
         self.blob_store = BlobStore(self.layout, api_key=civitai_api_key)
         self.view_builder = ViewBuilder(self.layout, self.blob_store)
+
+        # Create authenticated CivitaiClient when API key is provided
+        # but no explicit client was given (e.g. from get_store() in API)
+        if civitai_client is None and civitai_api_key:
+            from src.clients.civitai_client import CivitaiClient
+            civitai_client = CivitaiClient(api_key=civitai_api_key)
+
         self.pack_service = PackService(
             self.layout,
             self.blob_store,

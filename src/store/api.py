@@ -2303,9 +2303,12 @@ async def download_asset(
     if not download_url:
         raise HTTPException(status_code=400, detail="No download URL available for this asset")
 
-    # Check if Civitai API key is configured for Civitai downloads
-    if "civitai.com" in download_url and not store.blob_store.api_key:
-        logger.warning(f"[download-asset] No Civitai API key configured! Download may fail.")
+    # Pre-flight: log Civitai API key status for debugging auth issues
+    if "civitai.com" in download_url:
+        if store.blob_store.api_key:
+            logger.info(f"[download-asset] Civitai API key: {store.blob_store.api_key[:6]}... (configured)")
+        else:
+            logger.warning(f"[download-asset] NO Civitai API key configured! NSFW downloads will fail.")
 
     # Determine filename
     filename = request.filename or resolved_filename or f"{request.asset_name}.safetensors"
@@ -3456,7 +3459,7 @@ def batch_update_previews(
 
             preview = PreviewInfo(
                 filename=file.filename,
-                url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+                url=f"/previews/{pack_name}/resources/previews/{file.filename}",
                 media_type=media_type,
                 nsfw=False,
             )
@@ -3547,7 +3550,7 @@ def upload_preview(
         # Create preview info
         preview = PreviewInfo(
             filename=file.filename,
-            url=f"/packs/{pack_name}/resources/previews/{file.filename}",
+            url=f"/previews/{pack_name}/resources/previews/{file.filename}",
             media_type=media_type,
             nsfw=nsfw,
         )
@@ -4916,10 +4919,11 @@ def check_pack_updates(
         plan_dict = plan.model_dump()
         changes_count = len(plan_dict.get("changes", []))
         ambiguous_count = len(plan_dict.get("ambiguous", []))
-        
+        pending_count = len(plan_dict.get("pending_downloads", []))
+
         return UpdateCheckResponse(
             pack=pack_name,
-            has_updates=changes_count > 0 or ambiguous_count > 0,
+            has_updates=changes_count > 0 or ambiguous_count > 0 or pending_count > 0,
             changes_count=changes_count,
             ambiguous_count=ambiguous_count,
             plan=plan_dict,
@@ -4942,8 +4946,9 @@ def check_all_updates(store=Depends(require_initialized)):
             plan_dict = plan.model_dump()
             changes = len(plan_dict.get("changes", []))
             ambiguous = len(plan_dict.get("ambiguous", []))
-            
-            if changes > 0 or ambiguous > 0:
+            pending = len(plan_dict.get("pending_downloads", []))
+
+            if changes > 0 or ambiguous > 0 or pending > 0:
                 packs_with_updates += 1
                 total_changes += changes + ambiguous
                 plans_dict[name] = plan_dict

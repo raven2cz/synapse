@@ -195,6 +195,13 @@ def _plant_blob(store, content: bytes) -> str:
     return sha256
 
 
+def _plant_blob_by_sha(store, sha256: str) -> None:
+    """Create a stub blob file at the path for a given sha256 (for tests with fake hashes)."""
+    blob_path = store.blob_store.blob_path(sha256)
+    blob_path.parent.mkdir(parents=True, exist_ok=True)
+    blob_path.write_bytes(b"stub")
+
+
 # =============================================================================
 # A. API CONTRACT TESTS
 #
@@ -707,6 +714,8 @@ class TestJourneyUpdateCycle:
         model = _make_updatable_model(1100, "UpdateJourney", 1101, 11011, "sha_v1", 1102, 11021, "sha_v2")
 
         for client, store, _ in api_client_factory(tmp_path, models=[model]):
+            # Plant blob for v1 so the pack looks "fully installed"
+            _plant_blob_by_sha(store, "sha_v1")
             _create_pack_with_lock(store, name="UpdateJourneyPack", model_id=1100,
                                    version_id=1101, file_id=11011, sha256="sha_v1")
 
@@ -736,7 +745,10 @@ class TestJourneyUpdateCycle:
             assert resolved.artifact.provider.version_id == 1102
             assert resolved.artifact.sha256 == "sha_v2"
 
-            # Step 4: Check again — should report no updates
+            # Step 4: Plant blob for v2 to simulate completed download
+            _plant_blob_by_sha(store, "sha_v2")
+
+            # Step 5: Check again — should report no updates
             resp = client.get("/api/updates/check/UpdateJourneyPack")
             data = resp.json()
             assert data["has_updates"] is False
@@ -1111,6 +1123,11 @@ class TestUpdateServiceEdgeCases:
         for client, store, _ in api_client_factory(
             tmp_path, models=[model_updatable, model_current, model_pinned]
         ):
+            # Plant blobs for packs that should be "fully installed"
+            _plant_blob_by_sha(store, "old")
+            _plant_blob_by_sha(store, "cur")
+            _plant_blob_by_sha(store, "p_old")
+
             _create_pack_with_lock(store, name="UpdatablePack", model_id=1900,
                                    version_id=1901, file_id=19011, sha256="old")
             _create_pack_with_lock(store, name="CurrentPack", model_id=2000,

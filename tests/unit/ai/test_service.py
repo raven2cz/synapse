@@ -258,9 +258,9 @@ class TestAIService:
 
     def test_cache_hit(self, service_with_temp_cache):
         """Test cache hit prevents provider execution."""
-        # Populate cache
+        # Populate cache (key includes task_type prefix to prevent cross-task contamination)
         service_with_temp_cache.cache.set(
-            content="test description",
+            content="parameter_extraction:test description",
             result={"cached": True},
             provider_id="ollama",
             model="qwen2.5:14b",

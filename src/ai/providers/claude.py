@@ -90,9 +90,12 @@ class ClaudeProvider(AIProvider):
             )
 
             try:
-                # Claude Code: claude --print --model <model> "<prompt>"
+                # Claude Code: use stdin for prompt to avoid CLI arg length limits
+                # (long Civitai HTML descriptions can be 50KB+)
+                logger.debug(f"[ai-service] Running: claude --print --model {self.model} (prompt via stdin)")
                 result = subprocess.run(
-                    ["claude", "--print", "--model", self.model, prompt],
+                    ["claude", "--print", "--model", self.model],
+                    input=prompt,
                     capture_output=True,
                     text=True,
                     timeout=timeout,

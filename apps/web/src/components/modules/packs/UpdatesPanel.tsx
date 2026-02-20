@@ -71,14 +71,18 @@ function UpdateItem({
   const [expanded, setExpanded] = useState(false)
   const changesCount = plan.changes.length
   const ambiguousCount = plan.ambiguous.length
+  const pendingCount = plan.pending_downloads?.length ?? 0
+  const isPendingOnly = changesCount === 0 && ambiguousCount === 0 && pendingCount > 0
 
   return (
     <div
       className={clsx(
         'rounded-xl border transition-colors',
-        selected
-          ? 'bg-synapse/5 border-synapse/30'
-          : 'bg-slate-dark/50 border-slate-mid/30',
+        isPendingOnly
+          ? 'bg-amber-500/5 border-amber-500/30'
+          : selected
+            ? 'bg-synapse/5 border-synapse/30'
+            : 'bg-slate-dark/50 border-slate-mid/30',
         applying && 'opacity-60 pointer-events-none'
       )}
     >
@@ -103,7 +107,13 @@ function UpdateItem({
             <span className="font-medium text-text-primary truncate">{packName}</span>
           </div>
           <p className="text-sm text-text-muted mt-0.5">
-            {t('updates.panel.changesCount', { count: changesCount + ambiguousCount })}
+            {isPendingOnly ? (
+              <span className="text-amber-400">
+                {t('updates.panel.pendingDownloads', { count: pendingCount })}
+              </span>
+            ) : (
+              t('updates.panel.changesCount', { count: changesCount + ambiguousCount })
+            )}
           </p>
         </div>
 
@@ -127,6 +137,26 @@ function UpdateItem({
       {/* Expanded details */}
       {expanded && (
         <div className="px-4 pb-4 space-y-2 border-t border-slate-mid/20 pt-3">
+          {/* Pending downloads warning */}
+          {pendingCount > 0 && (
+            <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <p className="text-xs font-medium text-amber-400">
+                  {t('updates.panel.pendingDownloadsDetail', { count: pendingCount })}
+                </p>
+              </div>
+              {plan.pending_downloads.map((pd, idx) => (
+                <div key={idx} className="text-xs text-text-muted mt-1 ml-5.5">
+                  <span className="font-mono text-amber-300">{pd.dependency_id}</span>
+                  {pd.size_bytes ? (
+                    <span className="ml-2 text-text-muted/70">({formatBytes(pd.size_bytes)})</span>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+
           {plan.changes.map((change, idx) => {
             const newData = change.new as Record<string, unknown>
             const modelId = newData?.provider_model_id
@@ -289,6 +319,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
     deselectAll,
     togglePack,
     applySelected,
+    retryAllPending,
     cancelBatch,
   } = useUpdatesStore()
 
@@ -297,18 +328,36 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
   const packNames = Object.keys(availableUpdates)
   const allSelected = selectedCount === packNames.length && packNames.length > 0
 
+  // Detect if any selected packs have pending downloads
+  const hasPendingInSelection = selectedPacks.some(name => {
+    const plan = availableUpdates[name]
+    return plan && (plan.pending_downloads?.length ?? 0) > 0
+  })
+
   const handleApplySelected = async () => {
     if (selectedCount === 0) return
     setIsApplying(true)
 
     try {
-      const result = await applySelected()
-      if (result.applied > 0) {
-        toast.success(t('updates.panel.applySuccess', { count: result.applied }))
-        queryClient.invalidateQueries({ queryKey: ['packs'] })
-      }
-      if (result.failed > 0) {
-        toast.error(t('updates.panel.applyFailed', { count: result.failed }))
+      // Use retryAllPending which handles both pending downloads and new updates
+      if (hasPendingInSelection) {
+        const result = await retryAllPending()
+        if (result.queued > 0) {
+          toast.success(t('updates.panel.retrySuccess', { count: result.queued }))
+          queryClient.invalidateQueries({ queryKey: ['packs'] })
+        }
+        if (result.failed > 0) {
+          toast.error(t('updates.panel.applyFailed', { count: result.failed }))
+        }
+      } else {
+        const result = await applySelected()
+        if (result.applied > 0) {
+          toast.success(t('updates.panel.applySuccess', { count: result.applied }))
+          queryClient.invalidateQueries({ queryKey: ['packs'] })
+        }
+        if (result.failed > 0) {
+          toast.error(t('updates.panel.applyFailed', { count: result.failed }))
+        }
       }
     } finally {
       setIsApplying(false)
@@ -447,7 +496,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
               />
             )}
 
-            {/* Apply button when there are updates to apply */}
+            {/* Apply / Retry button when there are updates */}
             {updatesCount > 0 && (
               <Button
                 variant="primary"
@@ -460,7 +509,9 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
-                {t('updates.panel.applySelected', { count: selectedCount })}
+                {hasPendingInSelection
+                  ? t('updates.panel.retrySelected', { count: selectedCount })
+                  : t('updates.panel.applySelected', { count: selectedCount })}
               </Button>
             )}
           </div>

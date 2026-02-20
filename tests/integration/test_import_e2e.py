@@ -221,6 +221,16 @@ class TestImportPreviewEndpoint:
         assert "Invalid Civitai URL" in str(exc_info.value.detail)
 
 
+def _mock_ai_service():
+    """Create a mock AIService that doesn't call real AI providers."""
+    mock_result = MagicMock()
+    mock_result.success = False
+    mock_result.output = None
+    mock_ai = MagicMock()
+    mock_ai.extract_parameters.return_value = mock_result
+    return mock_ai
+
+
 class TestImportEndpointWithWizard:
     """Tests for /import endpoint with wizard options."""
 
@@ -234,7 +244,8 @@ class TestImportEndpointWithWizard:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -252,7 +263,8 @@ class TestImportEndpointWithWizard:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 pack_name="my_custom_pack",
@@ -271,7 +283,8 @@ class TestImportEndpointWithWizard:
         mock_response.iter_content = MagicMock(return_value=[b'fake video data'])
         mock_response.headers = {'content-length': '1000000'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_images=False,
@@ -292,7 +305,8 @@ class TestImportEndpointWithWizard:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 include_nsfw=False,
@@ -320,7 +334,8 @@ class TestFullImportCycle:
         mock_response.headers = {'content-length': '100'}
 
         # 1. Import
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_images=True,
@@ -380,7 +395,8 @@ class TestFullImportCycle:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -409,7 +425,8 @@ class TestFullImportCycle:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -428,7 +445,8 @@ class TestFullImportCycle:
         mock_response.iter_content = MagicMock(return_value=[b'fake video data'])
         mock_response.headers = {'content-length': '1000000'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_videos=True,
@@ -458,7 +476,8 @@ class TestImportIdempotency:
         mock_response.iter_content = MagicMock(return_value=[b'fake image data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             # Import twice
             request = ImportRequest(url="https://civitai.com/models/12345")
             result1 = import_pack(request=request, store=temp_store)
@@ -488,7 +507,8 @@ class TestStoreIntegration:
         mock_response.iter_content = MagicMock(return_value=[b'fake data'])
         mock_response.headers = {'content-length': '100'}
 
-        with patch('src.store.pack_service.requests.get', return_value=mock_response):
+        with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.ai.AIService', return_value=_mock_ai_service()):
             pack = temp_store.import_civitai(
                 url="https://civitai.com/models/12345",
                 download_previews=True,

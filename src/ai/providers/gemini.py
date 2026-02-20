@@ -95,6 +95,7 @@ class GeminiProvider(AIProvider):
 
             try:
                 # Gemini CLI: gemini --model <model> -p "<prompt>"
+                logger.debug(f"[ai-service] Running: gemini --model {self.model} (prompt length: {len(prompt)})")
                 result = subprocess.run(
                     ["gemini", "--model", self.model, "-p", prompt],
                     capture_output=True,

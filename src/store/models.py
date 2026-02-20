@@ -1165,12 +1165,21 @@ class AmbiguousUpdate(BaseModel):
     candidates: List[UpdateCandidate]
 
 
+class PendingDownload(BaseModel):
+    """A dependency whose lock is updated but blob hasn't been downloaded yet."""
+    dependency_id: str
+    sha256: str
+    download_url: str = ""
+    size_bytes: Optional[int] = None
+
+
 class UpdatePlan(BaseModel):
     """Update plan structure."""
     pack: str
     already_up_to_date: bool = False
     changes: List[UpdateChange] = Field(default_factory=list)
     ambiguous: List[AmbiguousUpdate] = Field(default_factory=list)
+    pending_downloads: List[PendingDownload] = Field(default_factory=list)
     impacted_packs: List[str] = Field(default_factory=list)
 
 

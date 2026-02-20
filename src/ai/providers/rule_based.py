@@ -69,15 +69,11 @@ class RuleBasedProvider(AIProvider):
 
             try:
                 # Import here to avoid circular imports
-                from src.utils.parameter_extractor import (
-                    ParameterExtractor,
-                )
-
-                extractor = ParameterExtractor()
+                from src.utils.parameter_extractor import extract_from_description
 
                 # Extract parameters from the description
                 # Note: For rule_based, we expect the raw description, not the AI prompt
-                result = extractor.extract(prompt)
+                result = extract_from_description(prompt)
 
                 # Convert to dict format expected by the system
                 output = self._normalize_result(result)
@@ -118,25 +114,18 @@ class RuleBasedProvider(AIProvider):
         """
         Normalize extraction result to dict format.
 
-        The ParameterExtractor may return different formats,
-        this ensures consistent dict output.
-
         Args:
-            result: Result from ParameterExtractor
+            result: ExtractionResult from parameter_extractor
 
         Returns:
-            Normalized dictionary
+            Normalized dictionary of parameters
         """
+        # ExtractionResult has a .parameters dict
+        if hasattr(result, "parameters") and isinstance(result.parameters, dict):
+            return result.parameters
+
         if isinstance(result, dict):
             return result
-
-        # If it's a dataclass or object with __dict__
-        if hasattr(result, "__dict__"):
-            return {k: v for k, v in result.__dict__.items() if not k.startswith("_")}
-
-        # If it's a NamedTuple or similar
-        if hasattr(result, "_asdict"):
-            return result._asdict()
 
         # Last resort: convert to string dict
         return {"raw": str(result)}
