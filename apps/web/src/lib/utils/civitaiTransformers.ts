@@ -231,7 +231,7 @@ function buildCivitaiImageUrl(
 /**
  * Transform a single preview/image.
  */
-function transformPreview(img: Record<string, unknown>): ModelPreview {
+export function transformPreview(img: Record<string, unknown>): ModelPreview {
   const rawUrl = (img.url as string) || ''
   const filename = img.name as string | null
   const imgType = img.type as string | undefined

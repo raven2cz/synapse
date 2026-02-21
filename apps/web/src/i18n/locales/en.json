@@ -791,6 +791,7 @@
     "modal": {
       "importToPack": "Import to Pack...",
       "previewImages": "Preview Images ({{count}})",
+      "loadingImages": "Loading preview images...",
       "usageTips": "Usage Tips",
       "triggerWords": "Trigger Words",
       "versions": "Versions ({{count}})",

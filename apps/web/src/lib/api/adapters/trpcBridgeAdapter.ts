@@ -15,8 +15,9 @@ import type {
   SearchParams,
   SearchResult,
   ModelDetail,
+  ModelPreview,
 } from '../searchTypes'
-import { transformTrpcModel, transformMeilisearchModel, transformTrpcModelDetail } from '@/lib/utils/civitaiTransformers'
+import { transformTrpcModel, transformMeilisearchModel, transformTrpcModelDetail, transformPreview } from '@/lib/utils/civitaiTransformers'
 
 // Timeout for image.getInfinite which is inherently slow
 const IMAGE_FETCH_TIMEOUT = 60000
@@ -217,51 +218,64 @@ export class TrpcBridgeAdapter implements SearchAdapter {
     }
   }
 
+  /**
+   * Get model info FAST (no image fetching).
+   *
+   * For tRPC: calls bridge.getModel() which returns in ~1s (model data only, images empty).
+   * For REST fallback: calls /api/browse/model/{id} which includes images.
+   *
+   * Images are loaded separately via getModelPreviews() for progressive loading.
+   */
   async getModelDetail(modelId: number): Promise<ModelDetail> {
     const bridge = window.SynapseSearchBridge
 
-    // Use bridge's direct tRPC calls if available (bypasses slow Python proxy)
-    if (bridge?.getModel && bridge?.getModelImages) {
+    // Use bridge's direct tRPC call if available (fast — model data only, no images)
+    if (bridge?.getModel) {
       try {
-        // Step 1: Get model data (fast — model.getById)
         const modelResult = await bridge.getModel(modelId)
-        if (!modelResult.ok) {
-          throw new Error(modelResult.error?.message || 'Model fetch failed')
+        if (modelResult.ok) {
+          return transformTrpcModelDetail(modelResult.data as Record<string, unknown>)
         }
-
-        // Step 2: Extract modelVersionId — image.getInfinite requires it (NOT modelId!)
-        const data = modelResult.data as Record<string, unknown>
-        const modelVersions = data?.modelVersions as Record<string, unknown>[] | undefined
-        const firstVersionId = modelVersions?.[0]?.id as number | undefined
-
-        // Step 3: Fetch images using modelVersionId (with timeout protection)
-        if (firstVersionId) {
-          try {
-            const imagesResult = await Promise.race([
-              bridge.getModelImages(firstVersionId, { limit: 50, timeout: IMAGE_FETCH_TIMEOUT }),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('getModelImages timeout')), 15_000)
-              ),
-            ])
-            if (imagesResult.ok && modelVersions?.[0]) {
-              modelVersions[0].images = imagesResult.data?.items || []
-            }
-          } catch {
-            // Images timed out or failed — proceed without them
-          }
-        }
-
-        return transformTrpcModelDetail(data)
+        throw new Error(modelResult.error?.message || 'Model fetch failed')
       } catch (err) {
         console.warn('[Synapse] Bridge model fetch failed, using REST fallback:', err)
       }
     }
 
-    // Fallback to REST if bridge unavailable or failed
+    // Fallback to REST (includes images — no need for separate getModelPreviews)
     const res = await fetch(`/api/browse/model/${modelId}`)
     if (!res.ok) {
       throw new Error('Failed to fetch model')
     }
     return res.json()
+  }
+
+  /**
+   * Fetch preview images separately via bridge (progressive loading).
+   *
+   * Called by BrowsePage as Query 2, only when getModelDetail returned 0 previews.
+   * Uses image.getInfinite which requires modelVersionId (NOT modelId!).
+   * 15s timeout protects against Civitai hangs.
+   */
+  async getModelPreviews(modelId: number, versionId: number): Promise<ModelPreview[]> {
+    const bridge = window.SynapseSearchBridge
+    if (!bridge?.getModelImages) {
+      throw new Error('Bridge getModelImages not available')
+    }
+
+    const result = await Promise.race([
+      bridge.getModelImages(versionId, { limit: 50, timeout: IMAGE_FETCH_TIMEOUT }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('getModelImages timeout')), 15_000)
+      ),
+    ])
+
+    if (!result.ok) {
+      throw new Error(result.error?.message || 'Image fetch failed')
+    }
+
+    return (result.data?.items || []).map((item) =>
+      transformPreview(item as Record<string, unknown>)
+    )
   }
 }

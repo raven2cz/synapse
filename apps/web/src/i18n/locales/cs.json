@@ -795,6 +795,7 @@
     "modal": {
       "importToPack": "Importovat do packu...",
       "previewImages": "Náhledy ({{count}})",
+      "loadingImages": "Načítání náhledů...",
       "usageTips": "Tipy pro použití",
       "triggerWords": "Spouštěcí slova",
       "versions": "Verze ({{count}})",

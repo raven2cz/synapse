@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
@@ -262,25 +262,83 @@ export function BrowsePage() {
     }
   }, [searchResults])
 
-  // Model detail query - uses adapter pattern (tRPC bridge when available)
-  const { data: modelDetail, isLoading: isLoadingDetail } = useQuery<ModelDetail>({
+  // =========================================================================
+  // Split Query Pattern: Model info (fast) + Images (progressive)
+  //
+  // Query 1: Model info — opens panel immediately
+  //   REST:  /api/browse/model/{id} → returns model WITH images
+  //   tRPC:  bridge.getModel() → returns model WITHOUT images (fast ~1s)
+  //
+  // Query 2: Images — only fires when Query 1 returned 0 previews (tRPC path)
+  //   Tries bridge.getModelImages(versionId) first, falls back to REST
+  //   REST users never hit this query (they already have images from Query 1)
+  // =========================================================================
+
+  // Query 1: Model info (opens panel immediately)
+  const { data: modelInfo, isLoading: isLoadingModel } = useQuery<ModelDetail>({
     queryKey: ['civitai-model', selectedModel, searchProvider],
     queryFn: async () => {
-      // Get adapter for current provider
       let adapter = getAdapter(searchProvider)
-
-      // If adapter has getModelDetail, use it (tRPC, REST)
-      // Otherwise fall back to REST (Archive doesn't support model fetch)
-      if (!adapter.getModelDetail) {
-        adapter = getAdapter('rest')
-      }
-
+      if (!adapter.getModelDetail) adapter = getAdapter('rest')
       return adapter.getModelDetail!(selectedModel!)
     },
     enabled: !!selectedModel,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-    retry: 2, // Limit retries to avoid long waits
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
   })
+
+  // Query 2: Images (progressive loading — only when model has 0 previews)
+  const firstVersionId = modelInfo?.versions?.[0]?.id
+  const modelHasImages = (modelInfo?.previews?.length ?? 0) > 0
+  const { data: modelPreviews, isLoading: isLoadingPreviews } = useQuery<ModelPreview[]>({
+    queryKey: ['civitai-model-previews', selectedModel, firstVersionId],
+    queryFn: async () => {
+      const currentAdapter = getAdapter(searchProvider)
+
+      // Try bridge getModelPreviews if available (direct tRPC, fast)
+      if (currentAdapter.getModelPreviews && firstVersionId) {
+        try {
+          const previews = await currentAdapter.getModelPreviews(selectedModel!, firstVersionId)
+          if (previews.length > 0) return previews
+        } catch {
+          // Bridge failed — fall through to REST fallback
+        }
+      }
+
+      // REST fallback — always returns images
+      const detail = await getAdapter('rest').getModelDetail!(selectedModel!)
+      return detail.previews || []
+    },
+    enabled: !!selectedModel && !!modelInfo && !modelHasImages,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  })
+
+  // Merge model info + progressively loaded previews
+  const modelDetail = useMemo(() => {
+    if (!modelInfo) return undefined
+    const previews = modelPreviews?.length ? modelPreviews : modelInfo.previews
+
+    // Derive example_params from loaded previews (tRPC model.getById has no images to extract from)
+    let exampleParams = modelInfo.example_params
+    if (!exampleParams && previews.length > 0) {
+      const meta = previews.find(p => p.meta)?.meta
+      if (meta) {
+        exampleParams = {
+          sampler: meta.sampler,
+          steps: meta.steps,
+          cfg_scale: meta.cfgScale,
+          clip_skip: meta.clipSkip,
+          seed: meta.seed,
+        }
+      }
+    }
+
+    if (previews === modelInfo.previews && exampleParams === modelInfo.example_params) {
+      return modelInfo
+    }
+    return { ...modelInfo, previews, example_params: exampleParams }
+  }, [modelInfo, modelPreviews])
 
   // Handlers
   const handleSearch = (e: React.FormEvent) => {
@@ -684,7 +742,7 @@ export function BrowsePage() {
             className="bg-slate-deep border border-slate-mid rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col"
             onClick={e => e.stopPropagation()}
           >
-            {isLoadingDetail ? (
+            {isLoadingModel ? (
               <BreathingOrb size="md" text={t('browse.loadingModel')} className="py-20" />
             ) : modelDetail ? (
               <>
@@ -725,25 +783,33 @@ export function BrowsePage() {
 
                 {/* Modal Content - Scrollable */}
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                  {/* Preview Gallery */}
+                  {/* Preview Gallery — skeleton while images load progressively */}
                   <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-text-primary">
-                      {t('browse.modal.previewImages', { count: modelDetail.previews.length })}
+                      {isLoadingPreviews && !modelHasImages
+                        ? t('browse.modal.loadingImages')
+                        : t('browse.modal.previewImages', { count: modelDetail.previews.length })}
                     </h3>
                     <div className="grid grid-cols-6 gap-3 max-h-[360px] overflow-y-auto p-1">
-                      {modelDetail.previews.map((preview, idx) => (
-                        <MediaPreview
-                          key={idx}
-                          src={preview.url}
-                          type={preview.media_type}
-                          thumbnailSrc={preview.thumbnail_url}
-                          nsfw={preview.nsfw}
-                          aspectRatio="portrait"
-                          className="cursor-pointer hover:ring-2 ring-synapse"
-                          autoPlay={true}
-                          onClick={() => setFullscreenIndex(idx)}
-                        />
-                      ))}
+                      {isLoadingPreviews && !modelHasImages ? (
+                        Array.from({ length: 6 }).map((_, i) => (
+                          <div key={i} className="aspect-[3/4] rounded-xl bg-slate-mid/30 animate-pulse" />
+                        ))
+                      ) : (
+                        modelDetail.previews.map((preview, idx) => (
+                          <MediaPreview
+                            key={idx}
+                            src={preview.url}
+                            type={preview.media_type}
+                            thumbnailSrc={preview.thumbnail_url}
+                            nsfw={preview.nsfw}
+                            aspectRatio="portrait"
+                            className="cursor-pointer hover:ring-2 ring-synapse"
+                            autoPlay={true}
+                            onClick={() => setFullscreenIndex(idx)}
+                          />
+                        ))
+                      )}
                     </div>
                   </div>
 

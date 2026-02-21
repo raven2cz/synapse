@@ -1,13 +1,47 @@
 /**
- * Tests for tRPC Bridge Adapter model detail wiring.
+ * Tests for tRPC Bridge Adapter — Split Query Pattern.
  *
- * Verifies the sequential flow: getModel() → extract modelVersionId → getModelImages(versionId)
+ * Architecture:
+ *   getModelDetail()   → bridge.getModel() → returns model WITHOUT images (fast ~1s)
+ *   getModelPreviews() → bridge.getModelImages(versionId) → returns images separately
+ *
  * Key insight: image.getInfinite requires modelVersionId, NOT modelId.
+ * BrowsePage uses two React Queries: model info (opens panel) + images (progressive).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-describe('TrpcBridgeAdapter.getModelDetail wiring', () => {
+// Helper: create a mock bridge with configurable methods
+function makeBridge(overrides: Record<string, unknown> = {}) {
+  return {
+    version: '10.0.0',
+    isEnabled: () => true,
+    getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
+    search: vi.fn(),
+    ...overrides,
+  }
+}
+
+// Helper: model data as returned by tRPC model.getById (images always empty)
+function makeModelData(id: number, name: string, versions: { id: number; name: string }[]) {
+  return {
+    id,
+    name,
+    type: 'LORA',
+    nsfw: false,
+    user: { username: 'test' },
+    stats: { downloadCount: 100 },
+    modelVersions: versions.map(v => ({
+      id: v.id,
+      name: v.name,
+      baseModel: 'SDXL 1.0',
+      files: [],
+      images: [], // tRPC model.getById always returns empty images
+    })),
+  }
+}
+
+describe('TrpcBridgeAdapter — Split Query Pattern', () => {
   let originalBridge: unknown
 
   beforeEach(() => {
@@ -19,238 +53,241 @@ describe('TrpcBridgeAdapter.getModelDetail wiring', () => {
     vi.restoreAllMocks()
   })
 
-  it('should pass modelVersionId (not modelId) to getModelImages', async () => {
-    const getModel = vi.fn().mockResolvedValue({
-      ok: true,
-      data: {
-        id: 123,
-        name: 'Test Model',
-        type: 'LORA',
-        nsfw: false,
-        user: { username: 'test' },
-        stats: { downloadCount: 100 },
-        modelVersions: [
-          { id: 456, name: 'v1', baseModel: 'SDXL 1.0', files: [], images: [] },
-        ],
-      },
+  // ===========================================================================
+  // getModelDetail — fast, returns model WITHOUT images
+  // ===========================================================================
+
+  describe('getModelDetail (fast model info)', () => {
+    it('should return model data without waiting for images', async () => {
+      const getModel = vi.fn().mockResolvedValue({
+        ok: true,
+        data: makeModelData(123, 'Test Model', [{ id: 456, name: 'v1' }]),
+      })
+
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel,
+        getModelImages: vi.fn(), // exists but should NOT be called
+      })
+
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+      const result = await adapter.getModelDetail(123)
+
+      expect(getModel).toHaveBeenCalledWith(123)
+      // getModelImages should NOT be called — images are loaded separately
+      expect((window.SynapseSearchBridge as any).getModelImages).not.toHaveBeenCalled()
+
+      expect(result.id).toBe(123)
+      expect(result.name).toBe('Test Model')
+      expect(result.previews.length).toBe(0) // No images in model.getById
     })
 
-    const getModelImages = vi.fn().mockResolvedValue({
-      ok: true,
-      data: {
-        items: [
-          { id: 1, url: 'uuid-1', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
-        ],
-      },
+    it('should fall back to REST when bridge.getModel unavailable', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          id: 123, name: 'REST Model', type: 'LORA', previews: [{ url: 'img.jpg', nsfw: false }], versions: [],
+        }),
+      })
+      vi.stubGlobal('fetch', mockFetch)
+
+      // Bridge without getModel method
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge()
+
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+      const result = await adapter.getModelDetail(123)
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/browse/model/123')
+      expect(result.name).toBe('REST Model')
+      // REST includes images — Query 2 won't fire in BrowsePage
+      expect(result.previews.length).toBe(1)
     })
 
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel,
-      getModelImages,
-    }
+    it('should fall back to REST when bridge.getModel fails', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: 999, name: 'Fallback', type: 'LORA', previews: [], versions: [] }),
+      })
+      vi.stubGlobal('fetch', mockFetch)
 
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(123)
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel: vi.fn().mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }),
+        getModelImages: vi.fn(),
+      })
 
-    // getModel receives the modelId
-    expect(getModel).toHaveBeenCalledWith(123)
-    // getModelImages receives the modelVERSIONId (456), NOT modelId (123)
-    expect(getModelImages).toHaveBeenCalledWith(456, expect.objectContaining({ limit: 50 }))
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+      const result = await adapter.getModelDetail(999)
 
-    expect(result.id).toBe(123)
-    expect(result.previews.length).toBe(1)
+      expect(mockFetch).toHaveBeenCalledWith('/api/browse/model/999')
+      expect(result.name).toBe('Fallback')
+    })
   })
 
-  it('should fall back to REST when bridge methods unavailable', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: 123, name: 'REST Model', type: 'LORA', previews: [], versions: [] }),
-    })
-    vi.stubGlobal('fetch', mockFetch)
+  // ===========================================================================
+  // getModelPreviews — separate image loading with correct modelVersionId
+  // ===========================================================================
 
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-    }
-
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(123)
-
-    expect(mockFetch).toHaveBeenCalledWith('/api/browse/model/123')
-    expect(result.name).toBe('REST Model')
-  })
-
-  it('should fall back to REST when getModel fails', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ id: 999, name: 'Fallback', type: 'LORA', previews: [], versions: [] }),
-    })
-    vi.stubGlobal('fetch', mockFetch)
-
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel: vi.fn().mockResolvedValue({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found' } }),
-      getModelImages: vi.fn(),
-    }
-
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(999)
-
-    expect(mockFetch).toHaveBeenCalledWith('/api/browse/model/999')
-    expect(result.name).toBe('Fallback')
-  })
-
-  it('should return model without images when getModelImages fails', async () => {
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel: vi.fn().mockResolvedValue({
+  describe('getModelPreviews (progressive image loading)', () => {
+    it('should call getModelImages with modelVersionId (not modelId)', async () => {
+      const getModelImages = vi.fn().mockResolvedValue({
         ok: true,
         data: {
-          id: 123, name: 'Test', type: 'LORA', nsfw: false,
-          user: { username: 'test' }, stats: {},
-          modelVersions: [{ id: 1, name: 'v1', baseModel: 'SDXL', files: [] }],
+          items: [
+            { id: 1, url: 'uuid-1', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
+            { id: 2, url: 'uuid-2', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
+          ],
         },
-      }),
-      getModelImages: vi.fn().mockResolvedValue({ ok: false, error: { code: 'TIMEOUT', message: 'Timed out' } }),
-    }
+      })
 
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(123)
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel: vi.fn(),
+        getModelImages,
+      })
 
-    expect(result.id).toBe(123)
-    expect(result.previews.length).toBe(0)
-  })
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
 
-  it('should inject images into model with empty version images (blindbox pattern)', async () => {
-    // Reproduces: blindbox/大概是盲盒 (model 25995)
-    // model.getById returns versions with images: [] (images live in posts, not versions)
-    // image.getInfinite with modelVersionId returns the actual images
-    const getModel = vi.fn().mockResolvedValue({
-      ok: true,
-      data: {
-        id: 25995,
-        name: 'blindbox/大概是盲盒',
-        type: 'LORA',
-        nsfw: false,
-        user: { username: 'samecorner' },
-        stats: { downloadCount: 298319, thumbsUpCount: 14204 },
-        modelVersions: [
-          { id: 32988, name: 'blindbox_v1_mix', baseModel: 'SD 1.5', files: [], images: [], posts: [{ id: 81807 }] },
-          { id: 48150, name: 'blindbox_v3', baseModel: 'SD 1.5', files: [], images: [], posts: [{ id: 149906 }] },
-          { id: 32376, name: 'blindbox_v2', baseModel: 'SD 1.5', files: [], images: [], posts: [{ id: 82963 }] },
-          { id: 31123, name: 'blindbox_v1', baseModel: 'SD 1.5', files: [], images: [], posts: [{ id: 78954 }] },
-        ],
-      },
+      // Simulates BrowsePage calling getModelPreviews with versionId from Query 1
+      const previews = await adapter.getModelPreviews(123, 456)
+
+      // Must use modelVersionId (456), NOT modelId (123)
+      expect(getModelImages).toHaveBeenCalledWith(456, expect.objectContaining({ limit: 50 }))
+      expect(previews.length).toBe(2)
+      expect(previews[0].url).toBeDefined()
     })
 
-    const getModelImages = vi.fn().mockResolvedValue({
-      ok: true,
-      data: {
-        items: [
-          { id: 101, url: 'uuid-blindbox-1', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
-          { id: 102, url: 'uuid-blindbox-2', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
-          { id: 103, url: 'uuid-blindbox-3', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
-        ],
-      },
+    it('should throw when getModelImages returns error', async () => {
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel: vi.fn(),
+        getModelImages: vi.fn().mockResolvedValue({
+          ok: false, error: { code: 'TIMEOUT', message: 'Timed out' },
+        }),
+      })
+
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+
+      // Should throw — BrowsePage will catch this and fall back to REST
+      await expect(adapter.getModelPreviews(123, 456)).rejects.toThrow('Timed out')
     })
 
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel,
-      getModelImages,
-    }
+    it('should timeout after 15s when getModelImages hangs', async () => {
+      vi.useFakeTimers()
 
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(25995)
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel: vi.fn(),
+        getModelImages: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
+      })
 
-    // Should call getModel with modelId
-    expect(getModel).toHaveBeenCalledWith(25995)
-    // Should call getModelImages with FIRST version's ID (32988), not modelId (25995)
-    expect(getModelImages).toHaveBeenCalledWith(32988, expect.objectContaining({ limit: 50 }))
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
 
-    // Images should be injected despite model.getById returning images: []
-    expect(result.id).toBe(25995)
-    expect(result.name).toBe('blindbox/大概是盲盒')
-    expect(result.previews.length).toBe(3)
+      let caughtError: Error | null = null
+      const promise = adapter.getModelPreviews(123, 456).catch((err) => {
+        caughtError = err
+      })
+
+      await vi.advanceTimersByTimeAsync(16_000)
+      await promise
+
+      expect(caughtError).not.toBeNull()
+      expect(caughtError!.message).toContain('timeout')
+
+      vi.useRealTimers()
+    })
+
+    it('should throw when bridge has no getModelImages', async () => {
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge()
+
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+
+      await expect(adapter.getModelPreviews(123, 456)).rejects.toThrow('not available')
+    })
   })
 
-  it('should handle model with no modelVersions gracefully', async () => {
-    // Edge case: model exists but has no versions at all
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel: vi.fn().mockResolvedValue({
+  // ===========================================================================
+  // Real-world model patterns
+  // ===========================================================================
+
+  describe('real-world patterns', () => {
+    it('blindbox pattern: model.getById returns images:[] but getModelImages returns data', async () => {
+      // Reproduces: blindbox/大概是盲盒 (model 25995)
+      // model.getById returns versions with images: [] (images live in posts)
+      // image.getInfinite with modelVersionId returns the actual images
+      const getModel = vi.fn().mockResolvedValue({
         ok: true,
         data: {
-          id: 777, name: 'Empty Model', type: 'LORA', nsfw: false,
-          user: { username: 'test' }, stats: {},
-          modelVersions: [],
+          id: 25995,
+          name: 'blindbox/大概是盲盒',
+          type: 'LORA',
+          nsfw: false,
+          user: { username: 'samecorner' },
+          stats: { downloadCount: 298319 },
+          modelVersions: [
+            { id: 32988, name: 'blindbox_v1_mix', baseModel: 'SD 1.5', files: [], images: [] },
+            { id: 48150, name: 'blindbox_v3', baseModel: 'SD 1.5', files: [], images: [] },
+          ],
         },
-      }),
-      getModelImages: vi.fn(),
-    }
+      })
 
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const result = await adapter.getModelDetail(777)
-
-    // Should NOT call getModelImages when there are no versions
-    expect((window.SynapseSearchBridge as any).getModelImages).not.toHaveBeenCalled()
-    expect(result.id).toBe(777)
-    expect(result.previews.length).toBe(0)
-  })
-
-  it('should handle getModelImages hang with timeout', async () => {
-    vi.useFakeTimers()
-
-    ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = {
-      version: '10.0.0',
-      isEnabled: () => true,
-      getStatus: () => ({ enabled: true, nsfw: true, version: '10.0.0', cacheSize: 0 }),
-      search: vi.fn(),
-      getModel: vi.fn().mockResolvedValue({
+      const getModelImages = vi.fn().mockResolvedValue({
         ok: true,
         data: {
-          id: 123, name: 'Timeout Test', type: 'LORA', nsfw: false,
-          user: { username: 'test' }, stats: {},
-          modelVersions: [{ id: 1, name: 'v1', baseModel: 'SDXL', files: [] }],
+          items: [
+            { id: 101, url: 'uuid-blindbox-1', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
+            { id: 102, url: 'uuid-blindbox-2', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
+            { id: 103, url: 'uuid-blindbox-3', type: 'image', width: 512, height: 768, nsfw: false, nsfwLevel: 1 },
+          ],
         },
-      }),
-      getModelImages: vi.fn().mockReturnValue(new Promise(() => {})), // never resolves
-    }
+      })
 
-    const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
-    const adapter = new TrpcBridgeAdapter()
-    const promise = adapter.getModelDetail(123)
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel,
+        getModelImages,
+      })
 
-    await vi.advanceTimersByTimeAsync(16_000)
-    const result = await promise
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
 
-    expect(result.id).toBe(123)
-    expect(result.previews.length).toBe(0)
+      // Step 1: getModelDetail returns fast with 0 previews
+      const modelInfo = await adapter.getModelDetail(25995)
+      expect(getModel).toHaveBeenCalledWith(25995)
+      expect(modelInfo.id).toBe(25995)
+      expect(modelInfo.previews.length).toBe(0) // No images from model.getById
 
-    vi.useRealTimers()
+      // Step 2: getModelPreviews loads images separately (using versionId from step 1)
+      const firstVersionId = modelInfo.versions[0]?.id
+      expect(firstVersionId).toBe(32988)
+
+      const previews = await adapter.getModelPreviews(25995, firstVersionId!)
+      expect(getModelImages).toHaveBeenCalledWith(32988, expect.objectContaining({ limit: 50 }))
+      expect(previews.length).toBe(3)
+    })
+
+    it('model with no versions: getModelDetail returns 0 previews, getModelPreviews not needed', async () => {
+      ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
+        getModel: vi.fn().mockResolvedValue({
+          ok: true,
+          data: {
+            id: 777, name: 'Empty Model', type: 'LORA', nsfw: false,
+            user: { username: 'test' }, stats: {},
+            modelVersions: [],
+          },
+        }),
+        getModelImages: vi.fn(),
+      })
+
+      const { TrpcBridgeAdapter } = await import('@/lib/api/adapters/trpcBridgeAdapter')
+      const adapter = new TrpcBridgeAdapter()
+      const result = await adapter.getModelDetail(777)
+
+      expect(result.id).toBe(777)
+      expect(result.previews.length).toBe(0)
+      expect(result.versions.length).toBe(0)
+      // No versionId → BrowsePage won't call getModelPreviews
+    })
   })
 })

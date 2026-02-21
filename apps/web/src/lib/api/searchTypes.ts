@@ -328,6 +328,14 @@ export interface SearchAdapter {
    * Get detailed model information (optional - some adapters may not support this)
    */
   getModelDetail?(modelId: number): Promise<ModelDetail>
+
+  /**
+   * Fetch preview images separately (optional — enables progressive loading).
+   * Adapters that return images in getModelDetail don't need this.
+   * Used by tRPC bridge where model.getById returns 0 images
+   * and image.getInfinite must be called separately with modelVersionId.
+   */
+  getModelPreviews?(modelId: number, versionId: number): Promise<ModelPreview[]>
 }
 
 // =============================================================================
