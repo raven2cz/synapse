@@ -235,7 +235,7 @@ class TestCivitaiProviderCheckUpdate:
         assert result is None
 
     def test_ambiguous_multiple_files(self):
-        """Multiple matching files should produce ambiguous result."""
+        """Multiple matching files should produce ambiguous result (when no filename info)."""
         mock_civitai = MagicMock()
         mock_civitai.get_model.return_value = {
             "modelVersions": [{
@@ -248,7 +248,7 @@ class TestCivitaiProviderCheckUpdate:
                 ],
             }],
         }
-        # No constraints that would filter to single file
+        # No constraints, no expose filename → falls through to generic filtering → ambiguous
         dep = PackDependency(
             id="model",
             kind=AssetKind.CHECKPOINT,
@@ -257,8 +257,10 @@ class TestCivitaiProviderCheckUpdate:
                 civitai={"model_id": 123},
             ),
             update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
-            expose=ExposeConfig(filename="model.safetensors"),
+            expose=ExposeConfig(filename="placeholder.safetensors"),
         )
+        # Remove filename info so we reach the no-filename fallback path
+        dep.expose = None
         provider = CivitaiUpdateProvider(mock_civitai)
 
         result = provider.check_update(dep, self._make_current())
@@ -415,13 +417,154 @@ class TestMultiFileMatching:
         assert result is not None
         assert result["id"] == 2
 
+    def test_dotted_version_suffix_match(self):
+        """Should match when dotted version suffix changes (v1.5 -> v2.0)."""
+        files = [{"id": 2, "name": "Model_v2.0.safetensors"}]
+        current = self._make_current("Model_v1.5.safetensors")
+
+        result = CivitaiUpdateProvider._match_file_for_dep(files, MagicMock(), current)
+        assert result is not None
+        assert result["id"] == 2
+
     def test_no_filename_returns_none(self):
-        """No filename in lock should return None."""
+        """No filename in lock should return None (and MagicMock dep is handled)."""
         files = [{"id": 1, "name": "model.safetensors"}]
         current = self._make_current(None)
 
         result = CivitaiUpdateProvider._match_file_for_dep(files, MagicMock(), current)
         assert result is None
+
+    def test_expose_filename_fallback(self):
+        """Should use dep.expose.filename when provider.filename is null."""
+        files = [
+            {"id": 1, "name": "ExtremeFrenchKiss-000010.safetensors"},
+            {"id": 2, "name": "Lamia_constriction-000014.safetensors"},
+        ]
+        dep = PackDependency(
+            id="test",
+            kind=AssetKind.LORA,
+            selector=DependencySelector(
+                strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                civitai={"model_id": 100, "version_id": 200},
+            ),
+            expose=ExposeConfig(filename="ExtremeFrenchKiss-000010.safetensors"),
+        )
+        # Lock has no filename (legacy)
+        current = self._make_current(None)
+
+        result = CivitaiUpdateProvider._match_file_for_dep(files, dep, current)
+        assert result is not None
+        assert result["id"] == 1
+
+
+class TestBundleModelUpdateSkip:
+    """Tests for skipping updates on bundle models where versions are different artifacts."""
+
+    def _make_dep(self, version_id=None, expose_filename="model.safetensors"):
+        return PackDependency(
+            id="lora",
+            kind=AssetKind.LORA,
+            selector=DependencySelector(
+                strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                civitai={"model_id": 100, "version_id": version_id} if version_id else {"model_id": 100},
+            ),
+            update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+            expose=ExposeConfig(filename=expose_filename),
+        )
+
+    def _make_current(self, version_id=100, filename=None):
+        return ResolvedDependency(
+            dependency_id="lora",
+            artifact=ResolvedArtifact(
+                kind=AssetKind.LORA,
+                sha256="old_hash",
+                provider=ArtifactProvider(
+                    name=ProviderName.CIVITAI,
+                    model_id=100,
+                    version_id=version_id,
+                    filename=filename,
+                ),
+            ),
+        )
+
+    def test_bundle_dep_with_pinned_version_no_filename_match_skips(self):
+        """Bundle dep with pinned version_id and unmatched filename → no update."""
+        mock_civitai = MagicMock()
+        mock_civitai.get_model.return_value = {
+            "modelVersions": [{
+                "id": 999,
+                "files": [{"id": 9001, "name": "Lamia_constriction.safetensors",
+                           "hashes": {"SHA256": "NEWHASH"}, "primary": True}],
+            }],
+        }
+
+        dep = self._make_dep(version_id=200, expose_filename="ExtremeFrenchKiss.safetensors")
+        current = self._make_current(version_id=200, filename="ExtremeFrenchKiss.safetensors")
+
+        provider = CivitaiUpdateProvider(mock_civitai)
+        result = provider.check_update(dep, current)
+        assert result is not None
+        assert result.has_update is False
+
+    def test_bundle_dep_without_pinned_version_skips_on_filename_mismatch(self):
+        """Dep without pinned version_id but with known filename → skip if no match."""
+        mock_civitai = MagicMock()
+        mock_civitai.get_model.return_value = {
+            "modelVersions": [{
+                "id": 999,
+                "files": [{"id": 9001, "name": "new_model.safetensors",
+                           "hashes": {"SHA256": "NEWHASH"}, "primary": True}],
+            }],
+        }
+
+        dep = self._make_dep(version_id=None, expose_filename="old_model.safetensors")
+        current = self._make_current(version_id=100)
+
+        provider = CivitaiUpdateProvider(mock_civitai)
+        result = provider.check_update(dep, current)
+        assert result is not None
+        # Filename doesn't match → different artifact → not an update
+        assert result.has_update is False
+
+    def test_bundle_dep_with_matching_filename_reports_update(self):
+        """Bundle dep where latest version has matching file → genuine update."""
+        mock_civitai = MagicMock()
+        mock_civitai.get_model.return_value = {
+            "modelVersions": [{
+                "id": 999,
+                "files": [{"id": 9001, "name": "ExtremeFrenchKissV2.safetensors",
+                           "hashes": {"SHA256": "NEWHASH"}, "primary": True}],
+            }],
+        }
+
+        dep = self._make_dep(version_id=200, expose_filename="ExtremeFrenchKissV1.safetensors")
+        current = self._make_current(version_id=200, filename="ExtremeFrenchKissV1.safetensors")
+
+        provider = CivitaiUpdateProvider(mock_civitai)
+        result = provider.check_update(dep, current)
+        assert result is not None
+        assert result.has_update is True
+        assert result.file_id == 9001
+
+    def test_bundle_dep_expose_fallback_when_lock_has_no_filename(self):
+        """Lock without filename should fallback to expose.filename for matching."""
+        mock_civitai = MagicMock()
+        mock_civitai.get_model.return_value = {
+            "modelVersions": [{
+                "id": 999,
+                "files": [{"id": 9001, "name": "Lamia_constriction.safetensors",
+                           "hashes": {"SHA256": "NEWHASH"}, "primary": True}],
+            }],
+        }
+
+        # Lock has no filename (legacy), but expose has the original filename
+        dep = self._make_dep(version_id=200, expose_filename="ExtremeFrenchKiss.safetensors")
+        current = self._make_current(version_id=200, filename=None)
+
+        provider = CivitaiUpdateProvider(mock_civitai)
+        result = provider.check_update(dep, current)
+        assert result is not None
+        assert result.has_update is False  # Different artifact, not an update
 
 
 class TestPendingDownloads:

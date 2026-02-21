@@ -121,7 +121,7 @@ def test_metadata_persistence_in_pack_json(pack_service, mock_layout):
     # Mock the internal helpers to focus on import logic
     with patch("src.store.pack_service.PackService.parse_civitai_url", return_value=(123, 456)), \
          patch("src.store.pack_service.PackService._sanitize_pack_name", return_value=pack_name), \
-         patch("src.store.pack_service.PackService._create_initial_lock"), \
+         patch("src.store.pack_service.PackService._create_initial_lock_multi"), \
          patch("src.store.pack_service.requests.get", return_value=mock_response):
 
         # Mock save_pack_lock to avoid serialization of MagicMock lock

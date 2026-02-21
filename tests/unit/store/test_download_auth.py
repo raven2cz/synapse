@@ -45,35 +45,43 @@ class TestCivitaiAuthProvider:
         assert provider.matches("https://huggingface.co/model") is False
         assert provider.matches("https://example.com/file") is False
 
-    def test_authenticate_url_strips_token(self):
-        """authenticate_url should strip legacy ?token= from URLs."""
+    def test_authenticate_url_injects_token(self):
+        """authenticate_url should inject ?token= into Civitai URLs."""
+        provider = CivitaiAuthProvider(api_key="my-secret-key")
+        url = "https://civitai.com/api/download/models/123"
+        result = provider.authenticate_url(url)
+        assert "token=my-secret-key" in result
+
+    def test_authenticate_url_replaces_old_token(self):
+        """authenticate_url should replace existing ?token= with fresh key."""
         provider = CivitaiAuthProvider(api_key="my-secret-key")
         url_with_token = "https://civitai.com/api/download/models/123?token=old-key"
         result = provider.authenticate_url(url_with_token)
-        assert "token=" not in result
-        assert result == "https://civitai.com/api/download/models/123"
+        assert "token=my-secret-key" in result
+        assert "old-key" not in result
 
     def test_authenticate_url_preserves_other_params(self):
-        """authenticate_url should strip token but keep other query params."""
+        """authenticate_url should inject token and keep other query params."""
         provider = CivitaiAuthProvider(api_key="my-key")
         url = "https://civitai.com/api/download/models/123?type=Model&token=old&format=SafeTensor"
         result = provider.authenticate_url(url)
-        assert "token=" not in result
+        assert "token=my-key" in result
+        assert "old" not in result
         assert "type=Model" in result
         assert "format=SafeTensor" in result
 
-    def test_authenticate_url_no_query_unchanged(self):
-        """URL without query params should pass through unchanged."""
+    def test_authenticate_url_no_query_injects_token(self):
+        """URL without query params should get ?token= appended."""
         provider = CivitaiAuthProvider(api_key="my-key")
         url = "https://civitai.com/api/download/models/123"
         result = provider.authenticate_url(url)
-        assert result == url
+        assert result == "https://civitai.com/api/download/models/123?token=my-key"
 
-    def test_get_auth_headers_with_key(self):
-        """get_auth_headers should return Bearer token header."""
+    def test_get_auth_headers_returns_empty(self):
+        """get_auth_headers should return empty dict (auth is via URL ?token=)."""
         provider = CivitaiAuthProvider(api_key="my-secret-key")
         headers = provider.get_auth_headers("https://civitai.com/api/download/models/123")
-        assert headers == {"Authorization": "Bearer my-secret-key"}
+        assert headers == {}
 
     def test_get_auth_headers_without_key(self):
         """get_auth_headers should return empty dict without API key."""

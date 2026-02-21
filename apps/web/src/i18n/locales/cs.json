@@ -1631,6 +1631,8 @@
       "checkPrompt": "Klikněte na Zkontrolovat aktualizace pro skenování všech packů",
       "checkAll": "Zkontrolovat všechny packy",
       "checking": "Kontroluji aktualizace...",
+      "checkingProgress": "Kontroluji {{current}}/{{total}} packů...",
+      "checkingPack": "Kontroluji {{pack}}...",
       "recheck": "Znovu",
       "selectAll": "Vybrat vše",
       "deselectAll": "Zrušit výběr",

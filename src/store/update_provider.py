@@ -47,6 +47,8 @@ class UpdateCheckResult:
     sha256: Optional[str] = None
     download_url: Optional[str] = None
     size_bytes: Optional[int] = None
+    filename: Optional[str] = None
+    """Filename of the matched file in the new version (for lock accuracy)."""
 
 
 @runtime_checkable

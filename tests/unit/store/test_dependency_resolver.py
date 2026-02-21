@@ -154,6 +154,147 @@ class TestCivitaiLatestResolver:
         assert result.provider.version_id == 200
         assert result.sha256 == "newhash"
 
+    def test_resolves_pinned_version_not_latest(self):
+        """Critical regression test: when version_id is pinned, resolver MUST
+        use get_model_version(version_id) and NOT blindly take versions[0].
+
+        This was the root cause of all bundle pack downloads failing —
+        multiple dependencies share the same model_id but have different
+        version_ids. The old code always took versions[0] (latest), which
+        could be gated/early-access, causing all downloads to fail.
+        """
+        mock_civitai = MagicMock()
+
+        # get_model returns LATEST as versions[0] (id=999, gated)
+        mock_civitai.get_model.return_value = {
+            "modelVersions": [
+                {
+                    "id": 999,
+                    "files": [{
+                        "id": 9000, "primary": True, "name": "latest.safetensors",
+                        "hashes": {"SHA256": "LATESTHASH"},
+                        "downloadUrl": "https://civitai.com/api/download/models/999",
+                    }],
+                },
+                {
+                    "id": 200,
+                    "files": [{
+                        "id": 2000, "primary": True, "name": "pinned.safetensors",
+                        "hashes": {"SHA256": "PINNEDHASH"},
+                        "downloadUrl": "https://civitai.com/api/download/models/200",
+                    }],
+                },
+            ],
+        }
+
+        # get_model_version returns the PINNED version data
+        mock_civitai.get_model_version.return_value = {
+            "id": 200,
+            "files": [{
+                "id": 2000, "primary": True, "name": "pinned.safetensors",
+                "hashes": {"SHA256": "PINNEDHASH"},
+                "downloadUrl": "https://civitai.com/api/download/models/200",
+            }],
+        }
+
+        # Dependency has version_id=200 pinned
+        dep = PackDependency(
+            id="lora_v2",
+            kind=AssetKind.LORA,
+            selector=DependencySelector(
+                strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                civitai={"model_id": 123, "version_id": 200},
+                constraints=SelectorConstraints(primary_file_only=True),
+            ),
+            expose=ExposeConfig(filename="pinned.safetensors"),
+        )
+
+        resolver = CivitaiLatestResolver(mock_civitai)
+        result = resolver.resolve(dep)
+
+        assert result is not None
+        # Must resolve to pinned version 200, NOT latest 999
+        assert result.provider.version_id == 200
+        assert result.sha256 == "pinnedhash"
+        assert "models/200" in result.download.urls[0]
+
+        # Must call get_model_version, NOT get_model
+        mock_civitai.get_model_version.assert_called_once_with(200)
+        mock_civitai.get_model.assert_not_called()
+
+    def test_multi_version_bundle_resolves_each_version(self):
+        """Simulate a bundle pack with 6 LoRAs from the same model but
+        different version_ids. Each must resolve to its own version.
+        """
+        mock_civitai = MagicMock()
+
+        version_ids = [100, 200, 300, 400, 500, 600]
+
+        def fake_get_model_version(vid):
+            return {
+                "id": vid,
+                "files": [{
+                    "id": vid * 10, "primary": True,
+                    "name": f"lora_v{vid}.safetensors",
+                    "hashes": {"SHA256": f"HASH{vid}"},
+                    "downloadUrl": f"https://civitai.com/api/download/models/{vid}",
+                }],
+            }
+
+        mock_civitai.get_model_version.side_effect = fake_get_model_version
+
+        resolver = CivitaiLatestResolver(mock_civitai)
+
+        for vid in version_ids:
+            dep = PackDependency(
+                id=f"lora_{vid}",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 42, "version_id": vid},
+                ),
+                expose=ExposeConfig(filename=f"lora_{vid}.safetensors"),
+            )
+            result = resolver.resolve(dep)
+            assert result is not None
+            assert result.provider.version_id == vid
+            assert f"models/{vid}" in result.download.urls[0]
+            assert result.sha256 == f"hash{vid}"
+
+        # Should have called get_model_version 6 times, get_model 0 times
+        assert mock_civitai.get_model_version.call_count == 6
+        mock_civitai.get_model.assert_not_called()
+
+    def test_pinned_version_with_file_id(self):
+        """When both version_id and file_id are set, resolver should pick
+        the exact file matching file_id.
+        """
+        mock_civitai = MagicMock()
+        mock_civitai.get_model_version.return_value = {
+            "id": 200,
+            "files": [
+                {"id": 2001, "name": "pruned.safetensors", "hashes": {"SHA256": "PRUNED"}},
+                {"id": 2002, "name": "full.safetensors", "hashes": {"SHA256": "FULL"}},
+            ],
+        }
+
+        dep = PackDependency(
+            id="model",
+            kind=AssetKind.CHECKPOINT,
+            selector=DependencySelector(
+                strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                civitai={"model_id": 123, "version_id": 200, "file_id": 2002},
+            ),
+            expose=ExposeConfig(filename="full.safetensors"),
+        )
+
+        resolver = CivitaiLatestResolver(mock_civitai)
+        result = resolver.resolve(dep)
+
+        assert result is not None
+        assert result.provider.file_id == 2002
+        assert result.sha256 == "full"
+
     def test_returns_none_for_empty_versions(self):
         mock_civitai = MagicMock()
         mock_civitai.get_model.return_value = {"modelVersions": []}
@@ -169,6 +310,51 @@ class TestCivitaiLatestResolver:
         )
         resolver = CivitaiLatestResolver(MagicMock())
         assert resolver.resolve(dep) is None
+
+
+class TestBaseModelHintResolver:
+    """Tests for BaseModelHintResolver constraint handling."""
+
+    def test_uses_select_file_with_constraints(self):
+        """BaseModelHintResolver should use _select_file() with constraints,
+        not just take files[0].
+        """
+        mock_civitai = MagicMock()
+        mock_civitai.get_model_version.return_value = {
+            "id": 300,
+            "files": [
+                {"id": 3001, "name": "model.ckpt", "primary": False, "hashes": {"SHA256": "CKPT"}},
+                {"id": 3002, "name": "model.safetensors", "primary": True, "hashes": {"SHA256": "SAFE"}},
+            ],
+        }
+
+        mock_layout = MagicMock()
+        mock_config = MagicMock()
+        mock_alias = MagicMock()
+        mock_alias.selector.civitai.model_id = 10
+        mock_alias.selector.civitai.version_id = 300
+        mock_alias.selector.civitai.file_id = None
+        mock_config.base_model_aliases.get.return_value = mock_alias
+        mock_layout.load_config.return_value = mock_config
+
+        dep = PackDependency(
+            id="base_checkpoint",
+            kind=AssetKind.CHECKPOINT,
+            selector=DependencySelector(
+                strategy=SelectorStrategy.BASE_MODEL_HINT,
+                base_model="SDXL",
+                constraints=SelectorConstraints(primary_file_only=True),
+            ),
+            expose=ExposeConfig(filename="sdxl.safetensors"),
+        )
+
+        resolver = BaseModelHintResolver(mock_civitai, mock_layout)
+        result = resolver.resolve(dep)
+
+        assert result is not None
+        # Should prefer primary file via _select_file, not just files[0]
+        assert result.provider.file_id == 3002
+        assert result.sha256 == "safe"
 
 
 class TestHuggingFaceResolver:

@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-import requests
-
+from .download_service import DownloadService
 from .layout import StoreLayout
 from .models import BlobManifest
 
@@ -110,6 +109,7 @@ class BlobStore:
         max_workers: int = DEFAULT_MAX_WORKERS,
         api_key: Optional[str] = None,
         auth_providers: Optional[List] = None,
+        download_service: Optional[DownloadService] = None,
     ):
         """
         Initialize blob store.
@@ -121,6 +121,7 @@ class BlobStore:
             max_workers: Max concurrent downloads
             api_key: Optional API key (deprecated, use auth_providers)
             auth_providers: List of DownloadAuthProvider instances for URL auth injection
+            download_service: Optional shared DownloadService instance
         """
         self.layout = layout
         self.chunk_size = chunk_size
@@ -135,18 +136,14 @@ class BlobStore:
             from .download_auth import CivitaiAuthProvider
             self._auth_providers = [CivitaiAuthProvider(self.api_key)]
 
-        self._session: Optional[requests.Session] = None
-    
-    @property
-    def session(self) -> requests.Session:
-        """Lazy-initialized requests session."""
-        if self._session is None:
-            self._session = requests.Session()
-            self._session.headers.update({
-                "User-Agent": "Mozilla/5.0 (compatible; Synapse/2.0)",
-            })
-        return self._session
-    
+        if download_service is not None:
+            self._download_service = download_service
+        else:
+            self._download_service = DownloadService(
+                auth_providers=self._auth_providers,
+                chunk_size=self.chunk_size,
+            )
+
     # =========================================================================
     # Blob Path Operations
     # =========================================================================
@@ -243,130 +240,42 @@ class BlobStore:
         expected_sha256: Optional[str] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ) -> str:
-        """Download file via HTTP/HTTPS."""
+        """Download file via HTTP/HTTPS.
+
+        Delegates actual HTTP work to DownloadService while handling
+        blob-specific logic (part paths, finalization).
+        """
+        from .download_service import DownloadError as DLError
+
         # Determine part file location
         if expected_sha256:
             part_path = self.layout.blob_part_path(expected_sha256)
         else:
-            # Use temp location until we know the hash
             import uuid
             temp_name = f"download_{uuid.uuid4().hex}"
             part_path = self.layout.tmp_path / temp_name
 
         part_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Apply auth provider for this URL
-        download_url = url
-        matched_auth = None
-        auth_headers = {}
-        for auth_provider in self._auth_providers:
-            if auth_provider.matches(url):
-                download_url = auth_provider.authenticate_url(url)
-                if hasattr(auth_provider, "get_auth_headers"):
-                    auth_headers = auth_provider.get_auth_headers(url)
-                matched_auth = auth_provider
-                break
-
-        # Log auth status for debugging download failures
-        if "civitai.com" in url:
-            has_token = "Authorization" in auth_headers or "token=" in download_url
-            logger.info(f"[BlobStore] Civitai download: token_injected={has_token}, url={url[:100]}")
-            if not has_token:
-                logger.warning(f"[BlobStore] NO AUTH TOKEN for Civitai download! api_key={'set' if self.api_key else 'MISSING'}")
-
-        # Create per-request session (requests.Session is NOT thread-safe,
-        # and download-asset runs multiple downloads in parallel threads)
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0 (compatible; Synapse/2.0)",
-        })
-
         try:
-            # Check for resume
-            headers = {**auth_headers}  # start with auth headers if any
-            mode = "wb"
-            initial_size = 0
-
-            if part_path.exists():
-                initial_size = part_path.stat().st_size
-                headers["Range"] = f"bytes={initial_size}-"
-                mode = "ab"
-
-            # Start download with split timeout: (connect, read)
-            # Connect timeout 15s, read timeout 60s per chunk
-            response = session.get(
-                download_url,
-                headers=headers,
-                stream=True,
-                timeout=(15, 60),
+            result = self._download_service.download_to_file(
+                url,
+                part_path,
+                expected_sha256=expected_sha256,
+                progress_callback=progress_callback,
+                timeout=(15, self.timeout),
+                chunk_size=self.chunk_size,
+                resume=True,
             )
-            
-            # Handle range response
-            if response.status_code == 416:  # Range not satisfiable
-                # File might be complete
-                if expected_sha256 and part_path.exists():
-                    actual = compute_sha256(part_path)
-                    if actual == expected_sha256.lower():
-                        return self._finalize_download(part_path, actual)
-                raise DownloadError(f"Range not satisfiable for {url}")
-            
-            response.raise_for_status()
+            return self._finalize_download(part_path, result.sha256)
 
-            # Check Content-Type - error pages return text/html instead of binary
-            content_type = response.headers.get("content-type", "")
-            if "text/html" in content_type.lower():
-                logger.error(f"[BlobStore] Received HTML content-type: {content_type}")
-                error_msg = (
-                    matched_auth.auth_error_message()
-                    if matched_auth
-                    else f"Download failed: server returned HTML instead of file for {url}"
-                )
-                raise DownloadError(error_msg)
-
-            # Get total size
-            content_length = response.headers.get("content-length")
-            total_size = int(content_length) + initial_size if content_length else 0
-            downloaded = initial_size
-            
-            # Download with progress
-            sha256 = hashlib.sha256()
-            
-            # If resuming, we need to hash the existing content first
-            if initial_size > 0 and expected_sha256 is None:
-                with open(part_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(self.chunk_size), b""):
-                        sha256.update(chunk)
-            
-            with open(part_path, mode) as f:
-                for chunk in response.iter_content(chunk_size=self.chunk_size):
-                    if chunk:
-                        f.write(chunk)
-                        sha256.update(chunk)
-                        downloaded += len(chunk)
-                        if progress_callback:
-                            progress_callback(downloaded, total_size)
-            
-            actual_sha256 = sha256.hexdigest().lower()
-            
-            # Verify hash if expected
-            if expected_sha256 and actual_sha256 != expected_sha256.lower():
+        except DLError as e:
+            # Map DownloadService errors to BlobStore error types
+            msg = str(e)
+            if "Hash mismatch" in msg:
                 part_path.unlink(missing_ok=True)
-                raise HashMismatchError(
-                    f"Hash mismatch for {url}: "
-                    f"expected {expected_sha256}, got {actual_sha256}"
-                )
-            
-            return self._finalize_download(part_path, actual_sha256)
-            
-        except requests.RequestException as e:
-            # Don't delete part file - allow resume
-            raise DownloadError(f"Download failed for {url}: {e}") from e
-        except Exception:
-            # Clean up on other errors
-            part_path.unlink(missing_ok=True)
-            raise
-        finally:
-            session.close()
+                raise HashMismatchError(msg) from e
+            raise DownloadError(msg) from e
     
     def _finalize_download(self, part_path: Path, sha256: str) -> str:
         """Move completed download to final blob location."""

@@ -76,7 +76,7 @@ export function PacksPage() {
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isUpdatesPanelOpen, setIsUpdatesPanelOpen] = useState(false)
-  const { isChecking, updatesCount, checkAll } = useUpdatesStore()
+  const { isChecking, checkProgress, updatesCount, checkAll } = useUpdatesStore()
 
   const handleCheckUpdates = async () => {
     await checkAll()
@@ -224,11 +224,19 @@ export function PacksPage() {
             className="transition-all duration-200"
           >
             {isChecking ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {checkProgress && checkProgress.total > 0
+                  ? `${checkProgress.current}/${checkProgress.total}`
+                  : t('updates.checkUpdates')
+                }
+              </>
             ) : (
-              <RefreshCw className="w-4 h-4" />
+              <>
+                <RefreshCw className="w-4 h-4" />
+                {t('updates.checkUpdates')}
+              </>
             )}
-            {t('updates.checkUpdates')}
           </Button>
 
           {/* Create Pack Button */}

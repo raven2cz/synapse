@@ -1467,28 +1467,34 @@ class TestAuthProviderInDownloadPath:
     We replaced hardcoded `if "civitai.com" in url` with a provider loop.
     """
 
-    def test_civitai_url_auth_via_headers(self, tmp_path):
-        """CivitaiAuthProvider should provide auth via Bearer header, not URL token."""
+    def test_civitai_url_auth_via_token_param(self, tmp_path):
+        """CivitaiAuthProvider should inject ?token= into URL (not Bearer header).
+
+        Civitai download redirects to CDN (cross-origin), and requests library
+        strips Authorization headers on cross-origin redirects (RFC 7235).
+        The ?token= query parameter survives redirects.
+        """
         from src.store.download_auth import CivitaiAuthProvider
 
         auth = CivitaiAuthProvider(api_key="test-key-123")
 
         url = "https://civitai.com/api/download/models/100"
         headers = auth.get_auth_headers(url)
-        assert headers == {"Authorization": "Bearer test-key-123"}
-        # URL should pass through unchanged (no token injected)
+        assert headers == {}  # No Bearer header
+        # URL should have ?token= injected
         result = auth.authenticate_url(url)
-        assert result == url
+        assert "token=test-key-123" in result
 
-    def test_civitai_url_strips_legacy_token(self, tmp_path):
-        """Legacy ?token= in URLs should be stripped (auth is via headers now)."""
+    def test_civitai_url_replaces_old_token(self, tmp_path):
+        """Old ?token= in URLs should be replaced with fresh API key."""
         from src.store.download_auth import CivitaiAuthProvider
 
         auth = CivitaiAuthProvider(api_key="mykey")
 
         url = "https://civitai.com/api/download/models/100?type=Model&format=SafeTensor&token=old"
         result = auth.authenticate_url(url)
-        assert "token=" not in result
+        assert "token=mykey" in result
+        assert "old" not in result
         assert "type=Model" in result
 
     def test_non_civitai_url_passes_through_unchanged(self, tmp_path):
@@ -1536,10 +1542,12 @@ class TestAuthProviderInDownloadPath:
         assert isinstance(auth, CivitaiAuthProvider)
         assert auth.api_key == "my-secret-key"
 
-        # Verify it provides auth via headers
+        # Verify it injects ?token= into URL (not via headers)
         url = "https://civitai.com/api/download/models/999"
         headers = auth.get_auth_headers(url)
-        assert headers == {"Authorization": "Bearer my-secret-key"}
+        assert headers == {}  # No Bearer header (stripped on cross-origin redirect)
+        authenticated_url = auth.authenticate_url(url)
+        assert "token=my-secret-key" in authenticated_url
 
 
 class TestUpdateProviderBuildDownloadUrl:
@@ -1573,8 +1581,7 @@ class TestUpdateProviderBuildDownloadUrl:
     def test_built_url_is_compatible_with_auth_provider(self):
         """
         URLs from build_download_url must work with CivitaiAuthProvider.
-        Auth is via Bearer header, not URL token.
-        authenticate_url should pass URLs through cleanly.
+        Auth is via ?token= query param (survives cross-origin redirects).
         """
         from src.store.civitai_update_provider import CivitaiUpdateProvider
         from src.store.download_auth import CivitaiAuthProvider
@@ -1586,16 +1593,18 @@ class TestUpdateProviderBuildDownloadUrl:
         url_with_params = update_provider.build_download_url(version_id=100, file_id=200)
         authenticated = auth_provider.authenticate_url(url_with_params)
 
-        # URL should be unchanged (no token injected into URL)
-        assert authenticated == url_with_params
-        # Auth via headers
+        # URL should have ?token= injected
+        assert "token=test-key" in authenticated
+        # Original query params preserved
+        assert "id=200" in authenticated
+        # No Authorization header (stripped on cross-origin redirect)
         headers = auth_provider.get_auth_headers(url_with_params)
-        assert headers == {"Authorization": "Bearer test-key"}
+        assert headers == {}
 
         # URL without file_id (no query params)
         url_no_params = update_provider.build_download_url(version_id=100, file_id=None)
         authenticated2 = auth_provider.authenticate_url(url_no_params)
-        assert authenticated2 == url_no_params
+        assert "token=test-key" in authenticated2
 
 
 class TestUpdateServiceProviderDispatch:

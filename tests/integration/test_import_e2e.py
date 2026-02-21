@@ -245,7 +245,12 @@ class TestImportEndpointWithWizard:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -264,7 +269,12 @@ class TestImportEndpointWithWizard:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 pack_name="my_custom_pack",
@@ -284,7 +294,12 @@ class TestImportEndpointWithWizard:
         mock_response.headers = {'content-length': '1000000'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_images=False,
@@ -306,7 +321,12 @@ class TestImportEndpointWithWizard:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 include_nsfw=False,
@@ -335,7 +355,12 @@ class TestFullImportCycle:
 
         # 1. Import
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_images=True,
@@ -396,7 +421,12 @@ class TestFullImportCycle:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -426,7 +456,12 @@ class TestFullImportCycle:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(url="https://civitai.com/models/12345")
             result = import_pack(request=request, store=temp_store)
 
@@ -446,7 +481,12 @@ class TestFullImportCycle:
         mock_response.headers = {'content-length': '1000000'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             request = ImportRequest(
                 url="https://civitai.com/models/12345",
                 download_videos=True,
@@ -477,7 +517,12 @@ class TestImportIdempotency:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             # Import twice
             request = ImportRequest(url="https://civitai.com/models/12345")
             result1 = import_pack(request=request, store=temp_store)
@@ -508,7 +553,12 @@ class TestStoreIntegration:
         mock_response.headers = {'content-length': '100'}
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
+             patch('src.store.download_service.requests.Session') as MockDLSession, \
              patch('src.ai.AIService', return_value=_mock_ai_service()):
+            MockDLSession.return_value.get.return_value = mock_response
+            MockDLSession.return_value.get.return_value.status_code = 200
+            MockDLSession.return_value.headers = {}
+            MockDLSession.return_value.close = MagicMock()
             pack = temp_store.import_civitai(
                 url="https://civitai.com/models/12345",
                 download_previews=True,

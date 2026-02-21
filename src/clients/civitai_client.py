@@ -13,12 +13,15 @@ import os
 import re
 import time
 import hashlib
+import logging
 import requests
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Tuple, Callable
 from dataclasses import dataclass
 from urllib.parse import urlparse, parse_qs
 import json
+
+logger = logging.getLogger(__name__)
 
 from ..core.models import (
     AssetDependency, AssetType, AssetSource, AssetHash,
@@ -358,10 +361,11 @@ class CivitaiClient:
         chunk_size: int = 8192,
         progress_callback: Optional[Callable[[int, int], None]] = None,
         resume: bool = True,
+        download_service=None,
     ) -> bool:
         """
         Download a file with optional resume support and hash verification.
-        
+
         Args:
             url: Download URL
             destination: Local file path
@@ -369,47 +373,67 @@ class CivitaiClient:
             chunk_size: Download chunk size
             progress_callback: Callback(downloaded_bytes, total_bytes)
             resume: Enable resume for interrupted downloads
-        
+            download_service: Optional DownloadService for centralized auth
+
         Returns:
             True if download successful and hash verified
         """
+        if download_service:
+            try:
+                download_service.download_to_file(
+                    url,
+                    destination,
+                    expected_sha256=expected_hash,
+                    progress_callback=progress_callback,
+                    timeout=(15, 300),
+                    chunk_size=chunk_size,
+                    resume=resume,
+                )
+                return True
+            except Exception as e:
+                logger.warning("[CivitaiClient] Download failed via DownloadService: %s", e)
+                return False
+
+        # Legacy fallback path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        
+
         headers = {}
         mode = "wb"
         initial_size = 0
-        
-        # Check for partial download
+
         if resume and destination.exists():
             initial_size = destination.stat().st_size
             headers["Range"] = f"bytes={initial_size}-"
             mode = "ab"
-        
+
         self._rate_limit()
-        
-        # Add API key to download URL if needed
+
+        # Auth via ?token= query param (Bearer header is stripped on
+        # cross-origin redirect to CDN — see download_auth.py).
+        download_url = url
         if self.api_key and "civitai.com" in url:
-            separator = "&" if "?" in url else "?"
-            url = f"{url}{separator}token={self.api_key}"
-        
+            from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
+            parsed = urlparse(url)
+            qs = [(k, v) for k, v in parse_qsl(parsed.query) if k != "token"]
+            qs.append(("token", self.api_key))
+            download_url = urlunparse(parsed._replace(query=urlencode(qs)))
+            logger.info("[CivitaiClient] Injected ?token= for legacy download fallback")
+
         response = self.session.get(
-            url,
+            download_url,
             headers=headers,
             stream=True,
             timeout=300,
         )
-        
-        # Handle range response
-        if response.status_code == 416:  # Range not satisfiable - file complete
+
+        if response.status_code == 416:
             return self._verify_hash(destination, expected_hash)
-        
+
         response.raise_for_status()
-        
-        # Get total size
+
         total_size = int(response.headers.get("content-length", 0)) + initial_size
         downloaded = initial_size
-        
-        # Download with progress
+
         with open(destination, mode) as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
@@ -417,8 +441,7 @@ class CivitaiClient:
                     downloaded += len(chunk)
                     if progress_callback:
                         progress_callback(downloaded, total_size)
-        
-        # Verify hash
+
         return self._verify_hash(destination, expected_hash)
     
     def _verify_hash(self, path: Path, expected_hash: Optional[str]) -> bool:
@@ -443,20 +466,28 @@ class CivitaiClient:
         self,
         preview: PreviewImage,
         destination: Path,
+        download_service=None,
     ) -> bool:
         """Download a preview image."""
         if not preview.url:
             return False
-        
+
         try:
+            if download_service:
+                data = download_service.download_to_bytes(preview.url)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with open(destination, "wb") as f:
+                    f.write(data)
+                return True
+
             self._rate_limit()
             response = self.session.get(preview.url, timeout=30)
             response.raise_for_status()
-            
+
             destination.parent.mkdir(parents=True, exist_ok=True)
             with open(destination, "wb") as f:
                 f.write(response.content)
-            
+
             return True
         except Exception:
             return False

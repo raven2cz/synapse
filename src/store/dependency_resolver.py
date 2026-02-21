@@ -92,6 +92,7 @@ class CivitaiFileResolver:
                 model_id=civ.model_id,
                 version_id=civ.version_id,
                 file_id=target_file.get("id"),
+                filename=target_file.get("name"),
             ),
             download=ArtifactDownload(urls=[download_url]),
             integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
@@ -110,13 +111,71 @@ class CivitaiLatestResolver:
 
         civ = dep.selector.civitai
 
+        # If a specific version_id is pinned, fetch that exact version
+        # instead of blindly taking versions[0] (latest).
+        # Multi-version packs have different version_ids per dependency.
+        if civ.version_id:
+            return self._resolve_pinned_version(dep, civ)
+
+        # No pinned version — fall back to latest
         model_data = self._civitai.get_model(civ.model_id)
         versions = model_data.get("modelVersions", [])
         if not versions:
             return None
 
         latest = versions[0]
-        files = latest.get("files", [])
+        return self._build_artifact(dep, civ, latest)
+
+    def _resolve_pinned_version(
+        self, dep: PackDependency, civ: Any
+    ) -> Optional[ResolvedArtifact]:
+        """Resolve a dependency pinned to a specific version_id."""
+        version_data = self._civitai.get_model_version(civ.version_id)
+        files = version_data.get("files", [])
+        if not files:
+            return None
+
+        # If file_id is specified, find that exact file
+        target_file = None
+        if civ.file_id:
+            for f in files:
+                if f.get("id") == civ.file_id:
+                    target_file = f
+                    break
+
+        # Fall back to file selection by constraints or primary
+        if not target_file:
+            target_file = _select_file(files, dep.selector.constraints)
+        if not target_file:
+            return None
+
+        hashes = target_file.get("hashes", {})
+        sha256 = hashes.get("SHA256", "").lower() if hashes else None
+
+        download_url = target_file.get("downloadUrl", "")
+        if not download_url:
+            download_url = f"https://civitai.com/api/download/models/{civ.version_id}"
+
+        return ResolvedArtifact(
+            kind=dep.kind,
+            sha256=sha256,
+            size_bytes=target_file.get("sizeKB", 0) * 1024 if target_file.get("sizeKB") else None,
+            provider=ArtifactProvider(
+                name=ProviderName.CIVITAI,
+                model_id=civ.model_id,
+                version_id=civ.version_id,
+                file_id=target_file.get("id"),
+                filename=target_file.get("name"),
+            ),
+            download=ArtifactDownload(urls=[download_url]),
+            integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
+        )
+
+    def _build_artifact(
+        self, dep: PackDependency, civ: Any, version_data: dict
+    ) -> Optional[ResolvedArtifact]:
+        """Build a ResolvedArtifact from version data."""
+        files = version_data.get("files", [])
         if not files:
             return None
 
@@ -129,7 +188,7 @@ class CivitaiLatestResolver:
 
         download_url = target_file.get("downloadUrl", "")
         if not download_url:
-            download_url = f"https://civitai.com/api/download/models/{latest['id']}"
+            download_url = f"https://civitai.com/api/download/models/{version_data['id']}"
 
         return ResolvedArtifact(
             kind=dep.kind,
@@ -138,8 +197,9 @@ class CivitaiLatestResolver:
             provider=ArtifactProvider(
                 name=ProviderName.CIVITAI,
                 model_id=civ.model_id,
-                version_id=latest["id"],
+                version_id=version_data["id"],
                 file_id=target_file.get("id"),
+                filename=target_file.get("name"),
             ),
             download=ArtifactDownload(urls=[download_url]),
             integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
@@ -174,6 +234,8 @@ class BaseModelHintResolver:
                         if f.get("id") == civ.file_id:
                             target_file = f
                             break
+                if not target_file:
+                    target_file = _select_file(files, dep.selector.constraints if hasattr(dep.selector, 'constraints') else None)
                 if not target_file and files:
                     target_file = files[0]
 
@@ -194,6 +256,7 @@ class BaseModelHintResolver:
                             model_id=civ.model_id,
                             version_id=civ.version_id,
                             file_id=target_file.get("id"),
+                            filename=target_file.get("name"),
                         ),
                         download=ArtifactDownload(urls=[download_url]),
                         integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),

@@ -265,11 +265,12 @@ export function DownloadsPage() {
       }
       return res.json()
     },
-    // Poll only when there are active (non-completed) downloads
+    // Fast poll (2s) when active downloads, slow poll (10s) otherwise
+    // to detect new downloads that start after the page loads
     refetchInterval: (query) => {
       const data = query.state.data as DownloadInfo[] | undefined
       const hasActive = data?.some((d: DownloadInfo) => d.status === 'downloading' || d.status === 'pending')
-      return hasActive ? 2000 : false
+      return hasActive ? 2000 : 10000
     },
   })
 

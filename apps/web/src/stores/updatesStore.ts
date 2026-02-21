@@ -64,11 +64,18 @@ function versionKeyFromPlan(plan: UpdatePlanEntry): string {
   return ids.sort().join(',')
 }
 
+interface CheckProgress {
+  current: number
+  total: number
+  currentPack: string
+}
+
 interface UpdatesState {
   // Check state
   isChecking: boolean
   lastChecked: number | null
   checkError: string | null
+  checkProgress: CheckProgress | null
 
   // Results - only packs with actual updates
   availableUpdates: Record<string, UpdatePlanEntry>
@@ -134,10 +141,28 @@ async function queueDownloadsForPack(
   }
 }
 
+/** Run async tasks with limited concurrency */
+async function asyncPool<T>(
+  concurrency: number,
+  items: T[],
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  const executing = new Set<Promise<void>>()
+  for (const item of items) {
+    const p = fn(item).then(() => { executing.delete(p) })
+    executing.add(p)
+    if (executing.size >= concurrency) {
+      await Promise.race(executing)
+    }
+  }
+  await Promise.all(executing)
+}
+
 export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   isChecking: false,
   lastChecked: null,
   checkError: null,
+  checkProgress: null,
   availableUpdates: {},
   selectedPacks: [],
   applyingPacks: [],
@@ -146,17 +171,51 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
   updatesCount: 0,
 
   checkAll: async () => {
-    set(() => ({ isChecking: true, checkError: null }))
+    set(() => ({ isChecking: true, checkError: null, checkProgress: null }))
     try {
-      const res = await fetch('/api/updates/check-all')
-      if (!res.ok) throw new Error('Failed to check updates')
-      const data = await res.json()
+      // Step 1: Fetch pack names
+      const packsRes = await fetch('/api/packs/')
+      if (!packsRes.ok) throw new Error('Failed to fetch packs')
+      const packsData = await packsRes.json()
+      const packNames: string[] = (packsData.packs || []).map((p: { name: string }) => p.name)
 
-      const plans: Record<string, UpdatePlanEntry> = data.plans || {}
+      if (packNames.length === 0) {
+        set(() => ({
+          isChecking: false,
+          lastChecked: Date.now(),
+          checkProgress: null,
+          availableUpdates: {},
+          updatesCount: 0,
+          selectedPacks: [],
+        }))
+        return
+      }
+
+      // Step 2: Check each pack with concurrency of 3
+      set(() => ({ checkProgress: { current: 0, total: packNames.length, currentPack: '' } }))
+
+      const plans: Record<string, UpdatePlanEntry> = {}
+      let current = 0
+
+      await asyncPool(3, packNames, async (packName: string) => {
+        set(() => ({ checkProgress: { current, total: packNames.length, currentPack: packName } }))
+        try {
+          const res = await fetch(`/api/updates/check/${encodeURIComponent(packName)}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (data.has_updates && data.plan) {
+              plans[packName] = { pack: packName, ...data.plan }
+            }
+          }
+        } catch {
+          // Skip failed individual pack checks
+        }
+        current++
+        set(() => ({ checkProgress: { current, total: packNames.length, currentPack: '' } }))
+      })
+
+      // Step 3: Filter dismissed updates
       const dismissed = { ...get().dismissedVersions }
-
-      // Clean up stale dismissed entries for packs no longer in results
-      // (pack was deleted, or version changed so the old dismissed key is irrelevant)
       const allCheckedPacks = new Set(Object.keys(plans))
       let dismissedChanged = false
       for (const name of Object.keys(dismissed)) {
@@ -169,12 +228,10 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
         saveDismissed(dismissed)
       }
 
-      // Filter out dismissed updates (but never dismiss pending downloads)
       const filtered: Record<string, UpdatePlanEntry> = {}
       for (const [name, plan] of Object.entries(plans)) {
         const hasPending = (plan.pending_downloads?.length ?? 0) > 0
         if (hasPending) {
-          // Always show packs with pending downloads - can't dismiss missing blobs
           filtered[name] = plan
         } else {
           const key = versionKeyFromPlan(plan)
@@ -184,19 +241,21 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
         }
       }
 
-      const packNames = Object.keys(filtered)
+      const filteredNames = Object.keys(filtered)
 
       set(() => ({
         isChecking: false,
         lastChecked: Date.now(),
+        checkProgress: null,
         availableUpdates: filtered,
-        updatesCount: packNames.length,
-        selectedPacks: [...packNames],
+        updatesCount: filteredNames.length,
+        selectedPacks: [...filteredNames],
         dismissedVersions: dismissed,
       }))
     } catch (e) {
       set(() => ({
         isChecking: false,
+        checkProgress: null,
         checkError: e instanceof Error ? e.message : 'Unknown error',
       }))
     }
@@ -247,7 +306,10 @@ export const useUpdatesStore = create<UpdatesState>((set, get) => ({
         body: JSON.stringify(body),
       })
 
-      if (!res.ok) throw new Error('Failed to apply update')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(errData.detail || 'Failed to apply update')
+      }
       const result = await res.json()
 
       if (result.applied) {

@@ -145,6 +145,7 @@ class UpdateService:
 
         changes = []
         ambiguous = []
+        lock_modified = False
 
         for dep in pack.dependencies:
             # Skip non-updatable dependencies
@@ -193,8 +194,15 @@ class UpdateService:
                             "provider_file_id": result.file_id,
                             "sha256": result.sha256,
                             "download_url": result.download_url,
+                            "filename": result.filename,
+                            "size_bytes": result.size_bytes,
                         },
                     ))
+                else:
+                    # Self-heal: fill missing filename in lock from check result
+                    if result.filename and not current.artifact.provider.filename:
+                        current.artifact.provider.filename = result.filename
+                        lock_modified = True
             except Exception as e:
                 logger.warning("Failed to check updates for %s dep %s: %s", pack_name, dep.id, e)
 
@@ -228,6 +236,10 @@ class UpdateService:
             and len(ambiguous) == 0
             and len(pending_downloads) == 0
         )
+
+        # Persist self-healed filename metadata in lock
+        if lock_modified:
+            self.layout.save_pack_lock(lock)
 
         # Scan for reverse dependencies (which packs depend on this one)
         impacted_packs = self._find_reverse_dependencies(pack_name)
@@ -287,15 +299,21 @@ class UpdateService:
         Raises:
             AmbiguousSelectionError: If plan has ambiguous entries without choose
         """
-        # Check for unresolved ambiguous
+        # Handle ambiguous updates: auto-select first candidate when no choice provided
         if plan.ambiguous:
-            unresolved = []
+            if choose is None:
+                choose = {}
             for amb in plan.ambiguous:
-                if choose is None or amb.dependency_id not in choose:
-                    unresolved.append(amb)
-
-            if unresolved:
-                raise AmbiguousSelectionError(pack_name, unresolved)
+                if amb.dependency_id not in choose:
+                    if amb.candidates:
+                        auto_file_id = amb.candidates[0].provider_file_id
+                        choose[amb.dependency_id] = auto_file_id
+                        logger.warning(
+                            "[UpdateService] Auto-selected file_id=%s for ambiguous "
+                            "dependency %s (pack=%s, %d candidates)",
+                            auto_file_id, amb.dependency_id, pack_name,
+                            len(amb.candidates),
+                        )
 
         # Load current lock and pack
         lock = self.layout.load_pack_lock(pack_name)
@@ -334,13 +352,13 @@ class UpdateService:
                         artifact=ResolvedArtifact(
                             kind=resolved.artifact.kind,
                             sha256=new_data.get("sha256"),
-                            size_bytes=resolved.artifact.size_bytes,
+                            size_bytes=new_data.get("size_bytes") or resolved.artifact.size_bytes,
                             provider=ArtifactProvider(
                                 name=provider_name,
                                 model_id=new_data.get("provider_model_id"),
                                 version_id=version_id,
                                 file_id=file_id,
-                                filename=resolved.artifact.provider.filename,
+                                filename=new_data.get("filename") or resolved.artifact.provider.filename,
                             ),
                             download=ArtifactDownload(urls=[download_url]),
                             integrity=ArtifactIntegrity(sha256_verified=new_data.get("sha256") is not None),
@@ -388,13 +406,13 @@ class UpdateService:
                                     artifact=ResolvedArtifact(
                                         kind=dep.kind if dep else resolved.artifact.kind,
                                         sha256=selected.sha256,
-                                        size_bytes=None,
+                                        size_bytes=selected.size_bytes or resolved.artifact.size_bytes,
                                         provider=ArtifactProvider(
                                             name=provider_name,
                                             model_id=selected.provider_model_id,
                                             version_id=selected.provider_version_id,
                                             file_id=selected.provider_file_id,
-                                            filename=resolved.artifact.provider.filename,
+                                            filename=selected.filename or resolved.artifact.provider.filename,
                                         ),
                                         download=ArtifactDownload(urls=[download_url]),
                                         integrity=ArtifactIntegrity(sha256_verified=selected.sha256 is not None),
@@ -635,9 +653,17 @@ class UpdateService:
         """
         Check for updates on all packs.
 
+        Clears provider model caches before and after the check loop
+        to avoid stale data while deduplicating API calls within a session.
+
         Returns:
             Dict mapping pack_name -> UpdatePlan
         """
+        # Clear provider caches before check-all session
+        for provider in self._providers.values():
+            if hasattr(provider, "clear_cache"):
+                provider.clear_cache()
+
         plans = {}
 
         for pack_name in self.layout.list_packs():
@@ -647,6 +673,11 @@ class UpdateService:
                     plans[pack_name] = self.plan_update(pack_name)
             except Exception as e:
                 logger.debug("Skipping pack %s during update check: %s", pack_name, e)
+
+        # Clear caches after session to free memory
+        for provider in self._providers.values():
+            if hasattr(provider, "clear_cache"):
+                provider.clear_cache()
 
         return plans
 

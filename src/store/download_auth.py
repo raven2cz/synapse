@@ -38,10 +38,21 @@ class DownloadAuthProvider(Protocol):
 
 
 class CivitaiAuthProvider:
-    """Civitai download authentication via API key."""
+    """Civitai download authentication via API key.
+
+    Uses ?token= query parameter in URL for authentication.
+    The Authorization: Bearer header does NOT survive Civitai's
+    cross-origin redirects (download API → CDN/S3 pre-signed URL).
+    The ?token= parameter is the only reliable method for downloads.
+    """
 
     def __init__(self, api_key: Optional[str] = None):
         self._api_key = api_key or os.environ.get("CIVITAI_API_KEY")
+        logger.info(
+            "[CivitaiAuth] Initialized: has_key=%s, key_length=%d",
+            bool(self._api_key),
+            len(self._api_key) if self._api_key else 0,
+        )
 
     @property
     def api_key(self) -> Optional[str]:
@@ -51,24 +62,40 @@ class CivitaiAuthProvider:
         return "civitai.com" in url
 
     def get_auth_headers(self, url: str) -> dict[str, str]:
-        if not self._api_key:
-            logger.warning("[CivitaiAuth] No API key configured, download may fail")
-            return {}
-        logger.debug("[CivitaiAuth] Using API key in Authorization header")
-        return {"Authorization": f"Bearer {self._api_key}"}
+        # No Authorization header — Civitai download redirects to CDN
+        # and requests library strips Authorization on cross-origin redirect.
+        # Auth is handled via ?token= in authenticate_url() instead.
+        return {}
 
     def authenticate_url(self, url: str) -> str:
-        # Modern auth uses headers, but legacy lockfiles might still have 'token=' baked in.
-        # We must strip it out to prevent Civitai from rejecting the request due to duplicate auth.
+        """Inject ?token= into the URL for Civitai download authentication.
+
+        Civitai's /api/download/ endpoint redirects to a CDN (different host).
+        Python's requests library strips Authorization headers on cross-origin
+        redirects (RFC 7235). The ?token= query parameter survives redirects
+        and is Civitai's recommended approach for wget/curl downloads.
+        """
         from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
+
+        if not self._api_key:
+            logger.warning("[CivitaiAuth] No API key configured, download may fail")
+            return url
+
         parsed = urlparse(url)
-        if parsed.query:
-            # Parse query params, filter out 'token', and rebuild
-            qs = parse_qsl(parsed.query, keep_blank_values=True)
-            new_qs = [(k, v) for k, v in qs if k != 'token']
-            parsed = parsed._replace(query=urlencode(new_qs))
-            return urlunparse(parsed)
-        return url
+        qs = parse_qsl(parsed.query, keep_blank_values=True)
+
+        # Remove existing token param (prevent duplicates)
+        qs = [(k, v) for k, v in qs if k != "token"]
+
+        # Add fresh token
+        qs.append(("token", self._api_key))
+
+        parsed = parsed._replace(query=urlencode(qs))
+        logger.info(
+            "[CivitaiAuth] Injected ?token= into URL: %s → has_token=%s",
+            url[:80], "token=" in urlencode(qs),
+        )
+        return urlunparse(parsed)
 
     def auth_error_message(self) -> str:
         return (

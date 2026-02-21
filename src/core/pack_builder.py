@@ -20,7 +20,7 @@ License: MIT
 import json
 import logging
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -225,16 +225,18 @@ class PackBuilder:
         ... )
     """
     
-    def __init__(self, civitai_client, config=None):
+    def __init__(self, civitai_client, config=None, download_service=None):
         """
         Initialize PackBuilder.
-        
+
         Args:
             civitai_client: Civitai API client instance
             config: Optional configuration object with paths
+            download_service: Optional DownloadService for authenticated downloads
         """
         self.civitai = civitai_client
         self.config = config
+        self._download_service = download_service
     
     def _sanitize_name(self, name: str) -> str:
         """
@@ -483,13 +485,8 @@ class PackBuilder:
                     timeout = video_timeout  # Use configured video timeout
                     logger.info(f"[PackBuilder] Downloading video: {filename} (quality: {video_quality}p)")
                 
-                auth_headers = {}
-                # === INJECT API TOKEN FOR NSFW/RESTRICTED CONTENT ===
-                if getattr(self, "civitai", None) and getattr(self.civitai, "api_key", None) and "civitai.com" in download_url.lower():
-                    auth_headers["Authorization"] = f"Bearer {self.civitai.api_key}"
-                    
                 dest_path = resources_dir / filename
-                
+
                 # Create progress object
                 progress = DownloadProgress(
                     index=i,
@@ -499,77 +496,81 @@ class PackBuilder:
                     media_type=media_type,
                     status='downloading',
                 )
-                
+
                 # Report progress start
                 if progress_callback:
                     progress_callback(progress)
-                
+
                 try:
-                    # Stream download for large files
-                    # Create per-thread session for ThreadPoolExecutor safety
-                    with requests.Session() as session:
-                        response = session.get(
+                    if self._download_service:
+                        # Use centralized DownloadService (auth injection, thread-safe)
+                        def _progress_adapter(downloaded, total):
+                            progress.bytes_downloaded = downloaded
+                            progress.total_bytes = total if total else None
+                            if progress_callback and total and downloaded % 102400 < 8192:
+                                progress_callback(progress)
+
+                        self._download_service.download_to_file(
                             download_url,
-                            headers=auth_headers,
+                            dest_path,
                             timeout=(15, timeout),
-                            stream=True,
+                            progress_callback=_progress_adapter,
+                            resume=False,
                         )
-                        response.raise_for_status()
-                        
-                        # Get content length if available
-                        total_bytes = response.headers.get('content-length')
-                        if total_bytes:
-                            total_bytes = int(total_bytes)
-                            progress.total_bytes = total_bytes
-                        
-                        # Write with progress tracking
-                        bytes_downloaded = 0
-                        with open(dest_path, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                                    bytes_downloaded += len(chunk)
-                                    
-                                    # Update progress periodically (every ~100KB)
-                                    progress.bytes_downloaded = bytes_downloaded
-                                    if progress_callback and total_bytes and bytes_downloaded % 102400 < 8192:
-                                        progress_callback(progress)
-                        
-                        # Final progress update
-                        progress.bytes_downloaded = bytes_downloaded
-                        progress.status = 'completed'
-                        if progress_callback:
-                            progress_callback(progress)
-                        
-                        # Log video downloads with size
-                        if media_type == 'video':
-                            file_size = dest_path.stat().st_size
-                            logger.info(
-                                f"[PackBuilder] Video downloaded: {filename} "
-                                f"({file_size / 1024 / 1024:.1f} MB)"
+                    else:
+                        # Fallback: direct download (legacy path)
+                        # Use ?token= query param for Civitai (Bearer header is stripped
+                        # on cross-origin redirect to CDN — see download_auth.py).
+                        actual_url = download_url
+                        if getattr(self, "civitai", None) and getattr(self.civitai, "api_key", None) and "civitai.com" in download_url.lower():
+                            from urllib.parse import urlparse, urlencode, parse_qsl, urlunparse
+                            parsed = urlparse(download_url)
+                            qs = [(k, v) for k, v in parse_qsl(parsed.query) if k != "token"]
+                            qs.append(("token", self.civitai.api_key))
+                            actual_url = urlunparse(parsed._replace(query=urlencode(qs)))
+                            logger.info("[PackBuilder] Injected ?token= for Civitai fallback download")
+
+                        with requests.Session() as session:
+                            response = session.get(
+                                actual_url,
+                                timeout=(15, timeout),
+                                stream=True,
                             )
-                        
-                except requests.exceptions.Timeout:
-                    error_msg = f"Timeout downloading {filename} (>{timeout}s)"
-                    logger.warning(f"[PackBuilder] {error_msg}")
-                    progress.status = 'failed'
-                    progress.error = error_msg
+                            response.raise_for_status()
+
+                            total_bytes = response.headers.get('content-length')
+                            if total_bytes:
+                                total_bytes = int(total_bytes)
+                                progress.total_bytes = total_bytes
+
+                            bytes_downloaded = 0
+                            with open(dest_path, 'wb') as f:
+                                for chunk in response.iter_content(chunk_size=8192):
+                                    if chunk:
+                                        f.write(chunk)
+                                        bytes_downloaded += len(chunk)
+                                        progress.bytes_downloaded = bytes_downloaded
+                                        if progress_callback and total_bytes and bytes_downloaded % 102400 < 8192:
+                                            progress_callback(progress)
+
+                    # Final progress update
+                    progress.bytes_downloaded = dest_path.stat().st_size if dest_path.exists() else 0
+                    progress.status = 'completed'
                     if progress_callback:
                         progress_callback(progress)
-                    return None
-                    
-                except requests.exceptions.RequestException as e:
-                    error_msg = f"Network error downloading {filename}: {str(e)}"
-                    logger.warning(f"[PackBuilder] {error_msg}")
-                    progress.status = 'failed'
-                    progress.error = error_msg
-                    if progress_callback:
-                        progress_callback(progress)
-                    return None
-                    
+
+                    if media_type == 'video' and dest_path.exists():
+                        file_size = dest_path.stat().st_size
+                        logger.info(
+                            f"[PackBuilder] Video downloaded: {filename} "
+                            f"({file_size / 1024 / 1024:.1f} MB)"
+                        )
+
                 except Exception as e:
-                    error_msg = f"Failed to download {filename}: {str(e)}"
-                    logger.error(f"[PackBuilder] {error_msg}")
+                    # Clean up partial file to avoid permanent skip on retry
+                    dest_path.unlink(missing_ok=True)
+                    error_msg = f"Download error for {filename}: {str(e)}"
+                    logger.warning(f"[PackBuilder] {error_msg}")
                     progress.status = 'failed'
                     progress.error = error_msg
                     if progress_callback:
@@ -896,15 +897,16 @@ class PackBuilder:
 # Factory Function
 # =============================================================================
 
-def create_pack_builder(civitai_client, config=None) -> PackBuilder:
+def create_pack_builder(civitai_client, config=None, download_service=None) -> PackBuilder:
     """
     Factory function to create a PackBuilder instance.
-    
+
     Args:
         civitai_client: Configured Civitai API client
         config: Optional application configuration
-        
+        download_service: Optional DownloadService for authenticated downloads
+
     Returns:
         Configured PackBuilder instance
     """
-    return PackBuilder(civitai_client, config)
+    return PackBuilder(civitai_client, config, download_service=download_service)

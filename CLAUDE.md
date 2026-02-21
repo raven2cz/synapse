@@ -208,12 +208,16 @@ tests/
 ├── conftest.py          # Globální fixtures + pytest markery
 ├── helpers/
 │   └── fixtures.py      # FakeCivitaiClient, TestStoreContext, assertions
-├── unit/                # Rychlé, izolované testy
+├── unit/                # Rychlé, izolované testy (vše mockované)
 │   ├── core/            # test_pack_builder_video.py, test_parameters.py
 │   ├── clients/         # test_civarchive.py
+│   ├── store/           # test_download_service.py (63 testů)
 │   └── utils/           # test_media_detection.py
 ├── store/               # Store/API testy
-├── integration/         # Multi-component testy
+├── integration/         # Multi-component + Smoke testy
+│   ├── test_import_e2e.py              # Import flow E2E (15 testů)
+│   ├── test_download_integration.py    # BlobStore/PackService/Store wiring (27 testů)
+│   └── test_download_smoke.py          # Full lifecycle smoke (7 testů)
 └── lint/                # Architecture enforcement (test_architecture.py)
 ```
 
@@ -290,6 +294,85 @@ Umístění: `apps/web/src/__tests__/`
 2. **Testy musí projít před commitem** → `./scripts/verify.sh`
 3. **Nové soubory v src/ = nové testy v tests/**
 4. **Při bugfixu přidat test na regrese**
+5. **Každá feature MUSÍ mít všechny tři typy testů** (viz níže)
+
+### Typy testů (povinné pro každou feature)
+
+#### Unit testy (`tests/unit/`)
+- **Účel:** Testují jednu třídu/funkci izolovaně, všechny závislosti mockované
+- **Umístění:** `tests/unit/<module>/test_<name>.py` (zrcadlí `src/`)
+- **Jak psát:**
+  - Mockovat vše mimo testovanou jednotku (`unittest.mock.patch`, `MagicMock`)
+  - Testovat happy path, edge cases, error handling
+  - Pokrýt všechny veřejné metody
+  - Regresní testy pro opravené bugy
+- **Příklad:** `tests/unit/store/test_download_service.py` — testuje DownloadService s mockovaným `requests.Session`
+
+```python
+# Unit test pattern
+class TestDownloadToFile:
+    def test_basic_download(self, tmp_path):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = [b"data"]
+        # ... mock HTTP, test only DownloadService logic
+```
+
+#### Integrační testy (`tests/integration/`)
+- **Účel:** Testují interakci mezi 2+ komponentami, HTTP stále mockované
+- **Umístění:** `tests/integration/test_<feature>.py`
+- **Jak psát:**
+  - Používat reálné třídy (BlobStore, PackService, Store), mockovat jen HTTP/external
+  - Testovat správné propojení (wiring) — předávání závislostí, delegaci volání
+  - Testovat error propagaci mezi vrstvami
+  - Testovat lifecycle operace (cache clear before/after)
+- **Příklad:** `tests/integration/test_download_integration.py` — testuje BlobStore→DownloadService delegaci, Store wiring
+
+```python
+# Integration test pattern
+class TestBlobStoreDownloadDelegation:
+    def test_download_http_delegates_to_service(self, tmp_path):
+        mock_ds = MagicMock(spec=DownloadService)
+        blob_store = BlobStore(layout, download_service=mock_ds)
+        blob_store._download_http(url, expected_sha256=sha256)
+        mock_ds.download_to_file.assert_called_once()
+```
+
+#### Smoke / E2E testy (`tests/integration/test_*_smoke.py`)
+- **Účel:** Testují celý flow od začátku do konce, mockované jen HTTP volání
+- **Umístění:** `tests/integration/test_<feature>_smoke.py`
+- **Jak psát:**
+  - Používat reálný Store (s `tmp_path` jako root)
+  - Fake Civitai client s realistickými daty
+  - Mockovat `requests.Session` / `requests.get` (ne interní třídy)
+  - Testovat celý lifecycle: import → list → check updates → verify files
+  - Testovat souběžnost a thread safety
+- **Příklad:** `tests/integration/test_download_smoke.py` — testuje import flow, auth injection, cache deduplication
+
+```python
+# Smoke test pattern
+class TestImportFlowSmoke:
+    def test_import_creates_pack_with_download_service(self, smoke_store):
+        store, fake_civitai = smoke_store
+        with patch("src.store.download_service.requests.Session", ...):
+            pack = store.import_civitai(url="https://civitai.com/models/1001")
+        assert pack is not None
+        assert (store.layout.packs_path / pack.name / "pack.json").exists()
+```
+
+### Test Pyramid
+
+```
+        /\
+       /  \        Smoke/E2E (7+)   — celé flows, reálný Store
+      /    \       ← pomalější, méně testů
+     /------\
+    /        \     Integrační (27+)  — 2+ komponenty, mockovaný HTTP
+   /          \    ← střední rychlost
+  /------------\
+ /              \  Unit (63+)       — 1 třída, vše mockované
+/________________\ ← nejrychlejší, nejvíc testů
+```
 
 ---
 

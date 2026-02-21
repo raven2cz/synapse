@@ -34,6 +34,7 @@ class CivitaiUpdateProvider:
 
     def __init__(self, civitai_client: Optional[Any] = None):
         self._civitai = civitai_client
+        self._model_cache: Dict[int, Dict[str, Any]] = {}
 
     @property
     def civitai(self):
@@ -42,6 +43,19 @@ class CivitaiUpdateProvider:
             from ..clients.civitai_client import CivitaiClient
             self._civitai = CivitaiClient()
         return self._civitai
+
+    def get_model_cached(self, model_id: int) -> Dict[str, Any]:
+        """Fetch model data with per-session cache to avoid duplicate API calls."""
+        if model_id in self._model_cache:
+            logger.debug("[CivitaiUpdateProvider] Cache hit for model %d", model_id)
+            return self._model_cache[model_id]
+        data = self.civitai.get_model(model_id)
+        self._model_cache[model_id] = data
+        return data
+
+    def clear_cache(self) -> None:
+        """Clear the model response cache (call before/after check-all sessions)."""
+        self._model_cache.clear()
 
     # =========================================================================
     # UpdateProvider interface
@@ -58,8 +72,8 @@ class CivitaiUpdateProvider:
 
         model_id = dep.selector.civitai.model_id
 
-        # Get latest version from Civitai
-        model_data = self.civitai.get_model(model_id)
+        # Get latest version from Civitai (cached per check-all session)
+        model_data = self.get_model_cached(model_id)
         versions = model_data.get("modelVersions", [])
         if not versions:
             return None
@@ -90,6 +104,7 @@ class CivitaiUpdateProvider:
                     file_id=target.get("id"),
                     sha256=sha256,
                     download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
+                    filename=target.get("name"),
                 )
 
             return UpdateCheckResult(has_update=False)
@@ -110,9 +125,29 @@ class CivitaiUpdateProvider:
                 sha256=sha256,
                 download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
                 size_bytes=target.get("sizeKB", 0) * 1024 if target.get("sizeKB") else None,
+                filename=target.get("name"),
             )
 
-        # Fallback: generic filtering by constraints
+        # Filename matching failed — check if we have filename info.
+        # If we know the current dep's filename but it doesn't match ANY file
+        # in the latest version, this is NOT an update for this dep.
+        # Civitai creators sometimes publish different artifacts (different
+        # LoRAs, different workflows) as "versions" of one model page.
+        # Without filename match we cannot reliably identify which file in
+        # the new version corresponds to this dep.
+        dep_filename = (
+            current.artifact.provider.filename
+            or (dep.expose.filename if dep.expose and isinstance(dep.expose.filename, str) else None)
+        )
+        if dep_filename:
+            logger.debug(
+                "[CivitaiUpdateProvider] No filename match for dep %s in "
+                "version %d (current file: %s) — skipping as different artifact",
+                dep.id, latest_version_id, dep_filename,
+            )
+            return UpdateCheckResult(has_update=False)
+
+        # Fallback: generic filtering by constraints (only when no filename)
         candidates = self._filter_files(files, dep.selector.constraints)
 
         if not candidates:
@@ -130,6 +165,8 @@ class CivitaiUpdateProvider:
                         provider_version_id=latest_version_id,
                         provider_file_id=f.get("id"),
                         sha256=f.get("hashes", {}).get("SHA256", "").lower() if f.get("hashes") else None,
+                        filename=f.get("name"),
+                        size_bytes=f.get("sizeKB", 0) * 1024 if f.get("sizeKB") else None,
                     )
                     for f in candidates
                 ],
@@ -149,6 +186,7 @@ class CivitaiUpdateProvider:
             sha256=sha256,
             download_url=target.get("downloadUrl") or self.build_download_url(latest_version_id, target.get("id")),
             size_bytes=target.get("sizeKB", 0) * 1024 if target.get("sizeKB") else None,
+            filename=target.get("name"),
         )
 
     def build_download_url(
@@ -174,7 +212,7 @@ class CivitaiUpdateProvider:
             return 0
 
         try:
-            model_data = self.civitai.get_model(model_id)
+            model_data = self.get_model_cached(model_id)
         except Exception:
             return 0
 
@@ -185,10 +223,15 @@ class CivitaiUpdateProvider:
                 target_version = v
                 break
         if not target_version:
-            # Use latest version
+            # Use latest version as fallback — may not match pack's pinned version
             versions = model_data.get("modelVersions", [])
             if versions:
                 target_version = versions[0]
+                logger.warning(
+                    "[CivitaiUpdateProvider] version_id=%s not found in model %d, "
+                    "falling back to latest version %d",
+                    version_id, model_id, target_version["id"],
+                )
 
         if not target_version:
             return 0
@@ -240,7 +283,7 @@ class CivitaiUpdateProvider:
             return False
 
         try:
-            model_data = self.civitai.get_model(source.model_id)
+            model_data = self.get_model_cached(source.model_id)
         except Exception:
             return False
 
@@ -257,7 +300,7 @@ class CivitaiUpdateProvider:
             return False
 
         try:
-            model_data = self.civitai.get_model(source.model_id)
+            model_data = self.get_model_cached(source.model_id)
         except Exception:
             return False
 
@@ -315,6 +358,12 @@ class CivitaiUpdateProvider:
         where each dependency corresponds to a different file.
         """
         current_filename = current.artifact.provider.filename
+        # Fallback: use the expose filename from pack dependency
+        if not current_filename:
+            try:
+                current_filename = dep.expose.filename if dep.expose and isinstance(dep.expose.filename, str) else None
+            except (AttributeError, TypeError):
+                current_filename = None
         if not current_filename or not files:
             return None
 
@@ -330,11 +379,21 @@ class CivitaiUpdateProvider:
         # Partial match: same base name without version suffix
         # e.g. "ExtremeFrenchKissV1.safetensors" → "ExtremeFrenchKissV2.safetensors"
         import re
-        current_stem = re.sub(r'[Vv]\d+', '', current_base.rsplit(".", 1)[0]).strip("_- ")
+        # Strip trailing version suffixes: V1, v2, v1.5, V2.0, etc.
+        # Only strip at the end of the stem to avoid removing "v1" from semantic names.
+        _VERSION_RE = re.compile(r'[_.\- ]?[Vv]\d+(?:\.\d+)*$')
+        current_parts = current_base.rsplit(".", 1)
+        current_ext = current_parts[1].lower() if len(current_parts) > 1 else ""
+        current_stem = _VERSION_RE.sub('', current_parts[0]).strip("_- ")
         if current_stem:
             for f in files:
                 fname = f.get("name", "")
-                candidate_stem = re.sub(r'[Vv]\d+', '', fname.rsplit(".", 1)[0]).strip("_- ").lower()
+                fparts = fname.rsplit(".", 1)
+                fext = fparts[1].lower() if len(fparts) > 1 else ""
+                # Extension must match to prevent cross-type confusion
+                if current_ext and fext and current_ext != fext:
+                    continue
+                candidate_stem = _VERSION_RE.sub('', fparts[0]).strip("_- ").lower()
                 if candidate_stem == current_stem:
                     return f
 
@@ -362,7 +421,7 @@ class CivitaiUpdateProvider:
             if constraints.file_ext:
                 ext_filtered = [
                     f for f in candidates
-                    if any(f.get("name", "").endswith(ext) for ext in constraints.file_ext)
+                    if any(f.get("name", "").lower().endswith(ext.lower()) for ext in constraints.file_ext)
                 ]
                 if ext_filtered:
                     candidates = ext_filtered

@@ -142,6 +142,7 @@ def _make_lock(
     version_id: int,
     file_id: int,
     sha256: str,
+    filename: str = "model.safetensors",
 ):
     """Build a lock with one resolved dependency."""
     return PackLock(
@@ -158,6 +159,7 @@ def _make_lock(
                         model_id=model_id,
                         version_id=version_id,
                         file_id=file_id,
+                        filename=filename,
                     ),
                     download=ArtifactDownload(
                         urls=[f"https://civitai.com/api/download/models/{version_id}"],
@@ -635,6 +637,7 @@ class TestE2EMultiDependency:
                         provider=ArtifactProvider(
                             name=ProviderName.CIVITAI,
                             model_id=500, version_id=100, file_id=1000,
+                            filename="checkpoint.safetensors",
                         ),
                         download=ArtifactDownload(urls=["https://civitai.com/api/download/models/100"]),
                         integrity=ArtifactIntegrity(sha256_verified=True),
@@ -649,6 +652,7 @@ class TestE2EMultiDependency:
                         provider=ArtifactProvider(
                             name=ProviderName.CIVITAI,
                             model_id=600, version_id=300, file_id=3000,
+                            filename="lora.safetensors",
                         ),
                         download=ArtifactDownload(urls=["https://civitai.com/api/download/models/300"]),
                         integrity=ArtifactIntegrity(sha256_verified=True),
@@ -658,8 +662,10 @@ class TestE2EMultiDependency:
         )
 
         civitai = {
-            500: _civitai_model_response(model_id=500, version_id=200, file_id=2000, sha256="ckpt_new"),
-            600: _civitai_model_response(model_id=600, version_id=400, file_id=4000, sha256="lora_new"),
+            500: _civitai_model_response(model_id=500, version_id=200, file_id=2000, sha256="ckpt_new",
+                                         filename="checkpoint.safetensors"),
+            600: _civitai_model_response(model_id=600, version_id=400, file_id=4000, sha256="lora_new",
+                                         filename="lora.safetensors"),
         }
 
         packs = {"multi-pack": pack}
@@ -724,7 +730,8 @@ class TestE2EMultiDependency:
                         kind=AssetKind.CHECKPOINT, sha256="ckpt_v1",
                         size_bytes=2048000,
                         provider=ArtifactProvider(name=ProviderName.CIVITAI,
-                                                  model_id=500, version_id=100, file_id=1000),
+                                                  model_id=500, version_id=100, file_id=1000,
+                                                  filename="ckpt.safetensors"),
                         download=ArtifactDownload(urls=["https://civitai.com/api/download/models/100"]),
                         integrity=ArtifactIntegrity(sha256_verified=True),
                     ),
@@ -735,7 +742,8 @@ class TestE2EMultiDependency:
                         kind=AssetKind.LORA, sha256="lora_v1",
                         size_bytes=128000,
                         provider=ArtifactProvider(name=ProviderName.CIVITAI,
-                                                  model_id=600, version_id=300, file_id=3000),
+                                                  model_id=600, version_id=300, file_id=3000,
+                                                  filename="lora.safetensors"),
                         download=ArtifactDownload(urls=["https://civitai.com/api/download/models/300"]),
                         integrity=ArtifactIntegrity(sha256_verified=True),
                     ),
@@ -744,8 +752,10 @@ class TestE2EMultiDependency:
         )
 
         civitai = {
-            500: _civitai_model_response(model_id=500, version_id=200, file_id=2000, sha256="ckpt_v2"),
-            600: _civitai_model_response(model_id=600, version_id=400, file_id=4000, sha256="lora_v2"),
+            500: _civitai_model_response(model_id=500, version_id=200, file_id=2000, sha256="ckpt_v2",
+                                         filename="ckpt.safetensors"),
+            600: _civitai_model_response(model_id=600, version_id=400, file_id=4000, sha256="lora_v2",
+                                         filename="lora.safetensors"),
         }
 
         packs = {"dual-pack": pack}
@@ -778,14 +788,17 @@ class TestE2EAmbiguousSelection:
     def test_ambiguous_resolved_with_choose(self):
         """
         Civitai returns 2 files (fp16 + fp32). User picks fp16 via choose dict.
+        Ambiguous only happens when dep has NO filename info (legacy import).
         """
         pack = _make_pack("my-pack", model_id=500)
         # Remove primary_file_only constraint so both files match
         pack.dependencies[0].selector.constraints = None
+        # Remove filename info so we reach the generic filtering → ambiguous path
+        pack.dependencies[0].expose = None
 
         lock = _make_lock("my-pack", "main-checkpoint",
                           model_id=500, version_id=100, file_id=1000,
-                          sha256="old_hash")
+                          sha256="old_hash", filename=None)
 
         civitai = {
             500: {
@@ -850,10 +863,12 @@ class TestE2EAmbiguousSelection:
 
         pack = _make_pack("my-pack", model_id=500)
         pack.dependencies[0].selector.constraints = None
+        # Remove filename info so we reach the generic filtering → ambiguous path
+        pack.dependencies[0].expose = None
 
         lock = _make_lock("my-pack", "main-checkpoint",
                           model_id=500, version_id=100, file_id=1000,
-                          sha256="old_hash")
+                          sha256="old_hash", filename=None)
 
         civitai = {
             500: {
@@ -878,8 +893,9 @@ class TestE2EAmbiguousSelection:
             civitai_responses=civitai,
         )
 
-        with pytest.raises(AmbiguousSelectionError):
-            service.update_pack("my-pack", sync=False)
+        # Ambiguous updates are now auto-resolved (first candidate selected)
+        result = service.update_pack("my-pack", sync=False)
+        assert result.applied is True
 
 
 # =============================================================================
@@ -1280,6 +1296,519 @@ class TestDismissedVersionKey:
         ]
         key = ",".join(sorted(ids))
         assert key == "main-ckpt:ambiguous"
+
+
+# =============================================================================
+# E2E: Filename Pipeline - Realistic Scenarios
+# =============================================================================
+
+
+class TestFilenamePipeline:
+    """
+    Realistic E2E tests verifying filename propagation through the entire
+    update pipeline: check_update → plan_update → apply_update → lock.
+
+    These scenarios mirror real-world Civitai packs where filename matching
+    is critical for correct update detection.
+    """
+
+    def test_bundle_model_7_loras_no_false_updates(self):
+        """
+        Real scenario: Monster Fucker Bundle - Civitai model with 11 versions,
+        each version is a DIFFERENT LoRA (not an update of the previous one).
+        Only the LoRA whose filename matches should be detected as an update.
+
+        Pack has 3 deps from model 100, each from a different version:
+        - dep-a: "ExtremeFrenchKiss.safetensors" (from version 201)
+        - dep-b: "Lamia_constriction.safetensors" (from version 202)
+        - dep-c: "TentacleGrip.safetensors" (from version 203)
+
+        Civitai latest version 999 has a COMPLETELY DIFFERENT file:
+        "SnakeConstriction.safetensors"
+
+        Expected: NO updates detected (none of the 3 filenames match).
+        """
+        deps = [
+            PackDependency(
+                id="dep-a",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 100},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="ExtremeFrenchKiss.safetensors"),
+            ),
+            PackDependency(
+                id="dep-b",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 100},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="Lamia_constriction.safetensors"),
+            ),
+            PackDependency(
+                id="dep-c",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 100},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="TentacleGrip.safetensors"),
+            ),
+        ]
+
+        pack = _make_pack("monster-bundle", model_id=100, deps=deps)
+
+        lock = PackLock(
+            pack="monster-bundle",
+            resolved=[
+                ResolvedDependency(
+                    dependency_id="dep-a",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="hash_a", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=100,
+                            version_id=201, file_id=3001,
+                            filename="ExtremeFrenchKiss.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/201"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+                ResolvedDependency(
+                    dependency_id="dep-b",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="hash_b", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=100,
+                            version_id=202, file_id=3002,
+                            filename="Lamia_constriction.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/202"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+                ResolvedDependency(
+                    dependency_id="dep-c",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="hash_c", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=100,
+                            version_id=203, file_id=3003,
+                            filename="TentacleGrip.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/203"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+            ],
+        )
+
+        # Civitai: latest version has a completely different LoRA
+        civitai = {
+            100: {
+                "id": 100, "name": "Monster Fucker Bundle", "description": "bundle",
+                "modelVersions": [{
+                    "id": 999,
+                    "name": "SnakeConstriction",
+                    "baseModel": "SDXL",
+                    "trainedWords": [],
+                    "files": [{
+                        "id": 9001, "primary": True,
+                        "name": "SnakeConstriction.safetensors",
+                        "hashes": {"SHA256": "NEWSNAKE"},
+                        "sizeKB": 100,
+                    }],
+                    "images": [],
+                }],
+            },
+        }
+
+        service, _, _ = _setup_service(
+            packs={"monster-bundle": pack},
+            locks={"monster-bundle": lock},
+            civitai_responses=civitai,
+        )
+
+        plan = service.plan_update("monster-bundle")
+        # CRITICAL: No false updates! All 3 deps have filenames that don't match.
+        assert plan.already_up_to_date is True
+        assert len(plan.changes) == 0
+
+    def test_dual_file_wan_high_low_update(self):
+        """
+        Real scenario: WAN Multiscene - 2 versions (Low Noise, High Noise),
+        each with 1 file. Pack has 2 deps, one per noise variant.
+
+        When Civitai latest version is "High Noise v2", only the dep whose
+        filename matches "HighNoise" gets updated. The "LowNoise" dep is
+        skipped (different artifact, not an update for it).
+        """
+        deps = [
+            PackDependency(
+                id="low-noise",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 200},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="WAN_LowNoise.safetensors"),
+            ),
+            PackDependency(
+                id="high-noise",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 200},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="WAN_HighNoise.safetensors"),
+            ),
+        ]
+
+        pack = _make_pack("wan-multiscene", model_id=200, deps=deps)
+
+        lock = PackLock(
+            pack="wan-multiscene",
+            resolved=[
+                ResolvedDependency(
+                    dependency_id="low-noise",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="low_v1", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=200,
+                            version_id=301, file_id=4001,
+                            filename="WAN_LowNoise.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/301"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+                ResolvedDependency(
+                    dependency_id="high-noise",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="high_v1", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=200,
+                            version_id=302, file_id=4002,
+                            filename="WAN_HighNoise.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/302"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+            ],
+        )
+
+        # Latest version: HighNoise v2 (NOT an update for LowNoise)
+        civitai = {
+            200: {
+                "id": 200, "name": "WAN Multiscene", "description": "",
+                "modelVersions": [{
+                    "id": 500,
+                    "name": "High Noise v2",
+                    "baseModel": "WAN",
+                    "trainedWords": [],
+                    "files": [{
+                        "id": 5001, "primary": True,
+                        "name": "WAN_HighNoise.safetensors",
+                        "hashes": {"SHA256": "HIGH_V2_HASH"},
+                        "sizeKB": 200,
+                    }],
+                    "images": [],
+                }],
+            },
+        }
+
+        service, _, _ = _setup_service(
+            packs={"wan-multiscene": pack},
+            locks={"wan-multiscene": lock},
+            civitai_responses=civitai,
+        )
+
+        plan = service.plan_update("wan-multiscene")
+        # Only high-noise gets updated, low-noise is NOT an update
+        assert len(plan.changes) == 1
+        assert plan.changes[0].dependency_id == "high-noise"
+        assert plan.changes[0].new["provider_version_id"] == 500
+        assert plan.changes[0].new["sha256"] == "high_v2_hash"
+
+        # Apply and verify lock
+        result = service.update_pack("wan-multiscene", sync=False)
+        assert result.applied is True
+
+        updated_lock = service.layout.load_pack_lock("wan-multiscene")
+        high = next(r for r in updated_lock.resolved if r.dependency_id == "high-noise")
+        low = next(r for r in updated_lock.resolved if r.dependency_id == "low-noise")
+
+        assert high.artifact.provider.version_id == 500
+        assert high.artifact.sha256 == "high_v2_hash"
+        assert high.artifact.provider.filename == "WAN_HighNoise.safetensors"
+        # Low noise unchanged
+        assert low.artifact.provider.version_id == 301
+        assert low.artifact.sha256 == "low_v1"
+
+    def test_filename_updated_in_lock_after_version_bump(self):
+        """
+        When a model updates from "LoraV1.safetensors" to "LoraV2.safetensors",
+        the lock should reflect the NEW filename after apply_update.
+        This ensures subsequent updates use the correct filename for matching.
+        """
+        pack = _make_pack("versioned-lora", model_id=300)
+        lock = _make_lock("versioned-lora", "main-checkpoint",
+                          model_id=300, version_id=100, file_id=1000,
+                          sha256="hash_v1", filename="LoraV1.safetensors")
+        # Also align expose.filename
+        pack.dependencies[0].expose = ExposeConfig(filename="LoraV1.safetensors")
+
+        civitai = {
+            300: _civitai_model_response(
+                model_id=300, version_id=200, file_id=2000,
+                sha256="hash_v2", filename="LoraV2.safetensors",
+            ),
+        }
+
+        service, _, _ = _setup_service(
+            packs={"versioned-lora": pack},
+            locks={"versioned-lora": lock},
+            civitai_responses=civitai,
+        )
+
+        # Stem matching: "LoraV1" → stem "Lora" matches "LoraV2" → stem "Lora"
+        plan = service.plan_update("versioned-lora")
+        assert len(plan.changes) == 1
+        assert plan.changes[0].new["filename"] == "LoraV2.safetensors"
+
+        # Apply
+        result = service.update_pack("versioned-lora", sync=False)
+        assert result.applied is True
+
+        # Verify lock has the NEW filename
+        updated = service.layout.load_pack_lock("versioned-lora")
+        resolved = updated.resolved[0]
+        assert resolved.artifact.provider.version_id == 200
+        assert resolved.artifact.provider.filename == "LoraV2.safetensors"
+
+    def test_legacy_lock_without_filename_uses_expose_fallback(self):
+        """
+        Legacy lock entries (before filename was stored) should use
+        expose.filename as fallback for matching.
+        """
+        pack = _make_pack("legacy-pack", model_id=400)
+        pack.dependencies[0].expose = ExposeConfig(filename="mymodel.safetensors")
+
+        # Lock WITHOUT filename (legacy)
+        lock = _make_lock("legacy-pack", "main-checkpoint",
+                          model_id=400, version_id=100, file_id=1000,
+                          sha256="old_hash", filename=None)
+
+        # Civitai has the same filename → update is genuine
+        civitai = {
+            400: _civitai_model_response(
+                model_id=400, version_id=200, file_id=2000,
+                sha256="new_hash", filename="mymodel.safetensors",
+            ),
+        }
+
+        service, _, _ = _setup_service(
+            packs={"legacy-pack": pack},
+            locks={"legacy-pack": lock},
+            civitai_responses=civitai,
+        )
+
+        plan = service.plan_update("legacy-pack")
+        assert len(plan.changes) == 1
+        assert plan.changes[0].dependency_id == "main-checkpoint"
+
+        # After apply, lock should have the filename filled in
+        result = service.update_pack("legacy-pack", sync=False)
+        assert result.applied is True
+        updated = service.layout.load_pack_lock("legacy-pack")
+        assert updated.resolved[0].artifact.provider.filename == "mymodel.safetensors"
+
+    def test_legacy_lock_without_filename_skips_mismatched(self):
+        """
+        Legacy lock without filename, but expose.filename doesn't match
+        any file in the new version → not an update (different artifact).
+        """
+        pack = _make_pack("legacy-mismatch", model_id=500)
+        pack.dependencies[0].expose = ExposeConfig(filename="original_lora.safetensors")
+
+        lock = _make_lock("legacy-mismatch", "main-checkpoint",
+                          model_id=500, version_id=100, file_id=1000,
+                          sha256="old_hash", filename=None)
+
+        civitai = {
+            500: _civitai_model_response(
+                model_id=500, version_id=200, file_id=2000,
+                sha256="new_hash", filename="completely_different.safetensors",
+            ),
+        }
+
+        service, _, _ = _setup_service(
+            packs={"legacy-mismatch": pack},
+            locks={"legacy-mismatch": lock},
+            civitai_responses=civitai,
+        )
+
+        plan = service.plan_update("legacy-mismatch")
+        # expose.filename "original_lora" doesn't match "completely_different"
+        assert plan.already_up_to_date is True
+        assert len(plan.changes) == 0
+
+    def test_size_bytes_updated_in_lock_after_apply(self):
+        """
+        When updating, the lock should have the new file's size_bytes,
+        not the old value.
+        """
+        pack = _make_pack("size-test", model_id=300)
+        lock = _make_lock("size-test", "main-checkpoint",
+                          model_id=300, version_id=100, file_id=1000,
+                          sha256="old_hash")
+
+        # New version with different file size (4096 KB = 4194304 bytes)
+        civitai = {
+            300: _civitai_model_response(
+                model_id=300, version_id=200, file_id=2000,
+                sha256="new_hash",
+            ),
+        }
+        # Override sizeKB in the response to a different value
+        civitai[300]["modelVersions"][0]["files"][0]["sizeKB"] = 4096
+
+        service, _, _ = _setup_service(
+            packs={"size-test": pack},
+            locks={"size-test": lock},
+            civitai_responses=civitai,
+        )
+
+        result = service.update_pack("size-test", sync=False)
+        assert result.applied is True
+
+        updated = service.layout.load_pack_lock("size-test")
+        resolved = updated.resolved[0]
+        assert resolved.artifact.size_bytes == 4096 * 1024
+
+    def test_check_all_bundle_no_false_positives(self):
+        """
+        check_all with a bundle model (7 deps, same model_id) and
+        a normal single-dep pack. Verifies:
+        - Bundle gets 0 false updates
+        - Normal pack gets correctly detected update
+        - Model cache prevents duplicate API calls
+        """
+        # Pack A: normal single-dep (has genuine update)
+        pack_a = _make_pack("normal-pack", model_id=10)
+        lock_a = _make_lock("normal-pack", "main-checkpoint",
+                            model_id=10, version_id=100, file_id=1000,
+                            sha256="old_a")
+
+        # Pack B: bundle with 2 deps from same model
+        bundle_deps = [
+            PackDependency(
+                id="lora-kiss",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 20},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="FrenchKiss.safetensors"),
+            ),
+            PackDependency(
+                id="lora-snake",
+                kind=AssetKind.LORA,
+                selector=DependencySelector(
+                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                    civitai={"model_id": 20},
+                ),
+                update_policy=UpdatePolicy(mode=UpdatePolicyMode.FOLLOW_LATEST),
+                expose=ExposeConfig(filename="SnakeWrap.safetensors"),
+            ),
+        ]
+        pack_b = _make_pack("bundle-pack", model_id=20, deps=bundle_deps)
+        lock_b = PackLock(
+            pack="bundle-pack",
+            resolved=[
+                ResolvedDependency(
+                    dependency_id="lora-kiss",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="kiss_hash", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=20,
+                            version_id=201, file_id=5001,
+                            filename="FrenchKiss.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/201"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+                ResolvedDependency(
+                    dependency_id="lora-snake",
+                    artifact=ResolvedArtifact(
+                        kind=AssetKind.LORA, sha256="snake_hash", size_bytes=50000,
+                        provider=ArtifactProvider(
+                            name=ProviderName.CIVITAI, model_id=20,
+                            version_id=202, file_id=5002,
+                            filename="SnakeWrap.safetensors",
+                        ),
+                        download=ArtifactDownload(urls=["https://civitai.com/api/download/models/202"]),
+                        integrity=ArtifactIntegrity(sha256_verified=True),
+                    ),
+                ),
+            ],
+        )
+
+        civitai = {
+            # Normal pack: genuine update available
+            10: _civitai_model_response(model_id=10, version_id=200, file_id=2000, sha256="new_a"),
+            # Bundle model: latest version is a completely different LoRA
+            20: {
+                "id": 20, "name": "Monster Bundle", "description": "",
+                "modelVersions": [{
+                    "id": 999,
+                    "name": "Tentacle Grip",
+                    "baseModel": "SDXL",
+                    "trainedWords": [],
+                    "files": [{
+                        "id": 9001, "primary": True,
+                        "name": "TentacleGrip.safetensors",
+                        "hashes": {"SHA256": "TENTACLE_HASH"},
+                        "sizeKB": 100,
+                    }],
+                    "images": [],
+                }],
+            },
+        }
+
+        packs = {"normal-pack": pack_a, "bundle-pack": pack_b}
+        locks = {"normal-pack": lock_a, "bundle-pack": lock_b}
+        service, _, mock_civitai = _setup_service(packs, locks, civitai)
+
+        plans = service.check_all_updates()
+
+        # Normal pack: has update
+        assert "normal-pack" in plans
+        assert plans["normal-pack"].already_up_to_date is False
+        assert len(plans["normal-pack"].changes) == 1
+
+        # Bundle pack: NO false updates (both filenames mismatch)
+        assert "bundle-pack" in plans
+        assert plans["bundle-pack"].already_up_to_date is True
+        assert len(plans["bundle-pack"].changes) == 0
+
+        # Verify model cache worked: model 20 should only be fetched ONCE
+        # (both deps share same model_id, cache deduplicates)
+        calls_for_model_20 = [
+            c for c in mock_civitai.get_model.call_args_list
+            if c[0][0] == 20
+        ]
+        assert len(calls_for_model_20) == 1
 
 
 class TestAutoCheckIntervalValues:

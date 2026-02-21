@@ -309,6 +309,7 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
   const queryClient = useQueryClient()
   const {
     isChecking,
+    checkProgress,
     availableUpdates,
     selectedPacks,
     applyingPacks,
@@ -428,11 +429,29 @@ export function UpdatesPanel({ open, onClose }: UpdatesPanelProps) {
             </div>
           )}
 
-          {/* Checking spinner */}
+          {/* Checking progress */}
           {isChecking && (
-            <div className="text-center py-8">
-              <Loader2 className="w-8 h-8 text-synapse animate-spin mx-auto mb-3" />
-              <p className="text-text-muted">{t('updates.panel.checking')}</p>
+            <div className="py-8 px-2">
+              {checkProgress ? (
+                <div className="space-y-3">
+                  <ProgressBar
+                    progress={checkProgress.total > 0 ? (checkProgress.current / checkProgress.total) * 100 : 0}
+                    variant="default"
+                    size="md"
+                    label={t('updates.panel.checkingProgress', { current: checkProgress.current, total: checkProgress.total })}
+                  />
+                  {checkProgress.currentPack && (
+                    <p className="text-xs text-text-muted font-mono truncate">
+                      {t('updates.panel.checkingPack', { pack: checkProgress.currentPack })}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 text-synapse animate-spin mx-auto mb-3" />
+                  <p className="text-text-muted">{t('updates.panel.checking')}</p>
+                </div>
+              )}
             </div>
           )}
 

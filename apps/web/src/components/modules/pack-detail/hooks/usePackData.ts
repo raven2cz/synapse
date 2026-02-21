@@ -344,6 +344,7 @@ export function usePackData({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.packBackup(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
       toast.success('Dependencies resolved')
     },
     onError: (error: Error) => {
@@ -483,6 +484,7 @@ export function usePackData({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
       toast.success('Resource deleted')
     },
     onError: (error: Error) => {
@@ -508,6 +510,7 @@ export function usePackData({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
       toast.success('Base model updated')
     },
     onError: (error: Error) => {

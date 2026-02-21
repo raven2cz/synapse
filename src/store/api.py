@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -287,7 +288,13 @@ def get_store():
         civitai_api_key = None
         if hasattr(cfg, 'api') and hasattr(cfg.api, 'civitai_token'):
             civitai_api_key = cfg.api.civitai_token
-        
+
+        logger.info(
+            "[get_store] civitai_api_key: present=%s, length=%d",
+            bool(civitai_api_key),
+            len(civitai_api_key) if civitai_api_key else 0,
+        )
+
         # Create Store with configured root and API keys
         _store_instance = Store(
             root=cfg.store.root,
@@ -2290,7 +2297,7 @@ async def download_asset(
     # Get download URL - first from request, then from lock file
     download_url = request.url
     resolved_filename = None
-    
+
     if not download_url:
         # Try to get URL from resolved artifact in lock
         lock = store.get_pack_lock(pack_name)
@@ -2299,7 +2306,24 @@ async def download_asset(
             if resolved and resolved.artifact.download.urls:
                 download_url = resolved.artifact.download.urls[0]
                 resolved_filename = resolved.artifact.provider.filename
-    
+
+    # Validate lock URL against dependency's pinned version_id.
+    # Stale locks may have wrong version in URL (e.g. always latest instead of pinned).
+    if download_url and dep.selector.civitai and dep.selector.civitai.version_id:
+        expected_vid = str(dep.selector.civitai.version_id)
+        if "civitai.com" in download_url and f"models/{expected_vid}" not in download_url:
+            stale_url = download_url
+            download_url = f"https://civitai.com/api/download/models/{expected_vid}"
+            logger.warning(
+                "[download-asset] Lock URL stale (version_id mismatch), "
+                "reconstructed: %s → %s", stale_url, download_url,
+            )
+
+    # Last resort: construct URL from dependency's Civitai selector
+    if not download_url and dep.selector.civitai and dep.selector.civitai.version_id:
+        download_url = f"https://civitai.com/api/download/models/{dep.selector.civitai.version_id}"
+        logger.info("[download-asset] No URL in request or lock, constructed from version_id: %s", download_url)
+
     if not download_url:
         raise HTTPException(status_code=400, detail="No download URL available for this asset")
 
@@ -2332,6 +2356,9 @@ async def download_asset(
         "speed_mbps": 0,
         "eta_seconds": 0,
         "error": None,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "target_path": None,
         "group_id": request.group_id,
         "group_label": request.group_label,
     }
@@ -2448,6 +2475,8 @@ async def download_asset(
             entry["status"] = "completed"
             entry["progress"] = 100.0
             entry["sha256"] = sha256
+            entry["completed_at"] = datetime.now(timezone.utc).isoformat()
+            entry["target_path"] = str(target_path) if target_path else None
             logger.info(f"[download-asset] Completed: {filename}, SHA256: {sha256[:16]}...")
             
         except Exception as e:
@@ -2490,6 +2519,8 @@ def clear_completed_downloads():
         k for k, v in _active_downloads.items()
         if v.get("status") in ["completed", "failed", "cancelled"]
     ]
+    import traceback
+    logger.warning("[downloads] clear_completed called, removing %d entries. Caller:\n%s", len(to_remove), "".join(traceback.format_stack()[-4:-1]))
     for k in to_remove:
         del _active_downloads[k]
     return {"cleared": len(to_remove)}
@@ -2498,6 +2529,8 @@ def clear_completed_downloads():
 @v2_packs_router.delete("/downloads/group/{group_id}")
 def cancel_download_group(group_id: str):
     """Cancel and remove all downloads matching the given group_id."""
+    import traceback
+    logger.warning("[downloads] cancel_download_group called for group_id=%s. Caller:\n%s", group_id, "".join(traceback.format_stack()[-4:-1]))
     cancelled = []
     to_remove = [
         k for k, v in _active_downloads.items()
@@ -2513,6 +2546,8 @@ def cancel_download_group(group_id: str):
 @v2_packs_router.delete("/downloads/{download_id}")
 def cancel_download(download_id: str):
     """Cancel a download."""
+    import traceback
+    logger.warning("[downloads] cancel_download called for id=%s. Caller:\n%s", download_id, "".join(traceback.format_stack()[-4:-1]))
     if download_id in _active_downloads:
         _active_downloads[download_id]["status"] = "cancelled"
         del _active_downloads[download_id]
@@ -2527,9 +2562,16 @@ def download_all_assets(
 ):
     """Download all pending assets for a pack using v2 install mechanism."""
     try:
+        # Re-resolve lock to ensure URLs are fresh (handles stale lock issue)
+        try:
+            store.resolve(pack_name)
+            logger.info("[download-all] Re-resolved lock for %s before download", pack_name)
+        except Exception as e:
+            logger.warning("[download-all] Lock re-resolve failed for %s: %s (proceeding with existing)", pack_name, e)
+
         # Use v2 install which downloads all blobs
         installed = store.install(pack_name)
-        
+
         return {
             "success": True,
             "pack_name": pack_name,

@@ -160,6 +160,7 @@ class PackService:
         civitai_client: Optional[Any] = None,
         huggingface_client: Optional[Any] = None,
         resolvers: Optional[Dict[SelectorStrategy, Any]] = None,
+        download_service: Optional[Any] = None,
     ):
         """
         Initialize pack service.
@@ -171,11 +172,13 @@ class PackService:
             huggingface_client: Optional HuggingFaceClient instance
             resolvers: Optional resolver registry (strategy -> DependencyResolver).
                        If None, default resolvers are created lazily.
+            download_service: Optional DownloadService for authenticated downloads
         """
         self.layout = layout
         self.blob_store = blob_store
         self._civitai = civitai_client
         self._huggingface = huggingface_client
+        self._download_service = download_service
         self._resolvers: Dict[SelectorStrategy, Any] = resolvers or {}
 
     @property
@@ -629,78 +632,6 @@ class PackService:
             expose=ExposeConfig(filename=f"{base_model}.safetensors"),
         )
 
-    def _create_initial_lock(
-        self,
-        pack: Pack,
-        version_data: Dict[str, Any],
-        primary_file: Dict[str, Any],
-        download_url: str,
-        sha256: Optional[str],
-        file_size: Optional[int],
-    ) -> PackLock:
-        """Create initial lock file from import data."""
-        resolved = []
-        unresolved = []
-
-        for dep in pack.dependencies:
-            if dep.selector.strategy == SelectorStrategy.CIVITAI_MODEL_LATEST:
-                resolved.append(ResolvedDependency(
-                    dependency_id=dep.id,
-                    artifact=ResolvedArtifact(
-                        kind=dep.kind,
-                        sha256=sha256,
-                        size_bytes=file_size,
-                        provider=ArtifactProvider(
-                            name=ProviderName.CIVITAI,
-                            model_id=dep.selector.civitai.model_id if dep.selector.civitai else None,
-                            version_id=dep.selector.civitai.version_id if dep.selector.civitai else None,
-                            file_id=dep.selector.civitai.file_id if dep.selector.civitai else None,
-                        ),
-                        download=ArtifactDownload(urls=[download_url]),
-                        integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
-                    ),
-                ))
-            elif dep.selector.strategy == SelectorStrategy.BASE_MODEL_HINT:
-                try:
-                    config = self.layout.load_config()
-                    alias = config.base_model_aliases.get(dep.selector.base_model)
-                    if alias and alias.selector.civitai:
-                        resolved.append(ResolvedDependency(
-                            dependency_id=dep.id,
-                            artifact=ResolvedArtifact(
-                                kind=dep.kind,
-                                sha256=None,
-                                size_bytes=None,
-                                provider=ArtifactProvider(
-                                    name=ProviderName.CIVITAI,
-                                    model_id=alias.selector.civitai.model_id,
-                                    version_id=alias.selector.civitai.version_id,
-                                    file_id=alias.selector.civitai.file_id,
-                                ),
-                                download=ArtifactDownload(urls=[]),
-                                integrity=ArtifactIntegrity(sha256_verified=False),
-                            ),
-                        ))
-                    else:
-                        unresolved.append(UnresolvedDependency(
-                            dependency_id=dep.id,
-                            reason="unknown_base_model_alias",
-                            details={"base_model": dep.selector.base_model},
-                        ))
-                except Exception:
-                    unresolved.append(UnresolvedDependency(
-                        dependency_id=dep.id,
-                        reason="base_model_resolution_failed",
-                        details={"base_model": dep.selector.base_model},
-                    ))
-
-        return PackLock(
-            pack=pack.name,
-            resolved_at=datetime.now().isoformat(),
-            resolved=resolved,
-            unresolved=unresolved,
-        )
-
     def _create_initial_lock_multi(self, pack: Pack) -> PackLock:
         """
         Create initial lock file from pack with multi-version support.
@@ -771,6 +702,7 @@ class PackService:
                                 model_id=civ.model_id,
                                 version_id=civ.version_id,
                                 file_id=target_file.get("id"),
+                                filename=target_file.get("name"),
                             ),
                             download=ArtifactDownload(urls=[download_url]),
                             integrity=ArtifactIntegrity(sha256_verified=sha256 is not None),
@@ -965,64 +897,63 @@ class PackService:
                     progress_callback(progress)
 
                 try:
-                    response = requests.get(
-                        download_url,
-                        timeout=timeout,
-                        stream=True,
-                    )
-                    response.raise_for_status()
+                    if self._download_service:
+                        # Use centralized DownloadService (auth injection, thread-safe)
+                        def _progress_adapter(downloaded, total):
+                            progress.bytes_downloaded = downloaded
+                            progress.total_bytes = total if total else None
+                            if progress_callback and total and downloaded % 102400 < 8192:
+                                progress_callback(progress)
 
-                    total_bytes = response.headers.get('content-length')
-                    if total_bytes:
-                        progress.total_bytes = int(total_bytes)
+                        self._download_service.download_to_file(
+                            download_url,
+                            dest,
+                            timeout=(15, timeout),
+                            progress_callback=_progress_adapter,
+                            resume=False,
+                        )
+                    else:
+                        # Fallback: direct download (no auth)
+                        response = requests.get(
+                            download_url,
+                            timeout=timeout,
+                            stream=True,
+                        )
+                        response.raise_for_status()
 
-                    bytes_downloaded = 0
-                    with open(dest, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                bytes_downloaded += len(chunk)
+                        total_bytes = response.headers.get('content-length')
+                        if total_bytes:
+                            progress.total_bytes = int(total_bytes)
 
-                                progress.bytes_downloaded = bytes_downloaded
-                                if progress_callback and progress.total_bytes:
-                                    if bytes_downloaded % 102400 < 8192:
-                                        progress_callback(progress)
+                        bytes_downloaded = 0
+                        with open(dest, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                                    bytes_downloaded += len(chunk)
 
-                    progress.bytes_downloaded = bytes_downloaded
+                                    progress.bytes_downloaded = bytes_downloaded
+                                    if progress_callback and progress.total_bytes:
+                                        if bytes_downloaded % 102400 < 8192:
+                                            progress_callback(progress)
+
+                    progress.bytes_downloaded = dest.stat().st_size if dest.exists() else 0
                     progress.status = 'completed'
                     if progress_callback:
                         progress_callback(progress)
 
-                    if media_type == 'video':
+                    if media_type == 'video' and dest.exists():
                         file_size = dest.stat().st_size
                         logger.info(
                             f"[PackService] Video downloaded: {filename} "
                             f"({file_size / 1024 / 1024:.1f} MB)"
                         )
 
-                except requests.exceptions.Timeout:
-                    error_msg = f"Timeout downloading {filename} (>{timeout}s)"
-                    logger.warning(f"[PackService] {error_msg}")
-                    progress.status = 'failed'
-                    progress.error = error_msg
-                    if progress_callback:
-                        progress_callback(progress)
-                    preview_number -= 1
-                    continue
-
-                except requests.exceptions.RequestException as e:
-                    error_msg = f"Network error: {str(e)}"
-                    logger.warning(f"[PackService] {error_msg}")
-                    progress.status = 'failed'
-                    progress.error = error_msg
-                    if progress_callback:
-                        progress_callback(progress)
-                    preview_number -= 1
-                    continue
-
                 except Exception as e:
-                    error_msg = f"Failed to download: {str(e)}"
-                    logger.error(f"[PackService] {error_msg}")
+                    # Clean up partial file to avoid permanent skip on retry
+                    dest.unlink(missing_ok=True)
+                    error_msg = f"Download error for {filename}: {str(e)}"
+                    logger.warning(f"[PackService] {error_msg}")
                     progress.status = 'failed'
                     progress.error = error_msg
                     if progress_callback:

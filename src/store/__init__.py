@@ -24,10 +24,15 @@ Usage:
     store.back(["comfyui"])
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+logger = logging.getLogger(__name__)
+
 from .blob_store import BlobStore, BlobStoreError, DownloadError, HashMismatchError
+from .download_auth import CivitaiAuthProvider
+from .download_service import DownloadService
 from .layout import (
     PackNotFoundError,
     ProfileNotFoundError,
@@ -203,7 +208,21 @@ class Store:
             civitai_api_key: Optional Civitai API key for authenticated downloads
         """
         self.layout = StoreLayout(root)
-        self.blob_store = BlobStore(self.layout, api_key=civitai_api_key)
+
+        # Centralized download service with auth providers
+        logger.info(
+            "[Store] Creating DownloadService: civitai_api_key present=%s, length=%d",
+            bool(civitai_api_key),
+            len(civitai_api_key) if civitai_api_key else 0,
+        )
+        auth_providers = [CivitaiAuthProvider(civitai_api_key)]
+        self.download_service = DownloadService(auth_providers=auth_providers)
+
+        self.blob_store = BlobStore(
+            self.layout,
+            api_key=civitai_api_key,
+            download_service=self.download_service,
+        )
         self.view_builder = ViewBuilder(self.layout, self.blob_store)
 
         # Create authenticated CivitaiClient when API key is provided
@@ -217,6 +236,7 @@ class Store:
             self.blob_store,
             civitai_client,
             huggingface_client,
+            download_service=self.download_service,
         )
         self.profile_service = ProfileService(
             self.layout,

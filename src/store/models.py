@@ -1151,12 +1151,14 @@ class UpdateChange(BaseModel):
 class UpdateCandidate(BaseModel):
     """A candidate for ambiguous update selection."""
     model_config = ConfigDict(protected_namespaces=())
-    
+
     provider: str
     provider_model_id: Optional[int] = None
     provider_version_id: Optional[int] = None
     provider_file_id: Optional[int] = None
     sha256: Optional[str] = None
+    filename: Optional[str] = None
+    size_bytes: Optional[int] = None
 
 
 class AmbiguousUpdate(BaseModel):

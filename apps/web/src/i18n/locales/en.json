@@ -1624,6 +1624,8 @@
       "checkPrompt": "Click Check Updates to scan all packs for new versions",
       "checkAll": "Check All Packs",
       "checking": "Checking for updates...",
+      "checkingProgress": "Checking {{current}}/{{total}} packs...",
+      "checkingPack": "Checking {{pack}}...",
       "recheck": "Recheck",
       "selectAll": "Select all",
       "deselectAll": "Deselect all",
