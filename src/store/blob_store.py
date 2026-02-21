@@ -258,15 +258,18 @@ class BlobStore:
         # Apply auth provider for this URL
         download_url = url
         matched_auth = None
+        auth_headers = {}
         for auth_provider in self._auth_providers:
             if auth_provider.matches(url):
                 download_url = auth_provider.authenticate_url(url)
+                if hasattr(auth_provider, "get_auth_headers"):
+                    auth_headers = auth_provider.get_auth_headers(url)
                 matched_auth = auth_provider
                 break
 
         # Log auth status for debugging download failures
         if "civitai.com" in url:
-            has_token = "token=" in download_url
+            has_token = "Authorization" in auth_headers or "token=" in download_url
             logger.info(f"[BlobStore] Civitai download: token_injected={has_token}, url={url[:100]}")
             if not has_token:
                 logger.warning(f"[BlobStore] NO AUTH TOKEN for Civitai download! api_key={'set' if self.api_key else 'MISSING'}")
@@ -280,7 +283,7 @@ class BlobStore:
 
         try:
             # Check for resume
-            headers = {}
+            headers = {**auth_headers}  # start with auth headers if any
             mode = "wb"
             initial_size = 0
 

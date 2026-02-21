@@ -483,10 +483,10 @@ class PackBuilder:
                     timeout = video_timeout  # Use configured video timeout
                     logger.info(f"[PackBuilder] Downloading video: {filename} (quality: {video_quality}p)")
                 
+                auth_headers = {}
                 # === INJECT API TOKEN FOR NSFW/RESTRICTED CONTENT ===
                 if getattr(self, "civitai", None) and getattr(self.civitai, "api_key", None) and "civitai.com" in download_url.lower():
-                    connector = "&" if "?" in download_url else "?"
-                    download_url = f"{download_url}{connector}token={self.civitai.api_key}"
+                    auth_headers["Authorization"] = f"Bearer {self.civitai.api_key}"
                     
                 dest_path = resources_dir / filename
                 
@@ -510,6 +510,7 @@ class PackBuilder:
                     with requests.Session() as session:
                         response = session.get(
                             download_url,
+                            headers=auth_headers,
                             timeout=(15, timeout),
                             stream=True,
                         )
