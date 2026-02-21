@@ -20,6 +20,7 @@ License: MIT
 import json
 import logging
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -405,15 +406,12 @@ class PackBuilder:
         preview_number = 0
         total_to_process = len(images)
         
-        for i, img_data in enumerate(images):
+        # Helper function for threaded downloading
+        def _process_preview(i, img_data):
+            # We use local variables instead of modifying the outer `preview_number`
             url = img_data.get("url", "")
             if not url:
-                continue
-            
-            # Skip duplicates
-            if url in downloaded_urls:
-                logger.debug(f"[PackBuilder] Skipping duplicate URL: {url[:80]}...")
-                continue
+                return None
             
             # MERGE: Get richer data if available
             detailed_img = detailed_map.get(url)
@@ -425,7 +423,7 @@ class PackBuilder:
             # === NSFW FILTER ===
             if is_nsfw and not include_nsfw:
                 logger.debug(f"[PackBuilder] Skipping NSFW preview: {url[:80]}...")
-                continue
+                return None
             
             # Detect media type from URL
             media_info = detect_media_type(url, use_head_request=False)
@@ -434,14 +432,11 @@ class PackBuilder:
             # === MEDIA TYPE FILTER ===
             if media_type == 'video' and not download_videos:
                 logger.debug(f"[PackBuilder] Skipping video (disabled): {url[:80]}...")
-                continue
+                return None
             
             if media_type == 'image' and not download_images:
                 logger.debug(f"[PackBuilder] Skipping image (disabled): {url[:80]}...")
-                continue
-            
-            # Increment preview number only for items we're keeping
-            preview_number += 1
+                return None
             
             # Generate filename with appropriate extension
             url_path = url.split("?")[0]
@@ -449,9 +444,9 @@ class PackBuilder:
             
             # For videos: ALWAYS use .mp4 extension regardless of original
             if media_type == 'video':
-                filename = f"preview_{preview_number}.mp4"
+                filename = f"preview_{i+1}.mp4"
             else:
-                filename = f"preview_{preview_number}{original_ext}"
+                filename = f"preview_{i+1}{original_ext}"
             
             local_path = f"resources/previews/{filename}"
             
@@ -488,11 +483,16 @@ class PackBuilder:
                     timeout = video_timeout  # Use configured video timeout
                     logger.info(f"[PackBuilder] Downloading video: {filename} (quality: {video_quality}p)")
                 
+                # === INJECT API TOKEN FOR NSFW/RESTRICTED CONTENT ===
+                if getattr(self, "civitai", None) and getattr(self.civitai, "api_key", None) and "civitai.com" in download_url.lower():
+                    connector = "&" if "?" in download_url else "?"
+                    download_url = f"{download_url}{connector}token={self.civitai.api_key}"
+                    
                 dest_path = resources_dir / filename
                 
                 # Create progress object
                 progress = DownloadProgress(
-                    index=preview_number - 1,
+                    index=i,
                     total=total_to_process,
                     filename=filename,
                     url=url,
@@ -506,49 +506,48 @@ class PackBuilder:
                 
                 try:
                     # Stream download for large files
-                    response = requests.get(
-                        download_url,
-                        timeout=timeout,
-                        stream=True,
-                    )
-                    response.raise_for_status()
-                    
-                    # Get content length if available
-                    total_bytes = response.headers.get('content-length')
-                    if total_bytes:
-                        total_bytes = int(total_bytes)
-                        progress.total_bytes = total_bytes
-                    
-                    # Write with progress tracking
-                    bytes_downloaded = 0
-                    with open(dest_path, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                bytes_downloaded += len(chunk)
-                                
-                                # Update progress periodically (every ~100KB)
-                                progress.bytes_downloaded = bytes_downloaded
-                                if progress_callback and total_bytes and bytes_downloaded % 102400 < 8192:
-                                    progress_callback(progress)
-                    
-                    # Final progress update
-                    progress.bytes_downloaded = bytes_downloaded
-                    progress.status = 'completed'
-                    if progress_callback:
-                        progress_callback(progress)
-                    
-                    # Log video downloads with size
-                    if media_type == 'video':
-                        file_size = dest_path.stat().st_size
-                        logger.info(
-                            f"[PackBuilder] Video downloaded: {filename} "
-                            f"({file_size / 1024 / 1024:.1f} MB)"
+                    # Create per-thread session for ThreadPoolExecutor safety
+                    with requests.Session() as session:
+                        response = session.get(
+                            download_url,
+                            timeout=(15, timeout),
+                            stream=True,
                         )
-                    
-                    # Mark URL as downloaded
-                    downloaded_urls.add(url)
-                    
+                        response.raise_for_status()
+                        
+                        # Get content length if available
+                        total_bytes = response.headers.get('content-length')
+                        if total_bytes:
+                            total_bytes = int(total_bytes)
+                            progress.total_bytes = total_bytes
+                        
+                        # Write with progress tracking
+                        bytes_downloaded = 0
+                        with open(dest_path, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                                    bytes_downloaded += len(chunk)
+                                    
+                                    # Update progress periodically (every ~100KB)
+                                    progress.bytes_downloaded = bytes_downloaded
+                                    if progress_callback and total_bytes and bytes_downloaded % 102400 < 8192:
+                                        progress_callback(progress)
+                        
+                        # Final progress update
+                        progress.bytes_downloaded = bytes_downloaded
+                        progress.status = 'completed'
+                        if progress_callback:
+                            progress_callback(progress)
+                        
+                        # Log video downloads with size
+                        if media_type == 'video':
+                            file_size = dest_path.stat().st_size
+                            logger.info(
+                                f"[PackBuilder] Video downloaded: {filename} "
+                                f"({file_size / 1024 / 1024:.1f} MB)"
+                            )
+                        
                 except requests.exceptions.Timeout:
                     error_msg = f"Timeout downloading {filename} (>{timeout}s)"
                     logger.warning(f"[PackBuilder] {error_msg}")
@@ -556,9 +555,7 @@ class PackBuilder:
                     progress.error = error_msg
                     if progress_callback:
                         progress_callback(progress)
-                    # Don't add to previews list
-                    preview_number -= 1
-                    continue
+                    return None
                     
                 except requests.exceptions.RequestException as e:
                     error_msg = f"Network error downloading {filename}: {str(e)}"
@@ -567,8 +564,7 @@ class PackBuilder:
                     progress.error = error_msg
                     if progress_callback:
                         progress_callback(progress)
-                    preview_number -= 1
-                    continue
+                    return None
                     
                 except Exception as e:
                     error_msg = f"Failed to download {filename}: {str(e)}"
@@ -577,14 +573,58 @@ class PackBuilder:
                     progress.error = error_msg
                     if progress_callback:
                         progress_callback(progress)
-                    preview_number -= 1
-                    continue
-            else:
-                # Not downloading, just mark as processed
-                downloaded_urls.add(url)
-            
-            previews.append(preview)
+                    return None
+
+            return url, preview
+
+        # Process previews concurrently to avoid blocking the main thread significantly
+        downloaded_urls: set = set()
         
+        # We need to filter out duplicates first so we keep the correct order
+        unique_images = []
+        for img in images:
+            url = img.get("url", "")
+            if url and url not in downloaded_urls:
+                unique_images.append(img)
+                downloaded_urls.add(url)
+                
+        total_to_process = len(unique_images)
+        downloaded_urls.clear()
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit all download tasks
+            futures = [executor.submit(_process_preview, i, img) for i, img in enumerate(unique_images)]
+            
+            # Wait for all to complete and collect results
+            # They are collected in order to preserve exactly the same naming scheme (preview_1, preview_2)
+            # wait is not strictly needed since we iterate over the futures below
+            pass
+
+        # Collect valid previews in order
+        preview_number = 1
+        for future in futures:
+            result = future.result()
+            if result:
+                url, preview = result
+                # Fix up the filename since we skipped some images in the filter phase
+                # This ensures filenames are strictly sequential (preview_1, preview_2...)
+                old_filename = preview.filename
+                new_filename = f"preview_{preview_number}{Path(old_filename).suffix}"
+                
+                # Rename file on disk if we changed the name
+                if preview.filename != new_filename and download:
+                    old_path = resources_dir / preview.filename
+                    new_path = resources_dir / new_filename
+                    if old_path.exists():
+                        old_path.rename(new_path)
+                
+                preview.filename = new_filename
+                preview.local_path = f"resources/previews/{new_filename}"
+                
+                previews.append(preview)
+                downloaded_urls.add(url)
+                preview_number += 1
+
         # Summary log
         video_count = sum(1 for p in previews if p.media_type == 'video')
         image_count = sum(1 for p in previews if p.media_type == 'image')
