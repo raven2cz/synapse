@@ -202,10 +202,10 @@
     )}`;
   }
 
-  function buildModelImagesUrl(modelId, config, limit = 50) {
+  function buildModelImagesUrl(modelVersionId, config, limit = 50) {
     const input = {
       json: {
-        modelId: modelId,
+        modelVersionId: modelVersionId,
         limit: limit,
         sort: 'Most Reactions',
         period: 'AllTime',
@@ -685,16 +685,16 @@
     },
 
     /**
-     * Get images for a model via tRPC image.getInfinite
+     * Get images for a model version via tRPC image.getInfinite
      *
-     * NOTE: model.getById only returns post IDs, not actual images!
-     * This method fetches the images separately.
+     * NOTE: image.getInfinite requires modelVersionId, NOT modelId!
+     * Using modelId causes the endpoint to hang indefinitely.
      *
-     * @param {number} modelId - Model ID
+     * @param {number} modelVersionId - Model Version ID (from model.getById response)
      * @param {Object} opts - Request options
      * @param {number} opts.limit - Max images to fetch (default: 50)
      */
-    getModelImages: async (modelId, opts = {}) => {
+    getModelImages: async (modelVersionId, opts = {}) => {
       const config = getConfig();
 
       if (!config.enabled) {
@@ -707,7 +707,7 @@
         };
       }
 
-      const url = buildModelImagesUrl(modelId, config, opts.limit || 50);
+      const url = buildModelImagesUrl(modelVersionId, config, opts.limit || 50);
       return trpcRequest(url, { ...opts, timeout: opts.timeout || IMAGE_FETCH_TIMEOUT });
     },
 

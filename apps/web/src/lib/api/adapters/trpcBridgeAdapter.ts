@@ -16,7 +16,10 @@ import type {
   SearchResult,
   ModelDetail,
 } from '../searchTypes'
-import { transformTrpcModel, transformMeilisearchModel } from '@/lib/utils/civitaiTransformers'
+import { transformTrpcModel, transformMeilisearchModel, transformTrpcModelDetail } from '@/lib/utils/civitaiTransformers'
+
+// Timeout for image.getInfinite which is inherently slow
+const IMAGE_FETCH_TIMEOUT = 60000
 
 // =============================================================================
 // Bridge Type Declaration
@@ -215,9 +218,46 @@ export class TrpcBridgeAdapter implements SearchAdapter {
   }
 
   async getModelDetail(modelId: number): Promise<ModelDetail> {
-    // Use REST API — returns full model data with images from local Python backend.
-    // Bridge tRPC (getModel+getModelImages) is not used here because
-    // getModelImages (image.getInfinite) hangs indefinitely in some environments.
+    const bridge = window.SynapseSearchBridge
+
+    // Use bridge's direct tRPC calls if available (bypasses slow Python proxy)
+    if (bridge?.getModel && bridge?.getModelImages) {
+      try {
+        // Step 1: Get model data (fast — model.getById)
+        const modelResult = await bridge.getModel(modelId)
+        if (!modelResult.ok) {
+          throw new Error(modelResult.error?.message || 'Model fetch failed')
+        }
+
+        // Step 2: Extract modelVersionId — image.getInfinite requires it (NOT modelId!)
+        const data = modelResult.data as Record<string, unknown>
+        const modelVersions = data?.modelVersions as Record<string, unknown>[] | undefined
+        const firstVersionId = modelVersions?.[0]?.id as number | undefined
+
+        // Step 3: Fetch images using modelVersionId (with timeout protection)
+        if (firstVersionId) {
+          try {
+            const imagesResult = await Promise.race([
+              bridge.getModelImages(firstVersionId, { limit: 50, timeout: IMAGE_FETCH_TIMEOUT }),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('getModelImages timeout')), 15_000)
+              ),
+            ])
+            if (imagesResult.ok && modelVersions?.[0]) {
+              modelVersions[0].images = imagesResult.data?.items || []
+            }
+          } catch {
+            // Images timed out or failed — proceed without them
+          }
+        }
+
+        return transformTrpcModelDetail(data)
+      } catch (err) {
+        console.warn('[Synapse] Bridge model fetch failed, using REST fallback:', err)
+      }
+    }
+
+    // Fallback to REST if bridge unavailable or failed
     const res = await fetch(`/api/browse/model/${modelId}`)
     if (!res.ok) {
       throw new Error('Failed to fetch model')
