@@ -215,15 +215,13 @@ export class TrpcBridgeAdapter implements SearchAdapter {
   }
 
   async getModelDetail(modelId: number): Promise<ModelDetail> {
-    // tRPC model.getById doesn't return images (only post IDs)
-    // Use REST API which returns full model data with images
-    // No proxy needed - browser loads Civitai URLs directly
+    // Use REST API — returns full model data with images from local Python backend.
+    // Bridge tRPC (getModel+getModelImages) is not used here because
+    // getModelImages (image.getInfinite) hangs indefinitely in some environments.
     const res = await fetch(`/api/browse/model/${modelId}`)
-
     if (!res.ok) {
       throw new Error('Failed to fetch model')
     }
-
     return res.json()
   }
 }

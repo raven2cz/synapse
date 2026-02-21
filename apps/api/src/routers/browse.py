@@ -8,7 +8,7 @@ Search and browse Civitai models with enhanced search:
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from typing import List, Optional, Literal, Dict, Any
 from pathlib import Path
@@ -209,19 +209,19 @@ async def search_models(
     - url:https://civitai.com/models/12345 - Direct model lookup
     - https://civitai.com/models/12345 - Direct URL also works
     """
-    logger.info(f"[SEARCH] query={query}, tag={tag}, types={types}, nsfw={nsfw}, cursor={cursor}")
+    logger.debug(f"[SEARCH] query={query}, tag={tag}, types={types}, nsfw={nsfw}, cursor={cursor}")
     
     config = get_config()
     client = CivitaiClient(api_key=config.api.civitai_token)
     
     # Parse query for special prefixes
     clean_query, tag_from_query, model_id = _parse_search_query(query)
-    logger.info(f"[SEARCH] Parsed: clean_query={clean_query}, tag_from_query={tag_from_query}, model_id={model_id}")
+    logger.debug(f"[SEARCH] Parsed: clean_query={clean_query}, tag_from_query={tag_from_query}, model_id={model_id}")
     
     # If we got a model ID from URL, return that single model
     if model_id:
         try:
-            logger.info(f"[SEARCH] Fetching single model by ID: {model_id}")
+            logger.debug(f"[SEARCH] Fetching single model by ID: {model_id}")
             model_data = client.get_model(model_id)
             if not model_data:
                 logger.warning(f"[SEARCH] Model {model_id} not found")
@@ -475,7 +475,7 @@ async def get_model_version(model_id: int, version_id: int):
 # Image Proxy - Serve Civitai images through our API
 # ============================================================================
 
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 import requests as req_lib
 from urllib.parse import unquote
 
@@ -488,14 +488,16 @@ ALLOWED_IMAGE_DOMAINS = [
 
 
 @router.get("/image-proxy")
-async def proxy_image(url: str):
+async def proxy_image(url: str, request: Request):
     """
     Proxy images from Civitai CDN to avoid CORS issues.
 
     Only allows requests to known Civitai domains for security.
-    Streams the image directly to avoid memory issues with large files.
+    Uses async httpx to avoid blocking the event loop (critical for concurrency).
+    Streams the response to avoid memory issues with large files.
     """
     from urllib.parse import urlparse
+    import httpx
 
     # Decode URL (may be URL-encoded)
     decoded_url = unquote(url)
@@ -513,7 +515,7 @@ async def proxy_image(url: str):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
 
     try:
-        # Fetch image with browser-like headers
+        # Fetch image with browser-like headers using async httpx (non-blocking)
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
@@ -521,29 +523,27 @@ async def proxy_image(url: str):
             "Referer": "https://civitai.com/",
         }
 
-        resp = req_lib.get(decoded_url, headers=headers, stream=True, timeout=30)
+        client: httpx.AsyncClient = request.app.state.http_client
+        resp = await client.get(decoded_url, headers=headers)
         resp.raise_for_status()
 
-        # Get content type from response
         content_type = resp.headers.get('content-type', 'image/jpeg')
 
-        # Stream the response
-        def generate():
-            for chunk in resp.iter_content(chunk_size=8192):
-                yield chunk
-
-        return StreamingResponse(
-            generate(),
+        return Response(
+            content=resp.content,
             media_type=content_type,
             headers={
-                "Cache-Control": "public, max-age=86400",  # Cache for 1 day
+                "Cache-Control": "public, max-age=86400",
                 "Access-Control-Allow-Origin": "*",
             }
         )
 
-    except req_lib.exceptions.Timeout:
+    except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
-    except req_lib.exceptions.RequestException as e:
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to proxy image (HTTP {e.response.status_code}): {e}")
+        raise HTTPException(status_code=502, detail="Failed to fetch image")
+    except httpx.HTTPError as e:
         logger.error(f"Failed to proxy image: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")
 
@@ -646,8 +646,7 @@ def _search_civitai_checkpoints(
     import requests
     from urllib.parse import urlparse, parse_qsl
     
-    logger.info(f"[civitai-search] Searching for: {query}")
-    print(f"[civitai-search] Searching for: {query}")
+    logger.debug(f"[civitai-search] Searching for: {query}")
     
     API_URL = "https://civitai.com/api/v1/models"
     
@@ -664,21 +663,17 @@ def _search_civitai_checkpoints(
         
         for batch_num in range(max_batches):
             logger.debug(f"[civitai-search] Fetching batch {batch_num + 1}")
-            print(f"[civitai-search] Fetching batch {batch_num + 1}, url={url}")
             
             try:
                 resp = requests.get(url, params=params, headers=get_headers(), timeout=30)
                 
                 if resp.status_code >= 400:
                     logger.warning(f"[civitai-search] API error: {resp.status_code}")
-                    print(f"[civitai-search] API error: {resp.status_code} - {resp.text[:200]}")
                     break
                 
                 data = resp.json()
                 items = data.get("items") or []
                 all_items.extend(items)
-                
-                print(f"[civitai-search] Got {len(items)} items in batch, total: {len(all_items)}")
                 
                 # Check for next page (cursor pagination)
                 meta = data.get("metadata") or {}
@@ -694,7 +689,6 @@ def _search_civitai_checkpoints(
                 
             except requests.RequestException as e:
                 logger.error(f"[civitai-search] Request failed: {e}")
-                print(f"[civitai-search] Request failed: {e}")
                 break
         
         return all_items
@@ -715,18 +709,16 @@ def _search_civitai_checkpoints(
         if tag.lower() in query.lower():
             base_params["tag"] = tag
             search_method = "tag"
-            print(f"[civitai-search] Using tag search: {tag}")
             break
     
     if search_method == "query":
         base_params["query"] = query
-        print(f"[civitai-search] Using query search: {query}")
     
     # Fetch items
     items = fetch_with_cursor(base_params, max_batches)
     
-    print(f"[civitai-search] Total items fetched: {len(items)}")
-    
+    logger.debug(f"[civitai-search] Total items fetched: {len(items)}")
+
     if not items:
         return BaseModelSearchResponse(
             results=[],
@@ -778,8 +770,8 @@ def _search_civitai_checkpoints(
     results.sort(key=sort_key)
     results = results[:limit]
     
-    print(f"[civitai-search] Returning {len(results)} results")
-    
+    logger.debug(f"[civitai-search] Returning {len(results)} results")
+
     return BaseModelSearchResponse(
         results=results,
         total_found=len(items),
@@ -802,8 +794,7 @@ def _search_huggingface_checkpoints(
     """Search Hugging Face for checkpoint models with proper file selection."""
     import requests
     
-    logger.info(f"[huggingface-search] Searching for: {query}")
-    print(f"[huggingface-search] Searching for: {query}")
+    logger.debug(f"[huggingface-search] Searching for: {query}")
     
     # Hugging Face Hub API
     API_URL = "https://huggingface.co/api/models"
@@ -826,7 +817,6 @@ def _search_huggingface_checkpoints(
         
         if resp.status_code >= 400:
             logger.warning(f"[huggingface-search] API error: {resp.status_code}")
-            print(f"[huggingface-search] API error: {resp.status_code}")
             return BaseModelSearchResponse(
                 results=[],
                 total_found=0,
@@ -835,11 +825,9 @@ def _search_huggingface_checkpoints(
             )
         
         models = resp.json()
-        print(f"[huggingface-search] Got {len(models)} models")
         
     except requests.RequestException as e:
         logger.error(f"[huggingface-search] Request failed: {e}")
-        print(f"[huggingface-search] Request failed: {e}")
         return BaseModelSearchResponse(
             results=[],
             total_found=0,
@@ -871,7 +859,6 @@ def _search_huggingface_checkpoints(
         
         if not best_file:
             # No suitable file found, skip this model
-            print(f"[huggingface-search] No suitable file for {model_id}")
             continue
         
         file_name = best_file.get("rfilename", "")
@@ -908,8 +895,8 @@ def _search_huggingface_checkpoints(
     results.sort(key=sort_key)
     results = results[:limit]
     
-    print(f"[huggingface-search] Returning {len(results)} results")
-    
+    logger.debug(f"[huggingface-search] Returning {len(results)} results")
+
     return BaseModelSearchResponse(
         results=results,
         total_found=len(models),
@@ -998,8 +985,7 @@ async def get_huggingface_files(
     """
     import requests
     
-    logger.info(f"[huggingface-files] Getting files for: {repo_id}")
-    print(f"[huggingface-files] Getting files for: {repo_id}")
+    logger.debug(f"[huggingface-files] Getting files for: {repo_id}")
     
     config = get_config()
     headers = {"Accept": "application/json"}
@@ -1082,8 +1068,8 @@ async def get_huggingface_files(
     
     has_suitable = len(files) > 0
     
-    print(f"[huggingface-files] Found {len(files)} suitable files, recommended: {recommended_filename}")
-    
+    logger.debug(f"[huggingface-files] Found {len(files)} suitable files, recommended: {recommended_filename}")
+
     return HuggingFaceFilesResponse(
         repo_id=repo_id,
         files=files,
@@ -1113,8 +1099,7 @@ async def search_base_models(
     
     Returns unified format regardless of source.
     """
-    logger.info(f"[base-models/search] source={source}, query={query}")
-    print(f"[base-models/search] source={source}, query={query}")
+    logger.debug(f"[base-models/search] source={source}, query={query}")
     
     config = get_config()
     
@@ -1219,7 +1204,7 @@ def _search_civarchive(
     }
 
     search_url = f"https://civarchive.com/search?q={query.replace(' ', '+')}&rating=all&page={page}"
-    logger.info(f"[civarchive] Searching page {page}: {search_url}")
+    logger.debug(f"[civarchive] Searching page {page}: {search_url}")
 
     try:
         # Use session for connection pooling
@@ -1229,7 +1214,6 @@ def _search_civarchive(
         resp.raise_for_status()
     except Exception as e:
         logger.error(f"[civarchive] Search failed page {page}: {e}")
-        print(f"[civarchive] Search failed page {page}: {e}")
         return [], False
 
     try:
@@ -1249,7 +1233,7 @@ def _search_civarchive(
         if full_url not in links:
             links.append(full_url)
 
-    logger.info(f"[civarchive] Found {len(links)} model links on page {page}")
+    logger.debug(f"[civarchive] Found {len(links)} model links on page {page}")
 
     # has_more = True if we found results (there might be more pages)
     has_more = len(links) > 0
@@ -1409,8 +1393,7 @@ async def search_via_civarchive(
     """
     import concurrent.futures
     
-    logger.info(f"[civarchive] Starting search for: {query}")
-    print(f"[civarchive] Starting parallel search for: {query}")
+    logger.debug(f"[civarchive] Starting search for: {query}")
     
     config = get_config()
     client = CivitaiClient(api_key=config.api.civitai_token)
@@ -1431,8 +1414,6 @@ async def search_via_civarchive(
             current_page=page,
         )
     
-    print(f"[civarchive] Extracting Civitai IDs from {len(civarchive_urls)} URLs (parallel)...")
-
     # Step 2: Extract Civitai IDs in parallel
     url_to_id: Dict[str, Optional[int]] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
@@ -1442,8 +1423,6 @@ async def search_via_civarchive(
             try:
                 model_id = future.result()
                 url_to_id[url] = model_id
-                if model_id:
-                    print(f"[civarchive] Extracted ID {model_id} from {url}")
             except Exception as e:
                 logger.warning(f"[civarchive] Failed to extract ID from {url}: {e}")
                 url_to_id[url] = None
@@ -1458,7 +1437,6 @@ async def search_via_civarchive(
             unique_items.append((url, mid))
     
     unique_items = unique_items[:limit]
-    print(f"[civarchive] Found {len(unique_items)} unique model IDs, fetching from Civitai (parallel)...")
     
     # Step 3: Fetch model data from Civitai in parallel
     results: List[CivArchiveResult] = []
@@ -1473,15 +1451,14 @@ async def search_via_civarchive(
                 result = future.result()
                 if result:
                     results.append(result)
-                    print(f"[civarchive] Fetched: {result.model_name} (ID: {mid})")
             except Exception as e:
                 logger.warning(f"[civarchive] Failed to fetch model {mid}: {e}")
     
     # Sort by download count
     results.sort(key=lambda x: x.download_count or 0, reverse=True)
     
-    print(f"[civarchive] Returning {len(results)} results")
-    
+    logger.debug(f"[civarchive] Returning {len(results)} results")
+
     return CivArchiveSearchResponse(
         results=results,
         total_found=len(results),

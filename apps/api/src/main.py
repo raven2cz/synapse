@@ -18,11 +18,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import logging
+import os
 import traceback
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
+import httpx
 
 from .routers import system, downloads, browse, comfyui
 
@@ -37,17 +40,14 @@ from src.store.api import (
 )
 from .core.config import settings
 
-# Configure logging - DEBUG level for detailed output
+# Configure logging - INFO level for normal operation
+# Use SYNAPSE_LOG_LEVEL=DEBUG env var for verbose output
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=getattr(logging, os.environ.get('SYNAPSE_LOG_LEVEL', 'INFO').upper(), logging.INFO),
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
-
-# Also set DEBUG for our modules
-logging.getLogger('src').setLevel(logging.DEBUG)
-logging.getLogger('apps.api').setLevel(logging.DEBUG)
 
 
 class StatusEndpointFilter(logging.Filter):
@@ -67,11 +67,31 @@ class StatusEndpointFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(StatusEndpointFilter())
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle: shared HTTP client for async proxying."""
+    app.state.http_client = httpx.AsyncClient(
+        timeout=30,
+        follow_redirects=True,
+        limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+    )
+    logger.info("=" * 50)
+    logger.info("  SYNAPSE API v2.1.8")
+    logger.info("  V2 Store Architecture - No v1 Code")
+    logger.info("=" * 50)
+    logger.info(f"  ComfyUI path: {settings.comfyui_path}")
+    logger.info(f"  Data path: {settings.synapse_data_path}")
+    logger.info("=" * 50)
+    yield
+    await app.state.http_client.aclose()
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Synapse API v2",
     description="The Pack-First Model Manager. Unified hub for ComfyUI, Forge, A1111, and SD.Next.",
     version="2.1.8",
+    lifespan=lifespan,
 )
 
 
@@ -144,18 +164,6 @@ previews_path = synapse_root / "store" / "state" / "packs"
 # Always create directory and mount
 previews_path.mkdir(parents=True, exist_ok=True)
 app.mount("/previews", StaticFiles(directory=str(previews_path)), name="previews")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup."""
-    logger.info("=" * 50)
-    logger.info("  SYNAPSE API v2.1.8")
-    logger.info("  V2 Store Architecture - No v1 Code")
-    logger.info("=" * 50)
-    logger.info(f"  ComfyUI path: {settings.comfyui_path}")
-    logger.info(f"  Data path: {settings.synapse_data_path}")
-    logger.info("=" * 50)
 
 
 @app.get("/")

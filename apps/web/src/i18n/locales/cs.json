@@ -44,7 +44,8 @@
       "expandPreviews": "Rozbalit náhledy",
       "collapsePreviews": "Sbalit náhledy",
       "video": "Video",
-      "edit": "Upravit"
+      "edit": "Upravit",
+      "loadMore": "Načíst další (zbývá {{remaining}})"
     },
     "dependencies": {
       "title": "Závislosti",

@@ -44,7 +44,8 @@
       "expandPreviews": "Expand previews",
       "collapsePreviews": "Collapse previews",
       "video": "Video",
-      "edit": "Edit"
+      "edit": "Edit",
+      "loadMore": "Load More ({{remaining}} remaining)"
     },
     "dependencies": {
       "title": "Dependencies",

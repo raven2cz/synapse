@@ -780,11 +780,15 @@ class PackService:
         """
         Download preview media for a pack with full video support.
 
+        Downloads are parallelized with ThreadPoolExecutor(max_workers=4) for
+        significantly faster import of packs with many previews.
+
         This method handles downloading preview content from Civitai with
         support for both images and videos. It includes configurable filtering
         by media type and NSFW status, optimized video URLs, and progress
         tracking for large downloads.
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         from ..utils.media_detection import (
             detect_media_type,
             get_video_thumbnail_url,
@@ -801,8 +805,6 @@ class PackService:
         previews_dir = self.layout.pack_previews_path(pack_name)
         previews_dir.mkdir(parents=True, exist_ok=True)
 
-        preview_infos: List[PreviewInfo] = []
-
         # Create lookup map for detailed images by URL (metadata merge)
         detailed_map: Dict[str, Dict[str, Any]] = {}
         if detailed_version_images:
@@ -811,6 +813,10 @@ class PackService:
                 if url:
                     detailed_map[url] = img
 
+        # =====================================================================
+        # Phase 1: Collect download tasks (serial, fast — no I/O)
+        # =====================================================================
+        download_tasks: List[Dict[str, Any]] = []
         downloaded_urls: set = set()
         preview_number = 0
         total_count = len(images)
@@ -875,108 +881,135 @@ class PackService:
             except Exception as e:
                 logger.debug(f"[PackService] Failed to write meta sidecar: {e}")
 
-            progress = DownloadProgressInfo(
-                index=preview_number - 1,
-                total=total_count,
-                filename=filename,
-                media_type=media_type,
-                status='downloading',
-            )
+            # Compute download URL and timeout
+            download_url = url
+            timeout = 60
+            if media_type == 'video':
+                download_url = get_optimized_video_url(url, width=video_quality)
+                timeout = 120
 
-            # Download if not exists
-            if not dest.exists():
-                download_url = url
-                timeout = 60
-
-                if media_type == 'video':
-                    download_url = get_optimized_video_url(url, width=video_quality)
-                    timeout = 120
-                    logger.info(f"[PackService] Downloading video: {filename}")
-
-                if progress_callback:
-                    progress_callback(progress)
-
-                try:
-                    if self._download_service:
-                        # Use centralized DownloadService (auth injection, thread-safe)
-                        def _progress_adapter(downloaded, total):
-                            progress.bytes_downloaded = downloaded
-                            progress.total_bytes = total if total else None
-                            if progress_callback and total and downloaded % 102400 < 8192:
-                                progress_callback(progress)
-
-                        self._download_service.download_to_file(
-                            download_url,
-                            dest,
-                            timeout=(15, timeout),
-                            progress_callback=_progress_adapter,
-                            resume=False,
-                        )
-                    else:
-                        # Fallback: direct download (no auth)
-                        response = requests.get(
-                            download_url,
-                            timeout=timeout,
-                            stream=True,
-                        )
-                        response.raise_for_status()
-
-                        total_bytes = response.headers.get('content-length')
-                        if total_bytes:
-                            progress.total_bytes = int(total_bytes)
-
-                        bytes_downloaded = 0
-                        with open(dest, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                if chunk:
-                                    f.write(chunk)
-                                    bytes_downloaded += len(chunk)
-
-                                    progress.bytes_downloaded = bytes_downloaded
-                                    if progress_callback and progress.total_bytes:
-                                        if bytes_downloaded % 102400 < 8192:
-                                            progress_callback(progress)
-
-                    progress.bytes_downloaded = dest.stat().st_size if dest.exists() else 0
-                    progress.status = 'completed'
-                    if progress_callback:
-                        progress_callback(progress)
-
-                    if media_type == 'video' and dest.exists():
-                        file_size = dest.stat().st_size
-                        logger.info(
-                            f"[PackService] Video downloaded: {filename} "
-                            f"({file_size / 1024 / 1024:.1f} MB)"
-                        )
-
-                except Exception as e:
-                    # Clean up partial file to avoid permanent skip on retry
-                    dest.unlink(missing_ok=True)
-                    error_msg = f"Download error for {filename}: {str(e)}"
-                    logger.warning(f"[PackService] {error_msg}")
-                    progress.status = 'failed'
-                    progress.error = error_msg
-                    if progress_callback:
-                        progress_callback(progress)
-                    preview_number -= 1
-                    continue
-            else:
-                progress.status = 'completed'
-                if progress_callback:
-                    progress_callback(progress)
-
-            preview_infos.append(PreviewInfo(
-                filename=filename,
-                url=url,
-                nsfw=is_nsfw,
-                width=source_img.get("width"),
-                height=source_img.get("height"),
-                meta=meta,
-                media_type=media_type,
-                thumbnail_url=thumbnail_url,
-            ))
+            download_tasks.append({
+                "url": url,
+                "download_url": download_url,
+                "dest": dest,
+                "filename": filename,
+                "timeout": timeout,
+                "media_type": media_type,
+                "is_nsfw": is_nsfw,
+                "source_img": source_img,
+                "meta": meta,
+                "thumbnail_url": thumbnail_url,
+                "preview_number": preview_number,
+            })
 
             downloaded_urls.add(url)
+
+        # =====================================================================
+        # Phase 2: Download in parallel (ThreadPoolExecutor)
+        # =====================================================================
+        preview_infos: List[PreviewInfo] = []
+        # Map to preserve order: task index → PreviewInfo (or None on failure)
+        results_map: Dict[int, Optional[PreviewInfo]] = {}
+
+        def _download_single(task_idx: int, task: Dict[str, Any]) -> Optional[PreviewInfo]:
+            """Download a single preview file. Thread-safe."""
+            dest = task["dest"]
+            filename = task["filename"]
+            download_url = task["download_url"]
+            timeout = task["timeout"]
+            media_type = task["media_type"]
+
+            if dest.exists():
+                return PreviewInfo(
+                    filename=filename,
+                    url=task["url"],
+                    nsfw=task["is_nsfw"],
+                    width=task["source_img"].get("width"),
+                    height=task["source_img"].get("height"),
+                    meta=task["meta"],
+                    media_type=media_type,
+                    thumbnail_url=task["thumbnail_url"],
+                )
+
+            if media_type == 'video':
+                logger.info(f"[PackService] Downloading video: {filename}")
+
+            try:
+                if self._download_service:
+                    self._download_service.download_to_file(
+                        download_url,
+                        dest,
+                        timeout=(15, timeout),
+                        progress_callback=None,
+                        resume=False,
+                    )
+                else:
+                    # Fallback: direct download (no auth)
+                    response = requests.get(
+                        download_url,
+                        timeout=timeout,
+                        stream=True,
+                    )
+                    response.raise_for_status()
+
+                    with open(dest, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+
+                if media_type == 'video' and dest.exists():
+                    file_size = dest.stat().st_size
+                    logger.info(
+                        f"[PackService] Video downloaded: {filename} "
+                        f"({file_size / 1024 / 1024:.1f} MB)"
+                    )
+
+                return PreviewInfo(
+                    filename=filename,
+                    url=task["url"],
+                    nsfw=task["is_nsfw"],
+                    width=task["source_img"].get("width"),
+                    height=task["source_img"].get("height"),
+                    meta=task["meta"],
+                    media_type=media_type,
+                    thumbnail_url=task["thumbnail_url"],
+                )
+
+            except Exception as e:
+                dest.unlink(missing_ok=True)
+                logger.warning(f"[PackService] Download error for {filename}: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {}
+            for idx, task in enumerate(download_tasks):
+                future = executor.submit(_download_single, idx, task)
+                futures[future] = idx
+
+            for future in as_completed(futures):
+                idx = futures[future]
+                try:
+                    result = future.result()
+                    results_map[idx] = result
+                except Exception as e:
+                    logger.warning(f"[PackService] Preview download future failed: {e}")
+                    results_map[idx] = None
+
+        # Collect results in original order
+        for idx in range(len(download_tasks)):
+            info = results_map.get(idx)
+            if info is not None:
+                preview_infos.append(info)
+                task = download_tasks[idx]
+                if progress_callback:
+                    progress = DownloadProgressInfo(
+                        index=idx,
+                        total=total_count,
+                        filename=task["filename"],
+                        media_type=task["media_type"],
+                        status='completed',
+                    )
+                    progress_callback(progress)
 
         video_count = sum(1 for p in preview_infos if p.media_type == 'video')
         image_count = sum(1 for p in preview_infos if p.media_type == 'image')

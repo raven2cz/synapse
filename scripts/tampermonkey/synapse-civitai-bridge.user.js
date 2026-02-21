@@ -708,7 +708,7 @@
       }
 
       const url = buildModelImagesUrl(modelId, config, opts.limit || 50);
-      return trpcRequest(url, opts);
+      return trpcRequest(url, { ...opts, timeout: opts.timeout || IMAGE_FETCH_TIMEOUT });
     },
 
     /**

@@ -1477,11 +1477,12 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                     "media_type": media_type,
                 }
 
-                # For videos, generate thumbnail URL (first frame)
+                # For videos, use the local .mp4 URL as thumbnail.
+                # MediaPreview.tsx detects local video URLs and uses forceVideoDisplay
+                # to render the <video> element directly (first frame as thumbnail).
+                # This avoids slow remote Civitai CDN requests for every video thumbnail.
                 if media_type == 'video':
-                    # Civitai URLs need special handling, local files can be served directly
-                    # For local .mp4 files, frontend will use video element to show first frame
-                    preview_info["thumbnail_url"] = getattr(preview, 'thumbnail_url', None) or preview_url
+                    preview_info["thumbnail_url"] = preview_url
 
                 # Use meta from pack manifest first
                 if preview.meta:
