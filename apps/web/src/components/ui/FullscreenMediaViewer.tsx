@@ -490,15 +490,12 @@ export function FullscreenMediaViewer({
       const vUrl = isCivitaiDirectUrl(item.url) ? getCivitaiVideoUrl(item.url, videoQuality) : item.url
       return (
         <div className="relative w-full h-full flex items-center justify-center select-none">
-          <video ref={videoRef} poster={thumb} loop={isLooping} muted={isMuted} playsInline
+          <video ref={videoRef} src={vUrl} poster={thumb} loop={isLooping} muted={isMuted} playsInline
             className={clsx('transition-all duration-300', getVideoClass())} onClick={togglePlay}
             onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             onDurationChange={(e) => setDuration(e.currentTarget.duration)}
-            onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onLoadedData={() => setIsBuffering(false)}>
-            <source src={vUrl.replace(/\.mp4$/i, '.webm')} type="video/webm" />
-            <source src={vUrl} type="video/mp4" />
-          </video>
+            onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onLoadedData={() => setIsBuffering(false)} />
           {isBuffering && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Loader2 className="w-12 h-12 text-white animate-spin" /></div>}
         </div>
       )

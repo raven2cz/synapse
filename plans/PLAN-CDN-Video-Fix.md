@@ -1,6 +1,6 @@
 # CDN/Proxy Video Fix — Integration Plan
 
-## Status: ✅ IMPLEMENTED — čeká manuální test v prohlížeči
+## Status: ✅ IMPLEMENTED — Browse ✅ ověřeno, PackDetail 🔧 opraveno (dual source revert)
 
 **Date:** 2026-02-22
 **Based on:** Smoke test analysis & Civitai source code review
@@ -61,17 +61,15 @@ if (type === 'video') {
 
 S `anim=true` video URL neředirectuje na B2, servíruje přímo z Cloudflare. 5s fast-fail už není potřeba.
 
-### ⚠️ Fix 3: Dual `<source>` Tags (WebM + MP4) — ČEKÁ OVĚŘENÍ
+### ❌ Fix 3: Dual `<source>` Tags (WebM + MP4) — REVERTOVÁNO
 
-**Změna:** `<video src={url}>` → `<video><source src="...webm" /><source src="...mp4" /></video>`
+~~**Změna:** `<video src={url}>` → `<video><source src="...webm" /><source src="...mp4" /></video>`~~
 
-Aplikováno v:
-- `MediaPreview.tsx` — video element
-- `FullscreenMediaViewer.tsx` — video element
+**REVERTOVÁNO** — Rozbíjelo PackDetail lokální video preview.
+Příčina: Pro lokální pack soubory (ne-Civitai URL) `.webm` verze neexistuje → browser se pokusí o 404 request
+a `<source>` error eventy se nefirují na `<video>` elementu → video se nikdy nenačte → "stuck" stav.
 
-**POZOR:** Nebylo ověřeno, zda Civitai CDN servíruje `.webm` verzi! Pokud ne, prohlížeč provede zbytečný failed request na `.webm` před tím, než přejde na `.mp4`. Civitai v svém kódu (`EdgeVideo.tsx`) toto používá, ale neověřili jsme to live.
-
-**Pokud nefunguje:** Vrátit na `<video src={videoUrl}>` v obou souborech.
+Vráceno na `<video src={videoUrl}>` v obou souborech.
 
 ---
 
@@ -158,7 +156,7 @@ uv run pytest tests/smoke/ -v -s
 - [ ] Quality selector (SD/HD/FHD) funguje
 - [ ] Žádné "Failed load" hlášky
 - [ ] Thumbnail (anim=false) se zobrazuje správně
-- [ ] WebM/MP4 dual source funguje (nebo vrátit na single `<video src>`)
+- [x] ~~WebM/MP4 dual source~~ → revertováno, používá se single `<video src>`
 
 ---
 

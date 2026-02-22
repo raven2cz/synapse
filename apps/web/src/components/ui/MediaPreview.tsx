@@ -430,7 +430,6 @@ export function MediaPreview({
       )}
 
       {/* Video Element - Only rendered when needed */}
-      {/* Uses dual <source> tags (WebM + MP4) like Civitai's EdgeVideo for better browser compatibility */}
       {isVideo && !videoError && (
         <video
           ref={videoRef}
@@ -440,20 +439,15 @@ export function MediaPreview({
             isVideoVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-95',
             shouldBlur && 'blur-xl scale-110'
           )}
+          src={isVideoVisible && videoUrl ? videoUrl : undefined}
+          autoPlay={autoPlay && isVideoVisible}
           loop
           muted={isMuted}
           playsInline
           preload={isVideoVisible || forceVideoDisplay ? "auto" : "none"}
           onLoadedData={handleVideoLoadedData}
           onError={handleVideoError}
-        >
-          {isVideoVisible && videoUrl && (
-            <>
-              <source src={videoUrl.replace(/\.mp4$/i, '.webm')} type="video/webm" />
-              <source src={videoUrl} type="video/mp4" />
-            </>
-          )}
-        </video>
+        />
       )}
 
       {/* Loading placeholder - Shown when image loading or video fallback loading */}
