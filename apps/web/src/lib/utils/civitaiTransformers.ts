@@ -25,6 +25,11 @@ import type { MediaType } from '@/lib/media'
 export function toProxyUrl(url: string): string {
   if (!url) return url
 
+  // Already proxied — don't double-wrap
+  if (url.includes('/api/browse/image-proxy')) {
+    return url
+  }
+
   // Only proxy Civitai CDN URLs
   if (
     !url.includes('image.civitai.com') &&

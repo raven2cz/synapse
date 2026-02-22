@@ -4,8 +4,8 @@
  * Uses the existing backend /api/browse endpoints.
  * Always available, stable and reliable.
  *
- * NOTE: No image proxy needed - browser loads Civitai CDN directly via <img>/<video> tags.
- * This is faster than proxying through our backend.
+ * REST backend returns raw Civitai CDN URLs which need proxying
+ * (Civitai CDN blocks direct browser requests without proper Referer).
  */
 
 import type {
@@ -13,7 +13,9 @@ import type {
   SearchParams,
   SearchResult,
   ModelDetail,
+  CivitaiModel,
 } from '../searchTypes'
+import { toProxyUrl } from '@/lib/utils/civitaiTransformers'
 
 export class RestSearchAdapter implements SearchAdapter {
   readonly provider = 'rest' as const
@@ -45,9 +47,10 @@ export class RestSearchAdapter implements SearchAdapter {
     }
 
     const data = await res.json()
+    const items = (data.items || []).map(proxyModelUrls)
 
     return {
-      items: data.items || [],
+      items,
       nextCursor: data.next_cursor,
       hasMore: !!data.next_cursor,
       metadata: {
@@ -65,7 +68,24 @@ export class RestSearchAdapter implements SearchAdapter {
       throw new Error('Failed to fetch model')
     }
 
-    // No proxy needed - browser loads Civitai URLs directly
-    return res.json()
+    const data: ModelDetail = await res.json()
+    return proxyModelUrls(data)
+  }
+}
+
+/**
+ * Proxy all Civitai CDN URLs in a model's previews.
+ * REST backend returns raw CDN URLs which browsers can't load
+ * (Civitai CDN requires proper Referer header).
+ */
+function proxyModelUrls<T extends CivitaiModel>(model: T): T {
+  if (!model.previews?.length) return model
+  return {
+    ...model,
+    previews: model.previews.map((p) => ({
+      ...p,
+      url: toProxyUrl(p.url),
+      thumbnail_url: p.thumbnail_url ? toProxyUrl(p.thumbnail_url) : p.thumbnail_url,
+    })),
   }
 }
