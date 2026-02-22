@@ -150,9 +150,10 @@ pnpm build            # Production build
 ```
 
 ### Civitai URL transformace
-- **Thumbnail:** `?anim=false&transcode=true&width=450` (statický snímek)
-- **Video:** `?transcode=true&width=450` + `.mp4` (pro playback)
+- **Thumbnail:** `anim=false,transcode=true,width=450` (statický snímek)
+- **Video:** `anim=true,transcode=true,width=450` + `.mp4` (MUSÍ mít `anim=true`!)
 - Civitai vrací videa s `.jpeg` příponou - nutná transformace!
+- **Detaily viz:** `docs/CIVITAI-CDN-VIDEO.md`
 
 ### FullscreenMediaViewer items
 ```typescript
@@ -477,6 +478,10 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 ---
 
 ## 🐛 Known Issues & Lessons Learned
+
+### Civitai CDN & Video playback (2026-02-22)
+`<video>` v MediaPreview MUSÍ mít `autoPlay` atribut a `src=` (NIKDY `<source>` children).
+Videa NESMÍ být omezována (žádný MAX_CONCURRENT). Viz `docs/CIVITAI-CDN-VIDEO.md`.
 
 ### CSS overflow u collapsible sekcí (2026-02-17)
 **Problém:** Pack detail sekce s `transition-[max-height]` a `max-h-[Npx]` BEZ `overflow-hidden`
