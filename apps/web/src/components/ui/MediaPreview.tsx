@@ -24,11 +24,23 @@ import { useSettingsStore } from '@/stores/settingsStore'
 // ============================================================================
 
 /**
+ * Check if URL is a direct Civitai CDN URL (NOT a proxy URL).
+ * Proxy URLs like `/api/browse/image-proxy?url=...civitai.com...` contain
+ * 'civitai.com' in query params, causing false matches with simple includes().
+ */
+function isCivitaiDirectUrl(url: string): boolean {
+  if (!url) return false
+  // Proxy URLs start with /api/ or contain image-proxy — NOT direct CDN
+  if (url.includes('/api/browse/image-proxy')) return false
+  return url.includes('civitai.com')
+}
+
+/**
  * Transform Civitai URL to get static thumbnail (first frame).
  * Uses anim=false parameter which returns actual JPEG/WebP.
  */
 function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
-  if (!url || !url.includes('civitai.com')) {
+  if (!url || !isCivitaiDirectUrl(url)) {
     return url
   }
 
@@ -64,7 +76,7 @@ function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
  * Uses transcode=true parameter and .mp4 extension.
  */
 function getCivitaiVideoUrl(url: string, width: number = 450): string {
-  if (!url || !url.includes('civitai.com')) {
+  if (!url || !isCivitaiDirectUrl(url)) {
     return url
   }
 
@@ -117,7 +129,7 @@ function isLikelyVideo(url: string): boolean {
   }
 
   // Civitai transcode pattern (without anim=false)
-  if (lowerUrl.includes('civitai.com') && lowerUrl.includes('transcode=true') && !lowerUrl.includes('anim=false')) {
+  if (isCivitaiDirectUrl(lowerUrl) && lowerUrl.includes('transcode=true') && !lowerUrl.includes('anim=false')) {
     return true
   }
 
@@ -241,7 +253,7 @@ export function MediaPreview({
     if (providedThumbnailSrc) return providedThumbnailSrc
     if (!src) return ''
 
-    if (src.includes('civitai.com')) {
+    if (isCivitaiDirectUrl(src)) {
       return getCivitaiThumbnailUrl(src)
     }
 
@@ -251,7 +263,7 @@ export function MediaPreview({
   const videoUrl = useMemo(() => {
     if (!src || !isVideo) return ''
 
-    if (src.includes('civitai.com')) {
+    if (isCivitaiDirectUrl(src)) {
       return getCivitaiVideoUrl(src)
     }
 
@@ -266,7 +278,7 @@ export function MediaPreview({
   // For local video files, skip the thumbnail image and go straight to video display
   // This prevents trying to load a .mp4 file as an image (which fails silently in some browsers)
   useEffect(() => {
-    if (isVideo && thumbnailUrl && !thumbnailUrl.includes('civitai.com')) {
+    if (isVideo && thumbnailUrl && !isCivitaiDirectUrl(thumbnailUrl)) {
       // Check if thumbnail URL is a video file (local video)
       const isVideoFile = /\.(mp4|webm|mov|avi|mkv)/i.test(thumbnailUrl)
       if (isVideoFile && autoPlay) {

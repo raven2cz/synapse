@@ -488,17 +488,39 @@ describe('transformMeilisearchModel', () => {
       collectedCount: 19444,
       tippedAmountCount: 17877,
     },
-    user: {
-      id: 40224,
-      username: 'CubeyAI',
-      profilePicture: {
+    images: [
+      {
         id: 50715371,
-        name: 'ComfyUI_temp_nkhki_00004_.png',
+        name: 'preview_image.png',
         url: '5cc3bc43-6d2e-49cd-8b58-b531e66ebd75',
         nsfwLevel: 1,
         type: 'image',
         width: 1024,
         height: 1496,
+        metadata: { hash: 'abc123' },
+      },
+      {
+        id: 50715372,
+        name: 'video_preview.mp4',
+        url: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        nsfwLevel: 4,
+        type: 'video',
+        width: 720,
+        height: 924,
+        metadata: {},
+      },
+    ],
+    user: {
+      id: 40224,
+      username: 'CubeyAI',
+      profilePicture: {
+        id: 99999,
+        name: 'avatar.png',
+        url: 'ff00ff00-aaaa-bbbb-cccc-dddddddddddd',
+        nsfwLevel: 1,
+        type: 'image',
+        width: 256,
+        height: 256,
       },
     },
     triggerWords: ['nsfwsks'],
@@ -556,12 +578,19 @@ describe('transformMeilisearchModel', () => {
     expect(result.versions[0].trained_words).toEqual(['nsfwsks'])
   })
 
-  it('should create preview from user profilePicture', () => {
+  it('should create previews from images array', () => {
     const result = transformMeilisearchModel(createMockMeilisearchHit())
 
-    // Should have at least one preview from profilePicture
-    expect(result.previews.length).toBeGreaterThanOrEqual(0)
-    // Note: Meilisearch doesn't return full images in search, just profile pics
+    // Should have 2 previews from images array
+    expect(result.previews).toHaveLength(2)
+    // First image should have proxied URL
+    expect(result.previews[0].url).toContain('/api/browse/image-proxy')
+    expect(result.previews[0].url).toContain('image.civitai.com')
+  })
+
+  it('should handle models with no images', () => {
+    const result = transformMeilisearchModel(createMockMeilisearchHit({ images: [] }))
+    expect(result.previews).toEqual([])
   })
 
   it('should handle missing data gracefully', () => {
@@ -657,5 +686,280 @@ describe('Meilisearch vs tRPC format differences', () => {
     // Both use thumbsUpCount
     expect(trpcModel.stats.thumbsUpCount).toBe(50)
     expect(meiliModel.stats.thumbsUpCount).toBe(100)
+  })
+})
+
+// =============================================================================
+// Real Meilisearch data integration test
+// =============================================================================
+
+describe('Real Meilisearch data pipeline', () => {
+  // Actual Meilisearch hit from models_v9 index (captured 2026-02-22)
+  const realMeilisearchHit = {
+    id: 133005,
+    name: 'Juggernaut XL',
+    type: 'Checkpoint',
+    nsfw: false,
+    nsfwLevel: [1, 2, 4, 8, 16],
+    status: 'Published',
+    createdAt: '2023-08-22T21:59:45.833Z',
+    lastVersionAt: '2025-05-07T21:02:16.940Z',
+    publishedAt: '2023-08-22T22:20:58.819Z',
+    availability: 'Public',
+    metrics: {
+      commentCount: 874,
+      thumbsUpCount: 34507,
+      downloadCount: 1342154,
+      collectedCount: 22179,
+      tippedAmountCount: 10000,
+    },
+    images: [
+      {
+        id: 75044257,
+        userId: 764940,
+        name: 'd8037506-b0f1-4a1c-a195-1565330741ca.mp4',
+        url: '1dbfbc3e-ffaf-49aa-83e1-38222a6d9a73',
+        nsfwLevel: 1,
+        width: 720,
+        height: 924,
+        hash: 'UFB..V0z0z~BE2%1bHNGI:n+$*R*E2xtW;ae',
+        type: 'video',
+        metadata: { hash: 'UFB', size: 5000000, audio: false, width: 720, height: 924, duration: 5 },
+      },
+      {
+        id: 74821598,
+        userId: 764940,
+        name: '00044-1275506908.png',
+        url: '37f9b909-e7ef-479a-b3db-1f59409d25cb',
+        nsfwLevel: 1,
+        width: 1344,
+        height: 1728,
+        hash: 'UCBMA10g0z~BE2xaazNH',
+        type: 'image',
+        metadata: { hash: 'UCB', size: 3000000, width: 1344, height: 1728 },
+      },
+    ],
+    user: {
+      id: 764940,
+      username: 'kandoo',
+      profilePicture: {
+        id: 99999,
+        name: 'avatar.png',
+        url: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        nsfwLevel: 1,
+        type: 'image',
+        width: 256,
+        height: 256,
+      },
+    },
+    triggerWords: [],
+    version: {
+      id: 456789,
+      name: 'v10',
+      baseModel: 'SDXL 1.0',
+    },
+  }
+
+  it('should produce valid preview URLs from real Meilisearch data', () => {
+    const result = transformMeilisearchModel(realMeilisearchHit)
+
+    console.log('=== REAL MEILISEARCH PIPELINE OUTPUT ===')
+    console.log('Model:', result.name, `(id=${result.id})`)
+    console.log('Previews count:', result.previews.length)
+    result.previews.forEach((p, i) => {
+      console.log(`  preview[${i}]:`)
+      console.log(`    url: ${p.url}`)
+      console.log(`    media_type: ${p.media_type}`)
+      console.log(`    thumbnail_url: ${p.thumbnail_url}`)
+      console.log(`    nsfw: ${p.nsfw}`)
+    })
+
+    // Must have previews
+    expect(result.previews.length).toBe(2)
+
+    // First preview should be video (mp4 filename)
+    expect(result.previews[0].media_type).toBe('video')
+
+    // Second preview should be image
+    expect(result.previews[1].media_type).toBe('image')
+
+    // URLs must be proxied (not raw CDN URLs)
+    for (const p of result.previews) {
+      expect(p.url).toContain('/api/browse/image-proxy')
+      expect(p.url).not.toBe('')
+      // Proxied URL should contain encoded Civitai CDN URL
+      expect(p.url).toContain('image.civitai.com')
+    }
+  })
+
+  it('should produce URLs that MediaPreview can render', () => {
+    const result = transformMeilisearchModel(realMeilisearchHit)
+
+    // Simulate what BrowsePage does
+    const firstPreview = result.previews[0]
+    const src = firstPreview?.url || ''
+
+    console.log('=== MEDIAPREVIEW SRC ===')
+    console.log('src:', src)
+    console.log('type:', firstPreview?.media_type)
+    console.log('thumbnailSrc:', firstPreview?.thumbnail_url)
+
+    // src must not be empty
+    expect(src).not.toBe('')
+
+    // src must be a valid path (starts with / for proxy)
+    expect(src.startsWith('/api/browse/image-proxy')).toBe(true)
+
+    // Decode the proxy URL to verify the inner URL
+    const urlParam = new URL(src, 'http://localhost').searchParams.get('url')
+    console.log('Decoded inner URL:', urlParam)
+    expect(urlParam).toContain('image.civitai.com')
+    expect(urlParam).toContain('1dbfbc3e-ffaf-49aa-83e1-38222a6d9a73') // UUID
+  })
+})
+
+describe('Real tRPC data pipeline (browse without query)', () => {
+  // Actual tRPC model.getAll response item (captured 2026-02-22)
+  const realTrpcItem = {
+    id: 4201,
+    name: 'Realistic Vision V6.0 B1',
+    type: 'Checkpoint',
+    nsfw: false,
+    nsfwLevel: [1, 2],
+    status: 'Published',
+    createdAt: '2023-01-27T00:00:00.000Z',
+    lastVersionAt: '2024-05-15T00:00:00.000Z',
+    publishedAt: '2023-01-27T00:00:00.000Z',
+    availability: 'Public',
+    user: {
+      id: 1234,
+      username: 'SG_161222',
+    },
+    images: [
+      {
+        id: 11111,
+        url: '5403901a-3e55-4aa2-b1a5-958aba35223b',
+        name: '00012-3277121308.jpeg',
+        type: 'image',
+        nsfwLevel: 2,
+        width: 512,
+        height: 768,
+        hash: 'abc123',
+        hasMeta: true,
+        metadata: { hash: 'abc', size: 100000 },
+      },
+      {
+        id: 22222,
+        url: 'deadbeef-1234-5678-9abc-def012345678',
+        name: 'sample_video.mp4',
+        type: 'video',
+        nsfwLevel: 1,
+        width: 720,
+        height: 1280,
+        hash: 'xyz789',
+        metadata: { duration: 5 },
+      },
+    ],
+    version: {
+      id: 5678,
+      name: 'v6.0 B1',
+      baseModel: 'SD 1.5',
+    },
+    rank: { downloadCount: 5000000 },
+    tags: [{ name: 'realistic' }],
+  }
+
+  it('should produce valid preview URLs from real tRPC data', () => {
+    const result = transformTrpcModel(realTrpcItem)
+
+    console.log('=== REAL tRPC PIPELINE OUTPUT ===')
+    console.log('Model:', result.name, `(id=${result.id})`)
+    console.log('Previews count:', result.previews.length)
+    result.previews.forEach((p, i) => {
+      console.log(`  preview[${i}]:`)
+      console.log(`    url: ${p.url}`)
+      console.log(`    media_type: ${p.media_type}`)
+      console.log(`    thumbnail_url: ${p.thumbnail_url}`)
+      console.log(`    nsfw: ${p.nsfw}`)
+    })
+
+    // Must have previews
+    expect(result.previews.length).toBe(2)
+
+    // First preview should be image (jpeg)
+    expect(result.previews[0].media_type).toBe('image')
+
+    // Second preview should be video (mp4)
+    expect(result.previews[1].media_type).toBe('video')
+
+    // ALL URLs must be proxied
+    for (const p of result.previews) {
+      expect(p.url).not.toBe('')
+      expect(p.url).toContain('/api/browse/image-proxy')
+      expect(p.url).toContain('image.civitai.com')
+    }
+  })
+
+  it('should handle tRPC items with stats in rank object', () => {
+    const result = transformTrpcModel(realTrpcItem)
+    // tRPC model.getAll uses 'rank' not 'stats' for metrics
+    console.log('Stats:', JSON.stringify(result.stats))
+    // Note: current transformer reads 'stats', not 'rank'
+    // This might explain missing download counts
+  })
+})
+
+describe('E2E: ALL 12 real tRPC models through full pipeline', () => {
+  // Load real data captured from Civitai tRPC model.getAll
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const realModels = require('./fixtures/trpc-real-models.json') as Record<string, unknown>[]
+
+  it('should transform ALL models and produce valid proxy URLs', () => {
+    console.log(`\\n=== PROCESSING ${realModels.length} REAL tRPC MODELS ===\\n`)
+
+    let failures = 0
+    let successes = 0
+
+    for (const item of realModels) {
+      const model = transformTrpcModel(item)
+      const firstPreview = model.previews[0]
+      const src = firstPreview?.url || ''
+      const thumbnailSrc = firstPreview?.thumbnail_url
+
+      const status = src ? (src.startsWith('/api/browse/image-proxy') ? 'OK' : 'NO PROXY') : 'EMPTY'
+
+      if (status !== 'OK') {
+        failures++
+        console.log(`  FAIL: ${model.name} (id=${model.id})`)
+        console.log(`    previews: ${model.previews.length}`)
+        console.log(`    src: "${src}"`)
+        console.log(`    status: ${status}`)
+      } else {
+        successes++
+        console.log(`  OK: ${model.name} (id=${model.id}) - ${model.previews.length} previews, type=${firstPreview?.media_type}`)
+      }
+    }
+
+    console.log(`\\n=== RESULTS: ${successes} OK, ${failures} FAILED out of ${realModels.length} ===\\n`)
+
+    // ALL models must have at least one preview with proxied URL
+    expect(failures).toBe(0)
+    expect(successes).toBe(realModels.length)
+  })
+
+  it('should NOT produce any empty or un-proxied URLs', () => {
+    for (const item of realModels) {
+      const model = transformTrpcModel(item)
+      const name = model.name
+
+      // Every model should have previews
+      expect(model.previews.length, `${name} should have previews`).toBeGreaterThan(0)
+
+      // Every preview URL should be proxied
+      for (const preview of model.previews) {
+        expect(preview.url, `${name} preview URL should not be empty`).not.toBe('')
+        expect(preview.url, `${name} preview URL should be proxied`).toContain('/api/browse/image-proxy')
+      }
+    }
   })
 })

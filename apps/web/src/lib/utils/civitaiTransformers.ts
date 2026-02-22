@@ -486,15 +486,9 @@ export function transformMeilisearchModel(
   const maxNsfwLevel = Math.max(...nsfwLevels, 1)
   const isNsfw = maxNsfwLevel >= 4 // 4=Mature, 8=X, etc.
 
-  // Profile picture as preview (Meilisearch doesn't include full images in search)
-  // We need to construct previews from the user's profilePicture or version images
-  const previews: ModelPreview[] = []
-
-  // Try to get profile picture
-  const profilePic = user?.profilePicture as Record<string, unknown> | undefined
-  if (profilePic?.url) {
-    previews.push(transformMeilisearchPreview(profilePic))
-  }
+  // Model preview images — Meilisearch includes up to 10 images per model
+  const images = (item.images as Record<string, unknown>[] | undefined) || []
+  const previews: ModelPreview[] = images.slice(0, 8).map(transformMeilisearchPreview)
 
   // Version info (Meilisearch has flattened version data)
   const version = item.version as Record<string, unknown> | undefined

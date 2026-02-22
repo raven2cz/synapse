@@ -515,7 +515,7 @@ async def proxy_image(url: str, request: Request):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
 
     try:
-        # Fetch image with browser-like headers using async httpx (non-blocking)
+        # Browser-like headers for initial Civitai CDN request
         headers = {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
@@ -524,7 +524,21 @@ async def proxy_image(url: str, request: Request):
         }
 
         client: httpx.AsyncClient = request.app.state.http_client
-        resp = await client.get(decoded_url, headers=headers)
+
+        # Don't auto-follow redirects: Civitai CDN redirects to B2 storage
+        # (image-b2.civitai.com) which returns 401 when it receives custom
+        # headers like Referer and Accept that are meant for the CDN.
+        resp = await client.get(decoded_url, headers=headers, follow_redirects=False)
+
+        # Handle redirect manually with minimal headers for B2 storage
+        if resp.status_code in (301, 302, 307, 308):
+            redirect_url = resp.headers.get('location', '')
+            if redirect_url:
+                logger.debug(f"Image proxy redirect: {parsed.netloc} -> {redirect_url[:80]}...")
+                resp = await client.get(redirect_url, headers={
+                    "User-Agent": headers["User-Agent"],
+                })
+
         resp.raise_for_status()
 
         content_type = resp.headers.get('content-type', 'image/jpeg')
@@ -541,7 +555,7 @@ async def proxy_image(url: str, request: Request):
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
     except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to proxy image (HTTP {e.response.status_code}): {e}")
+        logger.error(f"Failed to proxy image (HTTP {e.response.status_code}): {decoded_url[:100]}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")
     except httpx.HTTPError as e:
         logger.error(f"Failed to proxy image: {e}")

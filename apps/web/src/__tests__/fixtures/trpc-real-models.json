@@ -1,0 +1,2955 @@
+[
+  {
+    "id": 4201,
+    "name": "Realistic Vision V6.0 B1",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 15,
+    "user": {
+      "id": 26957,
+      "username": "SG_161222",
+      "deletedAt": null,
+      "image": "9f5a2aaf-4657-4670-50e7-0e7da58ebb00",
+      "profilePicture": {
+        "id": 5097963,
+        "name": "Kh1OFnRbDUM.jpg",
+        "url": "41ce091f-1006-491f-916d-873a9c80dfde",
+        "nsfwLevel": 1,
+        "hash": "UbB;hLkDyEbd.TV@WrWFX5WBemkDS#WYoLax",
+        "userId": 26957,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 2147,
+        "height": 2147,
+        "metadata": {
+          "hash": "UbB;hLkDyEbd.TV@WrWFX5WBemkDS#WYoLax",
+          "size": 816408,
+          "width": 2147,
+          "height": 2147,
+          "userId": 26957,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 310,
+          "data": null,
+          "cosmetic": {
+            "id": 310,
+            "name": "Profile Background 7",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "aeba5afe-8bde-41d2-9150-8eea2eeda9a4"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 379,
+          "data": null,
+          "cosmetic": {
+            "id": 379,
+            "name": "Dragon Magic.webp",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "9fbaa8bc-b89b-4a57-b051-21a91151d156",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 12221833,
+        "userId": 26957,
+        "name": "00012-3277121308.jpeg",
+        "url": "5403901a-3e55-4aa2-b1a5-958aba35223b",
+        "nsfwLevel": 2,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UCH24bRkUG4.~p_3_2tSENadIUnhM{D%RQjF",
+        "type": "image",
+        "metadata": {
+          "hash": "UCH24bRkUG4.~p_3_2tSENadIUnhM{D%RQjF",
+          "size": 924047,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 501240,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3643,
+          3647,
+          5133,
+          5148,
+          5228,
+          5248,
+          27182,
+          110302,
+          115460,
+          115513
+        ]
+      },
+      {
+        "id": 12221824,
+        "userId": 26957,
+        "name": "00002-983791494.jpeg",
+        "url": "1c65dc07-2e32-4e76-a0b7-458c450ff1ae",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UADu}F9a00xb+sIW?uNG0NoL}?D*0gD*-Uxu",
+        "type": "image",
+        "metadata": {
+          "hash": "UADu}F9a00xb+sIW?uNG0NoL}?D*0gD*-Uxu",
+          "size": 839237,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 501240,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3350,
+          5248,
+          5262,
+          6997,
+          27182,
+          110302,
+          114923,
+          115460,
+          115513,
+          116555,
+          125495,
+          127302,
+          143276,
+          146055
+        ]
+      },
+      {
+        "id": 12221845,
+        "userId": 26957,
+        "name": "00027-925691612.jpeg",
+        "url": "9d8e6d7d-7a26-44b4-a02d-131f53fd5d77",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "ULC~|_~VtRt74.4oE1Vsbvf,aet8bExt%1WB",
+        "type": "image",
+        "metadata": {
+          "hash": "ULC~|_~VtRt74.4oE1Vsbvf,aet8bExt%1WB",
+          "size": 997655,
+          "width": 1024,
+          "height": 1536,
+          "nsfwLevelReason": null
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 501240,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3643,
+          4213,
+          5133,
+          5148,
+          5228,
+          5248,
+          5262,
+          110302,
+          115460,
+          115513,
+          118100
+        ]
+      }
+    ],
+    "version": {
+      "id": 501240,
+      "index": 0,
+      "name": "V5.1 Hyper (VAE)",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5 Hyper",
+      "baseModelType": "Standard",
+      "createdAt": "2024-05-12T06:04:22.202Z",
+      "trainingStatus": null,
+      "publishedAt": "2024-05-12T06:24:13.109Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 15,
+      "description": null,
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": false
+    },
+    "rank": {
+      "downloadCount": 2091961,
+      "thumbsUpCount": 51807,
+      "thumbsDownCount": 90,
+      "commentCount": 779,
+      "collectedCount": 23442,
+      "tippedAmountCount": 115916
+    },
+    "tags": [
+      172,
+      266,
+      5248,
+      1726,
+      5255,
+      1237
+    ]
+  },
+  {
+    "id": 4384,
+    "name": "DreamShaper",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 15,
+    "user": {
+      "id": 53515,
+      "username": "Lykon",
+      "deletedAt": null,
+      "image": "https://cdn.discordapp.com/avatars/180327464155742208/59254be18ccd627daf138d053327485d.png",
+      "profilePicture": {
+        "id": 14148805,
+        "name": "GIZ1r03XAAASM-v.jpeg",
+        "url": "3b119431-445f-4b21-aba6-87a5ee9518ef",
+        "nsfwLevel": 1,
+        "hash": "UnK^~gnNcFoz~qt8kCjut8RkV?NHX9R%M{jY",
+        "userId": 53515,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 2000,
+        "height": 1296,
+        "metadata": {
+          "hash": "UnK^~gnNcFoz~qt8kCjut8RkV?NHX9R%M{jY",
+          "size": 236868,
+          "width": 2000,
+          "height": 1296,
+          "userId": 53515,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": []
+    },
+    "images": [
+      {
+        "id": 1777041,
+        "userId": 53515,
+        "name": "26072158-132340247-8k portrait of beautiful cyborg with brown hair, intricate, elegant, highly detailed, majestic, digital photography, art by artg_ed.png",
+        "url": "dd9b038c-bd15-43ab-86ab-66e145ad7ff2",
+        "nsfwLevel": 2,
+        "width": 1096,
+        "height": 1648,
+        "hash": "UFBMV#_29]IV~W-;X8NGTK%M-ps.%Mx[ogs.",
+        "type": "image",
+        "metadata": {
+          "hash": "UFBMV#_29]IV~W-;X8NGTK%M-ps.%Mx[ogs.",
+          "width": 1096,
+          "height": 1648
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 128713,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          66,
+          192,
+          833,
+          1441,
+          1930,
+          2435,
+          5193,
+          5484,
+          5787,
+          5942,
+          111754,
+          111755,
+          111759,
+          111761,
+          111939,
+          111978,
+          112035,
+          112279
+        ]
+      },
+      {
+        "id": 1777043,
+        "userId": 53515,
+        "name": "26072224-5775713-(masterpiece), (extremely intricate_1.3), (realistic), portrait of a girl, the most beautiful in the world, (medieval armor), me.png",
+        "url": "c1033497-007c-4a73-b812-915c8e32e8fe",
+        "nsfwLevel": 1,
+        "width": 1120,
+        "height": 1824,
+        "hash": "UeIXaFNG%2-o~Wt6t7s:g4xuIoR*X9ozIUa}",
+        "type": "image",
+        "metadata": {
+          "hash": "UeIXaFNG%2-o~Wt6t7s:g4xuIoR*X9ozIUa}",
+          "width": 1120,
+          "height": 1824
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 128713,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          5133,
+          5148,
+          5262,
+          5785,
+          5787,
+          111763,
+          112529,
+          115460,
+          115513,
+          118100,
+          143276
+        ]
+      },
+      {
+        "id": 1777944,
+        "userId": 53515,
+        "name": "26072285-951655291-cgmech, (realistic)_solo, white mecha robot, cape, science fiction, torn clothes, glowing, standing, robot joints, mecha, armor,.png",
+        "url": "e6a56e46-ccbf-4de3-ad62-09afd2ad9b91",
+        "nsfwLevel": 1,
+        "width": 1176,
+        "height": 1912,
+        "hash": "UuIY5@IVxuaz~qRjofj[tQWBRPWAbHM|M{Rk",
+        "type": "image",
+        "metadata": {
+          "hash": "UuIY5@IVxuaz~qRjofj[tQWBRPWAbHM|M{Rk",
+          "width": 1176,
+          "height": 1912
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 128713,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          448,
+          482,
+          5262,
+          6594,
+          8688,
+          116352,
+          143415
+        ]
+      }
+    ],
+    "version": {
+      "id": 128713,
+      "index": 0,
+      "name": "8",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "createdAt": "2023-07-29T15:56:46.392Z",
+      "trainingStatus": null,
+      "publishedAt": "2023-07-29T20:50:47.173Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 11,
+      "description": "<ul><li><p>Better at handling Character LoRA</p></li><li><p>Better at photorealism without sacrificing range (can still do art and anime pretty well, even if you might have to increase weight)</p></li><li><p>Better at NSFW</p></li></ul>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 1546970,
+      "thumbsUpCount": 57483,
+      "thumbsDownCount": 194,
+      "commentCount": 478,
+      "collectedCount": 15501,
+      "tippedAmountCount": 209415
+    },
+    "tags": [
+      5133,
+      5158,
+      172,
+      3922,
+      5098,
+      5245,
+      1237,
+      342,
+      2283,
+      5145,
+      4,
+      5207,
+      5212,
+      5248,
+      12,
+      310,
+      46,
+      1083,
+      5200,
+      5269
+    ]
+  },
+  {
+    "id": 133005,
+    "name": "Juggernaut XL",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 31,
+    "user": {
+      "id": 764940,
+      "username": "KandooAI",
+      "deletedAt": null,
+      "image": "8134e671-a860-46ad-0400-1fc83e4f7200",
+      "profilePicture": {
+        "id": 14368508,
+        "name": "00033-beautiful lady, (freckles), big smile, brown hazel eyes, Braided Crown, dark makeup, hyperdetailed photography, soft light, head.png",
+        "url": "381b50a7-daa3-4317-8214-5c5d249b5658",
+        "nsfwLevel": 1,
+        "hash": "UFG8G*%103Ip00W;MwWBcEV@~Vt74:ofVsaz",
+        "userId": 764940,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 1248,
+        "height": 1824,
+        "metadata": {
+          "hash": "UFG8G*%103Ip00W;MwWBcEV@~Vt74:ofVsaz",
+          "size": 2584347,
+          "width": 1248,
+          "height": 1824,
+          "userId": 764940,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 244,
+          "data": null,
+          "cosmetic": {
+            "id": 244,
+            "name": "Holiday 2023: Golden Donor",
+            "type": "Badge",
+            "data": {
+              "url": "742c4361-c2a3-4d8d-9513-de786b2c3f13",
+              "animated": true
+            },
+            "source": "Claim"
+          }
+        },
+        {
+          "cosmeticId": 301,
+          "data": null,
+          "cosmetic": {
+            "id": 301,
+            "name": "Avatar Cosmetic 5",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "308736df-2aa5-4134-b46f-4ad3af0f3e73",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 313,
+          "data": null,
+          "cosmetic": {
+            "id": 313,
+            "name": "Profile Background 10",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "7b7b5c59-e975-4a3d-babe-b29aa577d237",
+              "type": "video"
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 75044257,
+        "userId": 764940,
+        "name": "d8037506-b0f1-4a1c-a195-1565330741ca.mp4",
+        "url": "1dbfbc3e-ffaf-49aa-83e1-38222a6d9a73",
+        "nsfwLevel": 1,
+        "width": 720,
+        "height": 924,
+        "hash": "UFB..V0z0z~BE2%1bHNGI:n+$*R*E2xtW;ae",
+        "type": "video",
+        "metadata": {
+          "hash": "UFB..V0z0z~BE2%1bHNGI:n+$*R*E2xtW;ae",
+          "size": 73380017,
+          "audio": true,
+          "width": 720,
+          "height": 924,
+          "duration": 176.708
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1759168,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          2954,
+          3656,
+          5133,
+          5248,
+          5262,
+          5453,
+          5772,
+          6033,
+          6870,
+          27182,
+          115460,
+          115693,
+          118701,
+          123744,
+          161816,
+          161846,
+          162235,
+          234268
+        ]
+      },
+      {
+        "id": 74821598,
+        "userId": 764940,
+        "name": "00044-1275506908.png",
+        "url": "37f9b909-e7ef-479a-b3db-1f59409d25cb",
+        "nsfwLevel": 1,
+        "width": 1344,
+        "height": 1728,
+        "hash": "UCBMA10g0z~BE2xaazNHI:oL$*Rk9uxtbbae",
+        "type": "image",
+        "metadata": {
+          "hash": "UCBMA10g0z~BE2xaazNHI:oL$*Rk9uxtbbae",
+          "size": 3046568,
+          "width": 1344,
+          "height": 1728,
+          "nsfwLevelReason": "Above-shoulder portraits"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1759168,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          1441,
+          3656,
+          5133,
+          5248,
+          6870,
+          110937,
+          115460,
+          118100,
+          123744,
+          234268
+        ]
+      },
+      {
+        "id": 74821807,
+        "userId": 764940,
+        "name": "00195-996790554.png",
+        "url": "48288f6d-7815-44ee-93ce-1eb0a2305f7d",
+        "nsfwLevel": 1,
+        "width": 1344,
+        "height": 1728,
+        "hash": "UMAx6~xuRjkC_MozM{janlRjIBt7-:aeE1ba",
+        "type": "image",
+        "metadata": {
+          "hash": "UMAx6~xuRjkC_MozM{janlRjIBt7-:aeE1ba",
+          "size": 3237993,
+          "width": 1344,
+          "height": 1728
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1759168,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          321,
+          390,
+          1676,
+          5231,
+          5232,
+          5248,
+          5262,
+          6747,
+          9143,
+          78427,
+          112184,
+          114923,
+          158022,
+          234268
+        ]
+      }
+    ],
+    "version": {
+      "id": 1759168,
+      "index": 0,
+      "name": "Ragnarok_by_RunDiffusion",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SDXL 1.0",
+      "baseModelType": "Standard",
+      "createdAt": "2025-05-07T18:03:29.540Z",
+      "trainingStatus": null,
+      "publishedAt": "2025-05-07T21:02:16.940Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 7,
+      "description": "<p>Used version 12 as the base for training to bring it back into photorealism. Trained another NSFW set on SDXL (using Booru tags). Then trained the same NSFW set again, this time using the great <a rel=\"ugc\" href=\"https://civitai.com/models/573152/lustify-sdxl-nsfw-checkpoint\">Lustify</a> Model <a rel=\"ugc\" href=\"https://civitai.com/user/coyotte\">by Coyotte</a> as the base.</p><p>Both NSFW sets were then merged into the trained photorealism model (0.15 ratio for the trained SDXL NSFW set and 0.1 ratio for the trained Lustify set)</p>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 1342215,
+      "thumbsUpCount": 34507,
+      "thumbsDownCount": 96,
+      "commentCount": 874,
+      "collectedCount": 22179,
+      "tippedAmountCount": 589960
+    },
+    "tags": [
+      172,
+      5192,
+      113935,
+      3118,
+      110252,
+      1237
+    ]
+  },
+  {
+    "id": 43331,
+    "name": "majicMIX realistic \u9ea6\u6a58\u5199\u5b9e",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 31,
+    "user": {
+      "id": 747825,
+      "username": "Merjic",
+      "deletedAt": null,
+      "image": "be86c979-7730-4076-bdee-d62e1681f97a",
+      "profilePicture": {
+        "id": 48286022,
+        "name": "merjic_an_anthropomorphic_smiling_tangerine_with_wheat_hair_d9f5a821-1769-46ec-b737-0d62dbe6a51e_1.png",
+        "url": "9c74a0f1-166e-4b81-9ab6-1f5084adfc25",
+        "nsfwLevel": 1,
+        "hash": "UaDvf{i_FyxZPXW=R,oK9boz#kNHVZs9t2R-",
+        "userId": 747825,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 1024,
+        "height": 1024,
+        "metadata": {
+          "hash": "UaDvf{i_FyxZPXW=R,oK9boz#kNHVZs9t2R-",
+          "size": 2044595,
+          "width": 1024,
+          "height": 1024,
+          "userId": 747825,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 343,
+          "data": null,
+          "cosmetic": {
+            "id": 343,
+            "name": "424_Beach Timelapse.mp4",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "d1d7f6e5-5c49-4963-bd52-0a65c4ace400",
+              "type": "video"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 379,
+          "data": null,
+          "cosmetic": {
+            "id": 379,
+            "name": "Dragon Magic.webp",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "9fbaa8bc-b89b-4a57-b051-21a91151d156",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 2805533,
+        "userId": 747825,
+        "name": "00040-3882543293-1girl,sweater,white background,.png",
+        "url": "4fd40408-f963-4d2d-8caa-8d3f176139cf",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UHLD}qMe.A?wOaIU%MxuMx%1xZM|pIo~MxxZ",
+        "type": "image",
+        "metadata": {
+          "hash": "UHLD}qMe.A?wOaIU%MxuMx%1xZM|pIo~MxxZ",
+          "size": 3022245,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 176425,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          66,
+          5133,
+          5163,
+          5332,
+          5484,
+          5772,
+          111754,
+          112483
+        ]
+      },
+      {
+        "id": 2805528,
+        "userId": 747825,
+        "name": "00038-4216575493-1girl,hair with bangs,black long dress,orange background,.png",
+        "url": "23f3d38a-a9f0-4932-ac06-2cf336cbc77e",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UeLeKC-7}9R,-oniS2NwNGjZt7R*wvS4kCni",
+        "type": "image",
+        "metadata": {
+          "hash": "UeLeKC-7}9R,-oniS2NwNGjZt7R*wvS4kCni",
+          "size": 3028055,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 176425,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3642,
+          5133,
+          5228,
+          6747,
+          7337,
+          115513,
+          120708
+        ]
+      },
+      {
+        "id": 2805532,
+        "userId": 747825,
+        "name": "00043-2840409752-1girl,face,white background,.png",
+        "url": "c33755c9-2548-4142-91fe-6855a84c2d31",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UPK^+}x].T-V4UNeNH~W?bs:-;M{tlV@%LD%",
+        "type": "image",
+        "metadata": {
+          "hash": "UPK^+}x].T-V4UNeNH~W?bs:-;M{tlV@%LD%",
+          "size": 3025913,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 176425,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          192,
+          2687,
+          3642,
+          3800,
+          5133,
+          5228,
+          5248,
+          5262,
+          6997,
+          7337,
+          15772,
+          110302,
+          110937,
+          114502,
+          115460,
+          115513,
+          120708
+        ]
+      }
+    ],
+    "version": {
+      "id": 176425,
+      "index": 0,
+      "name": "v7",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "createdAt": "2023-10-05T12:00:18.846Z",
+      "trainingStatus": null,
+      "publishedAt": "2023-10-05T13:31:16.745Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 15,
+      "description": null,
+      "trainedWords": [],
+      "vaeId": 87822,
+      "covered": false
+    },
+    "rank": {
+      "downloadCount": 1169360,
+      "thumbsUpCount": 62228,
+      "thumbsDownCount": 35,
+      "commentCount": 520,
+      "collectedCount": 19791,
+      "tippedAmountCount": 56542
+    },
+    "tags": [
+      1754,
+      133749,
+      5248,
+      1237
+    ]
+  },
+  {
+    "id": 827184,
+    "name": "WAI-illustrious-SDXL",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 63,
+    "user": {
+      "id": 31176,
+      "username": "WAI0731",
+      "deletedAt": null,
+      "image": "https://cdn.discordapp.com/embed/avatars/2.png",
+      "profilePicture": {
+        "id": 12602654,
+        "name": "\u672a\u6807\u9898-1.jpg",
+        "url": "89402b8c-e932-4076-b38a-c8ecff677bf6",
+        "nsfwLevel": 1,
+        "hash": "UJBWe~WB00t7ofWBWBof00j[~qayj[ofofWB",
+        "userId": 31176,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 1181,
+        "height": 1181,
+        "metadata": {
+          "hash": "UJBWe~WB00t7ofWBWBof00j[~qayj[ofofWB",
+          "size": 156583,
+          "width": 1181,
+          "height": 1181,
+          "userId": 31176,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 184,
+          "data": null,
+          "cosmetic": {
+            "id": 184,
+            "name": "Legendary Nameplate",
+            "type": "NamePlate",
+            "data": {
+              "variant": "gradient",
+              "gradient": {
+                "to": "#E8590C",
+                "deg": 180,
+                "from": "#FD7E14"
+              }
+            },
+            "source": "Trophy"
+          }
+        },
+        {
+          "cosmeticId": 436,
+          "data": null,
+          "cosmetic": {
+            "id": 436,
+            "name": "Rainbow Vines",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "ba11fe14-d268-43b5-ab03-4b16a4b47b7e",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 846,
+          "data": null,
+          "cosmetic": {
+            "id": 846,
+            "name": "CivChan Background",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "4400deb1-c458-458a-8c1c-adc09c76d23e",
+              "type": "image"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 870,
+          "data": null,
+          "cosmetic": {
+            "id": 870,
+            "name": "Gold \u201cSSS-Rank\u201d Command Crest",
+            "type": "Badge",
+            "data": {
+              "url": "a457d41a-2182-486c-9fbd-870f29e83907",
+              "animated": true
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 114266623,
+        "userId": 31176,
+        "name": "01257-2073075463-1girl, hatsune miku, dress, long hair, jewelry, white dress, blue eyes, necklace, bubble, solo, underwater, hair between eyes, l.png",
+        "url": "20ad2af3-9598-47ed-ad77-d09848a334f2",
+        "nsfwLevel": 1,
+        "width": 1536,
+        "height": 2040,
+        "hash": "UNGm[Zx]59RPLgX8ohs.0znirWxa_MniRjM|",
+        "type": "image",
+        "metadata": {
+          "hash": "UNGm[Zx]59RPLgX8ohs.0znirWxa_MniRjM|",
+          "size": 3553735,
+          "width": 1536,
+          "height": 2040,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2514310,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          1930,
+          3623,
+          3629,
+          3656,
+          4316,
+          5133,
+          5148,
+          5228,
+          5262,
+          5787,
+          5798,
+          5862,
+          5942,
+          111890,
+          112023,
+          115041,
+          115052,
+          115513,
+          120222,
+          120942,
+          126351,
+          131353,
+          132701,
+          140234,
+          140856,
+          141917,
+          161816,
+          161928,
+          161948,
+          161987,
+          162526,
+          162601,
+          163099,
+          192918,
+          234268
+        ]
+      },
+      {
+        "id": 114266630,
+        "userId": 31176,
+        "name": "01260-561061719-mature female, solo, breasts, red hair, long hair, red eyes, large breasts, sunglasses, looking over eyewear, hair over one eye,.png",
+        "url": "ea1cdc83-91ca-4a1e-9d80-32bd27ece809",
+        "nsfwLevel": 2,
+        "width": 1536,
+        "height": 2040,
+        "hash": "URN]R.?I_2Diqb+u-;rrH@IUt7Nb~VWCROnh",
+        "type": "image",
+        "metadata": {
+          "hash": "URN]R.?I_2Diqb+u-;rrH@IUt7Nb~VWCROnh",
+          "size": 3151289,
+          "width": 1536,
+          "height": 2040,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2514310,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          1949,
+          3628,
+          3629,
+          3641,
+          3654,
+          3989,
+          4836,
+          5133,
+          5148,
+          5228,
+          5262,
+          5332,
+          5772,
+          5784,
+          16001,
+          27182,
+          111656,
+          111941,
+          115089,
+          115513,
+          123351,
+          131560,
+          161953,
+          161955,
+          162640,
+          162871,
+          233029
+        ]
+      },
+      {
+        "id": 114268528,
+        "userId": 31176,
+        "name": "01227-4254694678-glitch, halo, solo, wings, angel, angel wings, looking at viewer, earrings, 1girl, feathered wings, jewelry, upper body, chromat.png",
+        "url": "bfca8349-8a21-453c-954c-7a5c577f7cab",
+        "nsfwLevel": 1,
+        "width": 1536,
+        "height": 2040,
+        "hash": "UGJHzMRo00^+^#E1Nd?a4mRkt8?b~q-qIBtQ",
+        "type": "image",
+        "metadata": {
+          "hash": "UGJHzMRo00^+^#E1Nd?a4mRkt8?b~q-qIBtQ",
+          "size": 3368511,
+          "width": 1536,
+          "height": 2040,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2514310,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3622,
+          3627,
+          3629,
+          3647,
+          4233,
+          5133,
+          5262,
+          5453,
+          5773,
+          5785,
+          5786,
+          5787,
+          7168,
+          7337,
+          7954,
+          27182,
+          110302,
+          114265,
+          115513,
+          119829,
+          152344,
+          161910,
+          162113,
+          162306,
+          234268
+        ]
+      }
+    ],
+    "version": {
+      "id": 2514310,
+      "index": 0,
+      "name": "v16.0",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "Illustrious",
+      "baseModelType": "Standard",
+      "createdAt": "2025-12-18T08:44:16.977Z",
+      "trainingStatus": null,
+      "publishedAt": "2025-12-18T09:16:12.062Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 15,
+      "description": null,
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 1164056,
+      "thumbsUpCount": 75799,
+      "thumbsDownCount": 196,
+      "commentCount": 1863,
+      "collectedCount": 43560,
+      "tippedAmountCount": 156512
+    },
+    "tags": [
+      4,
+      1237
+    ]
+  },
+  {
+    "id": 257749,
+    "name": "Pony Diffusion V6 XL",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 7,
+    "user": {
+      "id": 492754,
+      "username": "PurpleSmartAI",
+      "deletedAt": null,
+      "image": "60a1a061-10ef-4bf5-a081-13a1a578fbc6",
+      "profilePicture": {
+        "id": 5743391,
+        "name": "chrome_UnZv3oXjrM.png",
+        "url": "60a1a061-10ef-4bf5-a081-13a1a578fbc6",
+        "nsfwLevel": 1,
+        "hash": "U77ch3s=0]EbR}oOssR#1CS0}LxJw%R#Nqxe",
+        "userId": 492754,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 256,
+        "height": 256,
+        "metadata": {
+          "hash": "U77ch3s=0]EbR}oOssR#1CS0}LxJw%R#Nqxe",
+          "size": 21672,
+          "width": 256,
+          "height": 256,
+          "userId": 492754,
+          "username": "PurpleSmartAI",
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 142,
+          "data": null,
+          "cosmetic": {
+            "id": 142,
+            "name": "Bronze Writer Badge",
+            "type": "Badge",
+            "data": {
+              "url": "d4bddcc9-910c-4eca-80da-e447c0154e53"
+            },
+            "source": "Trophy"
+          }
+        },
+        {
+          "cosmeticId": 355,
+          "data": null,
+          "cosmetic": {
+            "id": 355,
+            "name": "240501 Animated Avatar 8",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "23c63e25-91a2-48f0-bf1f-1101b769795d",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 429,
+          "data": null,
+          "cosmetic": {
+            "id": 429,
+            "name": "Pride Pony",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "2cba9108-324d-44a6-a80d-8f4d81e4d81f",
+              "type": "video"
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 5706937,
+        "userId": 492754,
+        "name": "ponydiffwall2.png",
+        "url": "4790674c-e16d-4dc7-b384-af4381fcfa3f",
+        "nsfwLevel": 1,
+        "width": 1200,
+        "height": 1600,
+        "hash": "UAGtHoRs0dxUKH;^J8OG0z%N{goN0MwM$%V=",
+        "type": "image",
+        "metadata": {
+          "hash": "UAGtHoRs0dxUKH;^J8OG0z%N{goN0MwM$%V=",
+          "size": 2624253,
+          "width": 1200,
+          "height": 1600
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 290640,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          335,
+          2397,
+          3624,
+          3642,
+          3645,
+          3800,
+          4316,
+          5133,
+          5148,
+          5228,
+          5453,
+          5772,
+          5786,
+          5791,
+          5983,
+          6033,
+          110401,
+          113138,
+          114246,
+          115513,
+          116865,
+          151155,
+          169148
+        ]
+      },
+      {
+        "id": 5275260,
+        "userId": 492754,
+        "name": "tmpwcaemsmp.webp",
+        "url": "ca18d37e-be8b-4a32-99d4-24e25b061a97",
+        "nsfwLevel": 1,
+        "width": 950,
+        "height": 950,
+        "hash": "UVM7fUEM~pv}_NRPxaxurC%1NHX9_3x]S$Mx",
+        "type": "image",
+        "metadata": {
+          "hash": "UVM7fUEM~pv}_NRPxaxurC%1NHX9_3x]S$Mx",
+          "size": 699934,
+          "width": 950,
+          "height": 950
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 290640,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          192,
+          335,
+          1930,
+          2397,
+          2836,
+          3622,
+          5148,
+          5228,
+          5262,
+          5772,
+          5787,
+          7337,
+          22328,
+          114502,
+          116940,
+          122110,
+          162113
+        ]
+      },
+      {
+        "id": 5305869,
+        "userId": 492754,
+        "name": "00310-3475198511.png",
+        "url": "f1d3824f-5dae-4139-86cc-ad755fb93463",
+        "nsfwLevel": 1,
+        "width": 1152,
+        "height": 896,
+        "hash": "U9IEqd9F_M=v00tQ0gD+_LozM|xaTdRk=_-n",
+        "type": "image",
+        "metadata": {
+          "hash": "U9IEqd9F_M=v00tQ0gD+_LozM|xaTdRk=_-n",
+          "size": 977366,
+          "width": 1152,
+          "height": 896,
+          "nsfwLevelReason": null
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 290640,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          531,
+          1238,
+          5186,
+          5262,
+          6123,
+          116352
+        ]
+      }
+    ],
+    "version": {
+      "id": 290640,
+      "index": 0,
+      "name": "V6 (start with this one)",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "Pony",
+      "baseModelType": "Standard",
+      "createdAt": "2024-01-08T01:54:45.998Z",
+      "trainingStatus": null,
+      "publishedAt": "2024-01-08T04:48:43.529Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 3,
+      "description": null,
+      "trainedWords": [],
+      "vaeId": 155933,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 865616,
+      "thumbsUpCount": 74500,
+      "thumbsDownCount": 323,
+      "commentCount": 1606,
+      "collectedCount": 34702,
+      "tippedAmountCount": 1036499
+    },
+    "tags": [
+      615,
+      1237,
+      488
+    ]
+  },
+  {
+    "id": 25694,
+    "name": "epiCRealism",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 31,
+    "user": {
+      "id": 81744,
+      "username": "epinikion",
+      "deletedAt": null,
+      "image": "529b3628-8929-4ef6-b63f-16d2999faa41",
+      "profilePicture": {
+        "id": 117551882,
+        "name": "1.png",
+        "url": "75543dbb-71c1-42b2-8050-a690ff6587ad",
+        "nsfwLevel": 1,
+        "hash": "UKK]_zkCO?%2?HWB$jofT0WBE1WX~qofx]of",
+        "userId": 81744,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 1231,
+        "height": 1347,
+        "metadata": {
+          "hash": "UKK]_zkCO?%2?HWB$jofT0WBE1WX~qofx]of",
+          "size": 2637032,
+          "width": 1231,
+          "height": 1347,
+          "userId": 81744,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 184,
+          "data": null,
+          "cosmetic": {
+            "id": 184,
+            "name": "Legendary Nameplate",
+            "type": "NamePlate",
+            "data": {
+              "variant": "gradient",
+              "gradient": {
+                "to": "#E8590C",
+                "deg": 180,
+                "from": "#FD7E14"
+              }
+            },
+            "source": "Trophy"
+          }
+        },
+        {
+          "cosmeticId": 350,
+          "data": null,
+          "cosmetic": {
+            "id": 350,
+            "name": "240501 Animated Avatar 3",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "285b0a79-0730-4f18-9f46-6cec0ae32d27",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 759,
+          "data": null,
+          "cosmetic": {
+            "id": 759,
+            "name": "Regal Stag",
+            "type": "Badge",
+            "data": {
+              "url": "7d94c83e-b438-4462-a45a-d27a1b043807",
+              "animated": true
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 846,
+          "data": null,
+          "cosmetic": {
+            "id": 846,
+            "name": "CivChan Background",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "4400deb1-c458-458a-8c1c-adc09c76d23e",
+              "type": "image"
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 2103034,
+        "userId": 81744,
+        "name": "02499-144278541.png",
+        "url": "3822f91b-5f4e-4df6-8934-2a453f13b40e",
+        "nsfwLevel": 1,
+        "width": 960,
+        "height": 1440,
+        "hash": "U6D9x89F00~p]i%M?^8_00xv_3015qD%4UXm",
+        "type": "image",
+        "metadata": {
+          "hash": "U6D9x89F00~p]i%M?^8_00xv_3015qD%4UXm",
+          "size": 1809664,
+          "width": 960,
+          "height": 1440
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 143906,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3350,
+          5248,
+          5262,
+          111805,
+          115460,
+          115513,
+          143276,
+          162540
+        ]
+      },
+      {
+        "id": 2103035,
+        "userId": 81744,
+        "name": "02500-1492004694.png",
+        "url": "905697ba-561f-405c-8c1f-a077aa0fa732",
+        "nsfwLevel": 2,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UOFYP,oKJUxu~qj[kXxuTeR*nht7Rkj[e-WB",
+        "type": "image",
+        "metadata": {
+          "hash": "UOFYP,oKJUxu~qj[kXxuTeR*nht7Rkj[e-WB",
+          "size": 2263367,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 143906,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          1433,
+          3569,
+          3643,
+          3800,
+          5133,
+          5148,
+          5228,
+          5248,
+          5262,
+          6924,
+          7157,
+          98492,
+          111755,
+          112070,
+          114758,
+          115460,
+          115513,
+          141202
+        ]
+      },
+      {
+        "id": 2103038,
+        "userId": 81744,
+        "name": "02501-2802306715.png",
+        "url": "470ce5ae-497e-414f-bd8b-cc1bf67086ef",
+        "nsfwLevel": 1,
+        "width": 1024,
+        "height": 1536,
+        "hash": "UZFPQqWANHWB-pM{kCRj_NM{RPM{tRaen%WB",
+        "type": "image",
+        "metadata": {
+          "hash": "UZFPQqWANHWB-pM{kCRj_NM{RPM{tRaen%WB",
+          "size": 2103929,
+          "width": 1024,
+          "height": 1536
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 143906,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          192,
+          2113,
+          5133,
+          5248,
+          5262,
+          5798,
+          115513,
+          118100
+        ]
+      }
+    ],
+    "version": {
+      "id": 143906,
+      "index": 1,
+      "name": "Natural Sin RC1 VAE",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "createdAt": "2023-08-19T07:28:57.129Z",
+      "trainingStatus": null,
+      "publishedAt": "2023-08-22T13:05:17.906Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 3,
+      "description": "<p>Since i'm low on time i still wanted to release the RC1 of an new aproach.</p><ul><li><p>ordinary faces, natural look, more face diversity</p></li><li><p>hand fix</p></li></ul><p><strong>VAE included</strong></p><p>Recommended simple Negative for average looking output, avoid \"optimizer\" Embeddings</p><pre><code>cartoon, cgi, render, illustration, painting, drawing</code></pre><p>seems to be a bit nsfw heavy and very lose on prompt guidance for now</p>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": false
+    },
+    "rank": {
+      "downloadCount": 833402,
+      "thumbsUpCount": 26537,
+      "thumbsDownCount": 30,
+      "commentCount": 329,
+      "collectedCount": 11118,
+      "tippedAmountCount": 224779
+    },
+    "tags": [
+      5120,
+      6680,
+      172,
+      192,
+      337,
+      1237,
+      618,
+      5248,
+      5241,
+      1441,
+      5133,
+      5242,
+      6868
+    ]
+  },
+  {
+    "id": 7808,
+    "name": "EasyNegative",
+    "type": "TextualInversion",
+    "nsfw": false,
+    "nsfwLevel": 1,
+    "user": {
+      "id": 3193,
+      "username": "rqdwdw",
+      "deletedAt": null,
+      "image": "6b458341-b194-4e30-f4ec-907e5f668600",
+      "profilePicture": {
+        "id": 4501465,
+        "name": null,
+        "url": "6b458341-b194-4e30-f4ec-907e5f668600",
+        "nsfwLevel": 1,
+        "hash": null,
+        "userId": 3193,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": null,
+        "height": null,
+        "metadata": {
+          "userId": 3193,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": []
+    },
+    "images": [
+      {
+        "id": 88246,
+        "userId": 3193,
+        "name": "sample01.png",
+        "url": "a2505a48-8eed-4b12-b6a0-6a8ec7e0c600",
+        "nsfwLevel": 1,
+        "width": 3387,
+        "height": 1930,
+        "hash": "UnLNiM~q?v?axtafaybGofWVfkn%%2afj[f+",
+        "type": "image",
+        "metadata": {
+          "hash": "UnLNiM~q?v?axtafaybGofWVfkn%%2afj[f+",
+          "width": 3387,
+          "height": 1930
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 9208,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          413,
+          531,
+          2397,
+          2687,
+          3628,
+          3629,
+          3642,
+          3726,
+          4150,
+          4213,
+          5133,
+          5148,
+          5228,
+          5772,
+          5773,
+          5862,
+          6997,
+          9090,
+          27182,
+          111890,
+          111960,
+          115065,
+          115187,
+          115513,
+          116254,
+          120222,
+          120456,
+          120594,
+          125495,
+          132582,
+          140856,
+          158485,
+          159986,
+          161919,
+          161924,
+          161988,
+          162223,
+          162703
+        ]
+      },
+      {
+        "id": 88248,
+        "userId": 3193,
+        "name": "sample02.png",
+        "url": "945f1968-7fda-4512-0676-d41787befd00",
+        "nsfwLevel": 1,
+        "width": 3387,
+        "height": 1930,
+        "hash": "UjLz,I~q_4-;xaWCayj[oeayfjWVt6j]ofof",
+        "type": "image",
+        "metadata": {
+          "hash": "UjLz,I~q_4-;xaWCayj[oeayfjWVt6j]ofof",
+          "width": 3387,
+          "height": 1930
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 9208,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          413,
+          531,
+          2397,
+          2687,
+          3628,
+          3629,
+          3642,
+          3726,
+          4150,
+          4213,
+          5133,
+          5148,
+          5228,
+          5293,
+          5772,
+          5773,
+          5862,
+          6576,
+          6997,
+          9090,
+          27182,
+          111890,
+          111960,
+          115041,
+          115065,
+          115187,
+          115513,
+          116254,
+          120222,
+          120456,
+          120594,
+          125495,
+          140856,
+          158485,
+          159986,
+          161919,
+          161988,
+          162222,
+          162223,
+          162703
+        ]
+      },
+      {
+        "id": 88273,
+        "userId": 3193,
+        "name": "sample03.png",
+        "url": "027053dc-60f2-42c5-6373-64db78fbc100",
+        "nsfwLevel": 1,
+        "width": 3387,
+        "height": 1930,
+        "hash": "UkL;Nw_N?u?b%2WCWUofoLa}ayfQxat7a#j]",
+        "type": "image",
+        "metadata": {
+          "hash": "UkL;Nw_N?u?b%2WCWUofoLa}ayfQxat7a#j]",
+          "width": 3387,
+          "height": 1930
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 9208,
+        "availability": "Public",
+        "hasMeta": false,
+        "hasPositivePrompt": false,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          413,
+          531,
+          2397,
+          2687,
+          3628,
+          3629,
+          3642,
+          3726,
+          4150,
+          4213,
+          5133,
+          5228,
+          5772,
+          5773,
+          5862,
+          6576,
+          6997,
+          9090,
+          27182,
+          111890,
+          111960,
+          114565,
+          115041,
+          115065,
+          115187,
+          115513,
+          116254,
+          120222,
+          120456,
+          120594,
+          125495,
+          132582,
+          140856,
+          158485,
+          159986,
+          161816,
+          161988,
+          162222,
+          162223,
+          162703,
+          162720
+        ]
+      }
+    ],
+    "version": {
+      "id": 9208,
+      "index": 0,
+      "name": "EasyNegative",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "createdAt": "2023-02-10T12:56:41.356Z",
+      "trainingStatus": null,
+      "publishedAt": "2023-02-10T12:56:41.356Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 1,
+      "description": "<p><strong>This embedding should be used in your NEGATIVE prompt. Adjust the strength as desired (seems to scale well without any distortions), the strength required may vary based on positive and negative prompts.</strong><br /><br /><strong>Samples are, in order:</strong></p><ol><li><p><strong>sample01 - Counterfeit-V2.0.safetensors</strong></p></li><li><p><strong>sample02 - AbyssOrangeMix2_sfw.safetensors</strong></p></li><li><p><strong>sample03 - anything-v4.0-pruned.safetensors</strong></p></li><li><p><strong>Strength comparison using AbyssOrangeMix2_sfw.</strong></p></li></ol><p><br /><strong>From Author</strong><br />\"This is a Negative Embedding trained with Counterfeit. Please use it in the \"\\stable-diffusion-webui\\embeddings\" folder. It can be used with other models, but the effectiveness is not certain.\"</p>",
+      "trainedWords": [
+        "easynegative"
+      ],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 725845,
+      "thumbsUpCount": 50796,
+      "thumbsDownCount": 73,
+      "commentCount": 158,
+      "collectedCount": 15602,
+      "tippedAmountCount": 2032
+    },
+    "tags": [
+      5203,
+      4,
+      867,
+      924,
+      1354,
+      111830
+    ]
+  },
+  {
+    "id": 443821,
+    "name": "CyberRealistic Pony",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 31,
+    "user": {
+      "id": 6357,
+      "username": "Cyberdelia",
+      "deletedAt": null,
+      "image": "67778471-8dfe-4456-075a-e181f217c100",
+      "profilePicture": {
+        "id": 14125863,
+        "name": "ppr3.png",
+        "url": "63c3d8a0-6f3b-4293-9be7-9efc8c1d9bc8",
+        "nsfwLevel": 1,
+        "hash": "UKG0qftS?^M|4UMxH?s:00xu8^t7i^of-pR*",
+        "userId": 6357,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 2343,
+        "height": 2343,
+        "metadata": {
+          "hash": "UKG0qftS?^M|4UMxH?s:00xu8^t7i^of-pR*",
+          "size": 6013825,
+          "width": 2343,
+          "height": 2343,
+          "userId": 6357,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 184,
+          "data": null,
+          "cosmetic": {
+            "id": 184,
+            "name": "Legendary Nameplate",
+            "type": "NamePlate",
+            "data": {
+              "variant": "gradient",
+              "gradient": {
+                "to": "#E8590C",
+                "deg": 180,
+                "from": "#FD7E14"
+              }
+            },
+            "source": "Trophy"
+          }
+        },
+        {
+          "cosmeticId": 298,
+          "data": null,
+          "cosmetic": {
+            "id": 298,
+            "name": "Avatar Cosmetic 2",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "f5a420bc-d283-44a6-860a-9fc130668c0e",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 307,
+          "data": null,
+          "cosmetic": {
+            "id": 307,
+            "name": "Profile Background 4",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "359a26eb-b7ce-468c-af34-b6f6668eed13"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 368,
+          "data": null,
+          "cosmetic": {
+            "id": 368,
+            "name": "Forge Badge",
+            "type": "Badge",
+            "data": {
+              "url": "da14fac8-b0ad-4462-9e14-40808b725605",
+              "animated": true
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 116913110,
+        "userId": 6357,
+        "name": "00171-2400831882.png",
+        "url": "6193a98d-58fc-4eee-8c32-d2531d66dee7",
+        "nsfwLevel": 2,
+        "width": 1248,
+        "height": 1824,
+        "hash": "UNLqFI%2?v_3-QMxIBnN9G?bI:Ip_NR*NKax",
+        "type": "image",
+        "metadata": {
+          "hash": "UNLqFI%2?v_3-QMxIBnN9G?bI:Ip_NR*NKax",
+          "size": 4278477,
+          "width": 1248,
+          "height": 1824
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2581228,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3645,
+          3647,
+          5133,
+          5228,
+          5248,
+          5262,
+          5798,
+          6032,
+          6924,
+          7229,
+          7317,
+          9090,
+          27182,
+          78479,
+          110749,
+          110937,
+          111879,
+          111951,
+          112143,
+          112144,
+          112958,
+          115460,
+          115513,
+          119756,
+          135878,
+          233029
+        ]
+      },
+      {
+        "id": 118723163,
+        "userId": 6357,
+        "name": "00056-3584134187.png",
+        "url": "655d4b1d-d096-4cc4-8a78-2ea36eac4a56",
+        "nsfwLevel": 8,
+        "width": 1248,
+        "height": 1824,
+        "hash": "UBEVjB?b?H-AYkt6R+%15S0L01E2~VaeH?Ip",
+        "type": "image",
+        "metadata": {
+          "hash": "UBEVjB?b?H-AYkt6R+%15S0L01E2~VaeH?Ip",
+          "size": 3737270,
+          "width": 1248,
+          "height": 1824,
+          "nsfwLevelReason": "Visible genitals through clothing gaps"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2581228,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          251,
+          530,
+          2193,
+          2240,
+          2687,
+          3642,
+          3645,
+          4213,
+          5109,
+          5133,
+          5148,
+          5228,
+          5248,
+          5262,
+          5293,
+          5798,
+          6611,
+          7229,
+          27186,
+          110750,
+          111915,
+          111951,
+          113032,
+          114420,
+          115165,
+          115460,
+          115513,
+          119303,
+          123249,
+          125503,
+          129427,
+          135034,
+          144823,
+          160869,
+          161852,
+          162024,
+          162065,
+          162068,
+          162110
+        ]
+      },
+      {
+        "id": 118721167,
+        "userId": 6357,
+        "name": "00054-2878406779.png",
+        "url": "880fcd93-3c4c-43dc-b08f-cef64f9402a8",
+        "nsfwLevel": 1,
+        "width": 1248,
+        "height": 1824,
+        "hash": "UKF~599F0e-:EKIU?HM{~qMxahNG%eM{xuI.",
+        "type": "image",
+        "metadata": {
+          "hash": "UKF~599F0e-:EKIU?HM{~qMxahNG%eM{xuI.",
+          "size": 4191674,
+          "width": 1248,
+          "height": 1824,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2581228,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          321,
+          1930,
+          3350,
+          3623,
+          3643,
+          3647,
+          3656,
+          5133,
+          5148,
+          5248,
+          5262,
+          5780,
+          5798,
+          9143,
+          15860,
+          110302,
+          110937,
+          111763,
+          111857,
+          115066,
+          115460,
+          115513,
+          115521,
+          118100,
+          123080,
+          143215,
+          143276,
+          160265,
+          161905,
+          162202,
+          234268
+        ]
+      }
+    ],
+    "version": {
+      "id": 2581228,
+      "index": 0,
+      "name": "v16.0",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "Pony",
+      "baseModelType": "Standard",
+      "createdAt": "2026-01-09T14:06:35.203Z",
+      "trainingStatus": null,
+      "publishedAt": "2026-01-24T23:25:01.075Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 31,
+      "description": "<p>Pony <strong>v16.0</strong> is here - and this one is the result of <strong>listening, stepping back, and rebuilding with intent</strong>.</p><p>After extensive feedback from users, I deliberately took a step back from the previous direction, re-evaluated the foundations, and rebuilt from there. The result is a version that feels <strong>fresh, flexible, and experimental</strong>, while still staying true to the CyberRealistic identity.</p><p>If you\u2019re looking for a <strong>rock-solid, predictable workhorse</strong>, I still recommend:</p><ul><li><p><strong>v14.x</strong> or <strong>v15.x</strong> - both remain excellent and stable choices</p></li></ul><p><strong>v16.0</strong>, however, is where the <strong>exciting stuff starts</strong>. It\u2019s for users who enjoy testing, experimenting, and discovering new behaviors and capabilities.</p>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 651659,
+      "thumbsUpCount": 30006,
+      "thumbsDownCount": 81,
+      "commentCount": 822,
+      "collectedCount": 26725,
+      "tippedAmountCount": 106152
+    },
+    "tags": [
+      5275,
+      215384,
+      1237,
+      5232,
+      5248,
+      5196
+    ]
+  },
+  {
+    "id": 264290,
+    "name": "Not Artists Styles for Pony Diffusion V6 XL",
+    "type": "LORA",
+    "nsfw": false,
+    "nsfwLevel": 23,
+    "user": {
+      "id": 1461,
+      "username": "obuyb404",
+      "deletedAt": null,
+      "image": "b78d22bc-2763-4cf0-a54c-d1997c124379",
+      "profilePicture": {
+        "id": 84157615,
+        "name": "00000-83405274 2025-06-24_Edited_Cropped_1152.png",
+        "url": "8d651db6-fba8-4a50-b11b-7fd91a63d2cf",
+        "nsfwLevel": 1,
+        "hash": "ULD]uVay}rt7TGWVTeoL+as.a#Sgt,bbR*r?",
+        "userId": 1461,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 1152,
+        "height": 1152,
+        "metadata": {
+          "hash": "ULD]uVay}rt7TGWVTeoL+as.a#Sgt,bbR*r?",
+          "size": 876252,
+          "width": 1152,
+          "height": 1152,
+          "userId": 1461,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": []
+    },
+    "images": [
+      {
+        "id": 64739376,
+        "userId": 1461,
+        "name": "00000-319863695 2025-03-20.png",
+        "url": "7c79113b-a6d7-4e22-a3d4-b06c9bb2cfa4",
+        "nsfwLevel": 1,
+        "width": 768,
+        "height": 1152,
+        "hash": "U6E:3yEU?K~VMckspKI.0Jr;QRDiFyDiRf?b",
+        "type": "image",
+        "metadata": {
+          "hash": "U6E:3yEU?K~VMckspKI.0Jr;QRDiFyDiRf?b",
+          "size": 1417954,
+          "width": 768,
+          "height": 1152
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1558543,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          81,
+          292,
+          3626,
+          3642,
+          3752,
+          3787,
+          5110,
+          5169,
+          5231,
+          5232,
+          5262,
+          5798,
+          6974,
+          7659,
+          8447,
+          110302,
+          110401,
+          110433,
+          110770,
+          110771,
+          111763,
+          111864,
+          114923,
+          115513,
+          120041,
+          120244,
+          148933,
+          161863,
+          161865
+        ]
+      },
+      {
+        "id": 64739390,
+        "userId": 1461,
+        "name": "00001-2906763293 2025-03-20.png",
+        "url": "79b0f5ad-b38a-48dd-9018-85ad0c8993e1",
+        "nsfwLevel": 1,
+        "width": 768,
+        "height": 1152,
+        "hash": "UJJ8O%%g5On5-rbx*0nh5afTxcWVY7Rkrsg3",
+        "type": "image",
+        "metadata": {
+          "hash": "UJJ8O%%g5On5-rbx*0nh5afTxcWVY7Rkrsg3",
+          "size": 1486027,
+          "width": 768,
+          "height": 1152
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1558543,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          81,
+          292,
+          1930,
+          3247,
+          3623,
+          3643,
+          3800,
+          4213,
+          5133,
+          5148,
+          5228,
+          5262,
+          5448,
+          5449,
+          8447,
+          78490,
+          111763,
+          111857,
+          112001,
+          112500,
+          114244,
+          115513,
+          127021,
+          130786,
+          143215,
+          144823,
+          156665,
+          161055,
+          161892,
+          162202
+        ]
+      },
+      {
+        "id": 64739374,
+        "userId": 1461,
+        "name": "00002-2136221279 2025-03-20.png",
+        "url": "76d72f94-b1e0-49af-8ffb-b14c67bac39b",
+        "nsfwLevel": 1,
+        "width": 768,
+        "height": 1152,
+        "hash": "UOFr#Hs9K4tR_Mn%t2ofyDa#s.jX_3j[WCWE",
+        "type": "image",
+        "metadata": {
+          "hash": "UOFr#Hs9K4tR_Mn%t2ofyDa#s.jX_3j[WCWE",
+          "size": 1486310,
+          "width": 768,
+          "height": 1152
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 1558543,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          81,
+          292,
+          2687,
+          4409,
+          5228,
+          5231,
+          5232,
+          5262,
+          5772,
+          7659,
+          9143,
+          15772,
+          27182,
+          110302,
+          111763,
+          112378,
+          114923,
+          115513,
+          118112,
+          120244,
+          122902,
+          123249,
+          140568,
+          151556,
+          163510
+        ]
+      }
+    ],
+    "version": {
+      "id": 1558543,
+      "index": 0,
+      "name": "Abstract Painting",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "Pony",
+      "baseModelType": "Standard",
+      "createdAt": "2025-03-20T21:31:06.924Z",
+      "trainingStatus": null,
+      "publishedAt": "2025-03-20T21:38:31.969Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 3,
+      "description": null,
+      "trainedWords": [
+        "abstractionism, brush stroke, traditional media, "
+      ],
+      "vaeId": null,
+      "covered": true
+    },
+    "rank": {
+      "downloadCount": 634283,
+      "thumbsUpCount": 26372,
+      "thumbsDownCount": 39,
+      "commentCount": 193,
+      "collectedCount": 14954,
+      "tippedAmountCount": 525024
+    },
+    "tags": [
+      4,
+      192,
+      313,
+      342,
+      488,
+      5231,
+      3822,
+      211435,
+      3673
+    ]
+  },
+  {
+    "id": 112902,
+    "name": "DreamShaper XL",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 15,
+    "user": {
+      "id": 53515,
+      "username": "Lykon",
+      "deletedAt": null,
+      "image": "https://cdn.discordapp.com/avatars/180327464155742208/59254be18ccd627daf138d053327485d.png",
+      "profilePicture": {
+        "id": 14148805,
+        "name": "GIZ1r03XAAASM-v.jpeg",
+        "url": "3b119431-445f-4b21-aba6-87a5ee9518ef",
+        "nsfwLevel": 1,
+        "hash": "UnK^~gnNcFoz~qt8kCjut8RkV?NHX9R%M{jY",
+        "userId": 53515,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 2000,
+        "height": 1296,
+        "metadata": {
+          "hash": "UnK^~gnNcFoz~qt8kCjut8RkV?NHX9R%M{jY",
+          "size": 236868,
+          "width": 2000,
+          "height": 1296,
+          "userId": 53515,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": []
+    },
+    "images": [
+      {
+        "id": 6935822,
+        "userId": 53515,
+        "name": "31072648-3698264988-In Casey Baugh's evocative style, art of a beautiful young girl cyborg with long brown hair, futuristic, scifi, intricate, elega.png",
+        "url": "ec16aedf-f847-45ff-a76c-81b1adb9f59c",
+        "nsfwLevel": 1,
+        "width": 1224,
+        "height": 1736,
+        "hash": "UDC6iS_No~NH^+x]-;bHxaa}%Lj@xuofjFIV",
+        "type": "image",
+        "metadata": {
+          "hash": "UDC6iS_No~NH^+x]-;bHxaa}%Lj@xuofjFIV",
+          "size": 3401352,
+          "width": 1224,
+          "height": 1736
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 354657,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          192,
+          5133,
+          5169,
+          5228,
+          5248,
+          5262,
+          5798,
+          6728,
+          15772,
+          110770,
+          112359,
+          115460,
+          116755
+        ]
+      },
+      {
+        "id": 6935835,
+        "userId": 53515,
+        "name": "31072607-3346112079-cinematic film still, close up, photo of redheaded girl near grasses, fictional landscapes, (intense sunlight_1.4), realist deta.png",
+        "url": "6f348cb1-4179-4e04-81a3-0071ff213f12",
+        "nsfwLevel": 1,
+        "width": 1224,
+        "height": 1632,
+        "hash": "UVE.5_NHRi-V~AWW%1oJ-:e.jZofxuofW=WB",
+        "type": "image",
+        "metadata": {
+          "hash": "UVE.5_NHRi-V~AWW%1oJ-:e.jZofxuofW=WB",
+          "size": 2975766,
+          "width": 1224,
+          "height": 1632
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 354657,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          2687,
+          4245,
+          5133,
+          5228,
+          5248,
+          5262,
+          6997,
+          7954,
+          111763,
+          112001,
+          115513,
+          118100
+        ]
+      },
+      {
+        "id": 6935837,
+        "userId": 53515,
+        "name": "31072616-2067885438-(masterpiece, best quality, ultra-detailed, best shadow), cinematic film still, photo of a man wearing a high tech scifi armor,.png",
+        "url": "efafe699-815d-4968-9950-ad9d4de1dfbb",
+        "nsfwLevel": 1,
+        "width": 1072,
+        "height": 1432,
+        "hash": "U9B|HN~q-.e-%g-pNa%LVYxuM}M{4.o#I@IU",
+        "type": "image",
+        "metadata": {
+          "hash": "U9B|HN~q-.e-%g-pNa%LVYxuM}M{4.o#I@IU",
+          "size": 2266042,
+          "width": 1072,
+          "height": 1432
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 354657,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3350,
+          5169,
+          5232,
+          5248,
+          5262,
+          7659,
+          115513,
+          120244,
+          143276
+        ]
+      }
+    ],
+    "version": {
+      "id": 354657,
+      "index": 1,
+      "name": "Lightning DPM++ SDE",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SDXL Lightning",
+      "baseModelType": "Standard",
+      "createdAt": "2024-02-21T20:04:57.080Z",
+      "trainingStatus": null,
+      "publishedAt": "2024-02-21T20:38:13.270Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 3,
+      "description": "<p>Lightning version should be used at <u>CFG scale 2</u> and with around <u>3-6 sampling steps</u>. Should work with <strong><u>DPM++ SDE Karras (or Normal)</u></strong>. It might work on other samplers, but please hold your judgement on anything that differs from the suggested settings.</p><p>Can be used for highres fix and tiled upscaling. Please check the examples.</p><p><strong>If you train on this, make sure to use <u>DPM++ SDE Karras</u> at the correct target steps and cfg scale. </strong></p>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": false
+    },
+    "rank": {
+      "downloadCount": 578782,
+      "thumbsUpCount": 21399,
+      "thumbsDownCount": 25,
+      "commentCount": 441,
+      "collectedCount": 11180,
+      "tippedAmountCount": 3764041
+    },
+    "tags": [
+      322,
+      5241,
+      143304,
+      5173,
+      5248,
+      119816,
+      4,
+      132076,
+      143638,
+      1237
+    ]
+  },
+  {
+    "id": 15003,
+    "name": "CyberRealistic",
+    "type": "Checkpoint",
+    "nsfw": false,
+    "nsfwLevel": 31,
+    "user": {
+      "id": 6357,
+      "username": "Cyberdelia",
+      "deletedAt": null,
+      "image": "67778471-8dfe-4456-075a-e181f217c100",
+      "profilePicture": {
+        "id": 14125863,
+        "name": "ppr3.png",
+        "url": "63c3d8a0-6f3b-4293-9be7-9efc8c1d9bc8",
+        "nsfwLevel": 1,
+        "hash": "UKG0qftS?^M|4UMxH?s:00xu8^t7i^of-pR*",
+        "userId": 6357,
+        "ingestion": "Scanned",
+        "type": "image",
+        "width": 2343,
+        "height": 2343,
+        "metadata": {
+          "hash": "UKG0qftS?^M|4UMxH?s:00xu8^t7i^of-pR*",
+          "size": 6013825,
+          "width": 2343,
+          "height": 2343,
+          "userId": 6357,
+          "profilePicture": true
+        }
+      },
+      "cosmetics": [
+        {
+          "cosmeticId": 184,
+          "data": null,
+          "cosmetic": {
+            "id": 184,
+            "name": "Legendary Nameplate",
+            "type": "NamePlate",
+            "data": {
+              "variant": "gradient",
+              "gradient": {
+                "to": "#E8590C",
+                "deg": 180,
+                "from": "#FD7E14"
+              }
+            },
+            "source": "Trophy"
+          }
+        },
+        {
+          "cosmeticId": 298,
+          "data": null,
+          "cosmetic": {
+            "id": 298,
+            "name": "Avatar Cosmetic 2",
+            "type": "ProfileDecoration",
+            "data": {
+              "url": "f5a420bc-d283-44a6-860a-9fc130668c0e",
+              "offset": "30%"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 307,
+          "data": null,
+          "cosmetic": {
+            "id": 307,
+            "name": "Profile Background 4",
+            "type": "ProfileBackground",
+            "data": {
+              "url": "359a26eb-b7ce-468c-af34-b6f6668eed13"
+            },
+            "source": "Purchase"
+          }
+        },
+        {
+          "cosmeticId": 368,
+          "data": null,
+          "cosmetic": {
+            "id": 368,
+            "name": "Forge Badge",
+            "type": "Badge",
+            "data": {
+              "url": "da14fac8-b0ad-4462-9e14-40808b725605",
+              "animated": true
+            },
+            "source": "Purchase"
+          }
+        }
+      ]
+    },
+    "images": [
+      {
+        "id": 120750638,
+        "userId": 6357,
+        "name": "00063-3944915305.png",
+        "url": "00c2690e-f71b-491a-a5cb-0199d8956e0f",
+        "nsfwLevel": 1,
+        "width": 1056,
+        "height": 1536,
+        "hash": "U7D]l05GyYO?,HtmTEDj0zQkQn%fIU~q8_xt",
+        "type": "image",
+        "metadata": {
+          "hash": "U7D]l05GyYO?,HtmTEDj0zQkQn%fIU~q8_xt",
+          "size": 2765486,
+          "width": 1056,
+          "height": 1536,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2681234,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3642,
+          5133,
+          5248,
+          5262,
+          5772,
+          5798,
+          6032,
+          6634,
+          6907,
+          7229,
+          9090,
+          16001,
+          110749,
+          111777,
+          111879,
+          112143,
+          112144,
+          114565,
+          115460,
+          115513,
+          161823,
+          234268
+        ]
+      },
+      {
+        "id": 120750640,
+        "userId": 6357,
+        "name": "00098-1160164261.png",
+        "url": "e5382e62-8051-4486-88d4-dcb02ca876fb",
+        "nsfwLevel": 1,
+        "width": 1056,
+        "height": 1536,
+        "hash": "UaIOtpNy%0%L%2t7Iqf+?bRk%Mt7_NR+xDof",
+        "type": "image",
+        "metadata": {
+          "hash": "UaIOtpNy%0%L%2t7Iqf+?bRk%Mt7_NR+xDof",
+          "size": 3119024,
+          "width": 1056,
+          "height": 1536,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2681234,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          1090,
+          1930,
+          3647,
+          5133,
+          5148,
+          5228,
+          5262,
+          5772,
+          5798,
+          7232,
+          8688,
+          9143,
+          16188,
+          111763,
+          111999,
+          112635,
+          115059,
+          115062,
+          115513,
+          116234,
+          125364,
+          154471,
+          161972,
+          234268
+        ]
+      },
+      {
+        "id": 120750627,
+        "userId": 6357,
+        "name": "00139-3471007578.png",
+        "url": "95845a8f-5bc9-40bb-888a-bff04ed85748",
+        "nsfwLevel": 1,
+        "width": 1056,
+        "height": 1536,
+        "hash": "U7CPCj_NX.k6_4pG^PR#Q-MwrWITvgadWAM_",
+        "type": "image",
+        "metadata": {
+          "hash": "U7CPCj_NX.k6_4pG^PR#Q-MwrWITvgadWAM_",
+          "size": 2474703,
+          "width": 1056,
+          "height": 1536,
+          "nsfwLevelReason": "Knights Vote"
+        },
+        "minor": false,
+        "poi": false,
+        "modelVersionId": 2681234,
+        "availability": "Public",
+        "hasMeta": true,
+        "hasPositivePrompt": true,
+        "onSite": false,
+        "remixOfId": null,
+        "tags": [
+          3350,
+          3629,
+          3639,
+          3641,
+          3642,
+          3800,
+          4148,
+          5109,
+          5110,
+          5133,
+          5228,
+          5248,
+          5262,
+          5780,
+          5787,
+          5942,
+          6924,
+          7229,
+          7903,
+          15772,
+          27182,
+          110749,
+          110750,
+          111763,
+          111805,
+          111951,
+          114770,
+          115460,
+          115513,
+          118100,
+          130116,
+          130729,
+          143276,
+          152340,
+          161876,
+          162128,
+          233029
+        ]
+      }
+    ],
+    "version": {
+      "id": 2681234,
+      "index": 0,
+      "name": "Final",
+      "earlyAccessTimeFrame": 0,
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "createdAt": "2026-02-11T20:48:57.492Z",
+      "trainingStatus": null,
+      "publishedAt": "2026-02-11T21:15:48.459Z",
+      "status": "Published",
+      "availability": "Public",
+      "nsfwLevel": 7,
+      "description": "<p><strong>CyberRealistic SD1.5 ~Final Release~</strong></p><p>This is it.<br />The last and final version of the original CyberRealistic SD1.5 model.<br />This release marks the <strong>end of an era</strong> and the moment where SD1.5 CyberRealistic reaches its ultimate form.</p><p>No more updates.<br />No more revisions.<br />Just the <strong>final, perfected vision</strong> of where it all began.</p><p>Thank you to everyone who supported, tested, created, and believed in CyberRealistic from day one.<br />The era of SD1.5 ends here.<br /><strong>The legacy continues.</strong></p>",
+      "trainedWords": [],
+      "vaeId": null,
+      "covered": false
+    },
+    "rank": {
+      "downloadCount": 575993,
+      "thumbsUpCount": 24145,
+      "thumbsDownCount": 25,
+      "commentCount": 275,
+      "collectedCount": 8852,
+      "tippedAmountCount": 175242
+    },
+    "tags": [
+      5177,
+      5231,
+      5242,
+      1237,
+      172,
+      192,
+      1009,
+      5248
+    ]
+  }
+]

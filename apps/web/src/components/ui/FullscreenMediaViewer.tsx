@@ -62,8 +62,16 @@ export interface FullscreenMediaViewerProps {
 // ============================================================================
 // URL helpers
 // ============================================================================
+
+/** Check if URL is a direct Civitai CDN URL (not a proxy URL). */
+function isCivitaiDirectUrl(url: string): boolean {
+  if (!url) return false
+  if (url.includes('/api/browse/image-proxy')) return false
+  return url.includes('civitai.com')
+}
+
 function getCivitaiVideoUrl(url: string, quality: VideoQuality = 'sd'): string {
-  if (!url?.includes('civitai.com')) return url
+  if (!url || !isCivitaiDirectUrl(url)) return url
   try {
     const urlObj = new URL(url)
     const parts = urlObj.pathname.split('/')
@@ -79,7 +87,7 @@ function getCivitaiVideoUrl(url: string, quality: VideoQuality = 'sd'): string {
 }
 
 function getCivitaiThumbnailUrl(url: string, width = 450): string {
-  if (!url?.includes('civitai.com')) return url
+  if (!url || !isCivitaiDirectUrl(url)) return url
   try {
     const urlObj = new URL(url)
     const parts = urlObj.pathname.split('/')
@@ -96,7 +104,7 @@ function isLikelyVideo(url: string): boolean {
   if (!url) return false
   const lower = url.toLowerCase()
   return /\.(mp4|webm|mov|avi|mkv|gif)(\?|$)/i.test(url) ||
-    (lower.includes('civitai.com') && lower.includes('transcode=true') && !lower.includes('anim=false'))
+    (isCivitaiDirectUrl(lower) && lower.includes('transcode=true') && !lower.includes('anim=false'))
 }
 
 // ============================================================================
@@ -160,12 +168,12 @@ export function FullscreenMediaViewer({
 
   const videoUrl = useMemo(() => {
     if (!currentItem?.url || !isVideo) return ''
-    return currentItem.url.includes('civitai.com') ? getCivitaiVideoUrl(currentItem.url, videoQuality) : currentItem.url
+    return isCivitaiDirectUrl(currentItem.url) ? getCivitaiVideoUrl(currentItem.url, videoQuality) : currentItem.url
   }, [currentItem?.url, isVideo, videoQuality])
 
   const downloadUrl = useMemo(() => {
     if (!currentItem?.url) return ''
-    return currentItem.url.includes('civitai.com') && isVideo ? getCivitaiVideoUrl(currentItem.url, 'fhd') : currentItem.url
+    return isCivitaiDirectUrl(currentItem.url) && isVideo ? getCivitaiVideoUrl(currentItem.url, 'fhd') : currentItem.url
   }, [currentItem?.url, isVideo])
 
   // Check if current item has metadata
@@ -179,7 +187,7 @@ export function FullscreenMediaViewer({
   const getThumbUrl = useCallback((item: MediaItem) => {
     if (!item) return ''
     if (item.thumbnailUrl) return item.thumbnailUrl
-    if (item.url?.includes('civitai.com')) return getCivitaiThumbnailUrl(item.url, 450)
+    if (isCivitaiDirectUrl(item.url || '')) return getCivitaiThumbnailUrl(item.url, 450)
     return item.url || ''
   }, [])
 
@@ -479,7 +487,7 @@ export function FullscreenMediaViewer({
         )
       }
 
-      const vUrl = item.url.includes('civitai.com') ? getCivitaiVideoUrl(item.url, videoQuality) : item.url
+      const vUrl = isCivitaiDirectUrl(item.url) ? getCivitaiVideoUrl(item.url, videoQuality) : item.url
       return (
         <div className="relative w-full h-full flex items-center justify-center select-none">
           <video ref={videoRef} src={vUrl} poster={thumb} loop={isLooping} muted={isMuted} playsInline
@@ -728,7 +736,7 @@ export function FullscreenMediaViewer({
                         const img = e.target as HTMLImageElement
                         // For videos, fallback to transformed thumbnail URL (not raw video URL)
                         // For images, fallback to original URL
-                        const fallbackUrl = itemIsVideo && item.url?.includes('civitai.com')
+                        const fallbackUrl = itemIsVideo && isCivitaiDirectUrl(item.url || '')
                           ? getCivitaiThumbnailUrl(item.url, 450)
                           : item.url
                         if (img.src !== fallbackUrl) img.src = fallbackUrl

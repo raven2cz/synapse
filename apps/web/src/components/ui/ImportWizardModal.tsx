@@ -233,7 +233,7 @@ function collectAllPreviews(versions: ModelVersion[]): VersionPreview[] {
  * @returns Static thumbnail URL
  */
 function getCivitaiThumbnailUrl(url: string): string {
-    if (!url.includes('civitai.com')) return url
+    if (!url || url.includes('/api/browse/image-proxy') || !url.includes('civitai.com')) return url
     const separator = url.includes('?') ? '&' : '?'
     return `${url}${separator}anim=false`
 }
