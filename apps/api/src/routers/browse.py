@@ -526,25 +526,32 @@ async def proxy_image(url: str, request: Request):
 
         client: httpx.AsyncClient = request.app.state.http_client
 
+        # Use short timeout for video URLs — B2 storage returns 401 for
+        # transcoded .mp4 redirects anyway, so fail fast and let the
+        # frontend fall back to the thumbnail (anim=false) which works.
+        is_video = decoded_url.lower().endswith('.mp4')
+        timeout = 5.0 if is_video else 30.0
+
         # Don't auto-follow redirects: Civitai CDN redirects to B2 storage
         # (image-b2.civitai.com) or DO Spaces which reject custom headers.
-        resp = await client.get(decoded_url, headers=headers, follow_redirects=False)
+        resp = await client.get(decoded_url, headers=headers, follow_redirects=False, timeout=timeout)
 
         # Handle redirect manually with minimal headers for external storage
         if resp.status_code in (301, 302, 307, 308):
             redirect_url = resp.headers.get('location', '')
             if redirect_url:
-                resp = await client.get(redirect_url, headers={})
+                resp = await client.get(redirect_url, headers={}, timeout=timeout)
 
         # Retry once on transient server errors (Civitai CDN 500/503)
-        if resp.status_code in (500, 502, 503):
+        # Skip retry for video URLs (they fail due to B2 auth, not transient)
+        if not is_video and resp.status_code in (500, 502, 503):
             import asyncio
             await asyncio.sleep(1)
-            resp = await client.get(decoded_url, headers=headers, follow_redirects=False)
+            resp = await client.get(decoded_url, headers=headers, follow_redirects=False, timeout=timeout)
             if resp.status_code in (301, 302, 307, 308):
                 redirect_url = resp.headers.get('location', '')
                 if redirect_url:
-                    resp = await client.get(redirect_url, headers={})
+                    resp = await client.get(redirect_url, headers={}, timeout=timeout)
 
         resp.raise_for_status()
 
