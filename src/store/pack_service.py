@@ -366,35 +366,20 @@ class PackService:
         all_versions = model_data.get("modelVersions", [])
 
         if download_config.download_from_all_versions:
-            try:
-                # Fetch detailed data for ALL versions to get complete image metadata
-                seen_urls: set = set()
-                for ver in all_versions:
-                    ver_id = ver.get("id")
-                    if ver_id:
-                        try:
-                            detailed_ver = self.civitai.get_model_version(ver_id)
-                            for img in detailed_ver.get("images", []):
-                                img_url = img.get("url")
-                                if img_url and img_url not in seen_urls:
-                                    seen_urls.add(img_url)
-                                    detailed_version_images.append(img)
-                        except Exception as ver_err:
-                            logger.debug(f"[PackService] Failed to fetch version {ver_id}: {ver_err}")
-                logger.info(f"[PackService] Collected {len(detailed_version_images)} unique previews from {len(all_versions)} versions")
-            except Exception as e:
-                logger.warning(f"[PackService] Failed to fetch detailed versions: {e}")
+            # Use images already present in model_data (no extra API calls needed).
+            # get_model() returns modelVersions[].images with full metadata.
+            seen_urls: set = set()
+            for ver in all_versions:
+                for img in ver.get("images", []):
+                    img_url = img.get("url")
+                    if img_url and img_url not in seen_urls:
+                        seen_urls.add(img_url)
+                        detailed_version_images.append(img)
+            logger.info(f"[PackService] Collected {len(detailed_version_images)} unique previews from {len(all_versions)} versions")
         else:
-            # Only use images from selected version
-            logger.info(f"[PackService] Collecting previews only from selected version {version_id}")
-            # We already have version_data, use its images (but need to fetch detailed version for full metadata)
-            try:
-                detailed_ver = self.civitai.get_model_version(version_id)
-                detailed_version_images = detailed_ver.get("images", [])
-                logger.info(f"[PackService] Collected {len(detailed_version_images)} previews from version {version_id}")
-            except Exception as e:
-                logger.warning(f"[PackService] Failed to fetch detailed version {version_id}: {e}")
-                detailed_version_images = version_data.get("images", [])
+            # Only use images from selected version (already fetched)
+            detailed_version_images = version_data.get("images", [])
+            logger.info(f"[PackService] Collected {len(detailed_version_images)} previews from version {version_id}")
 
         # Determine asset type
         civitai_type = model_data.get("type", "LORA")
