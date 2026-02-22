@@ -1286,9 +1286,17 @@ def list_packs(
 
             # 1. Check for user-selected cover_url
             if pack.cover_url:
+                # Normalize cover_url: strip proxy wrapper if present
+                cover_cmp = pack.cover_url
+                if '/api/browse/image-proxy' in cover_cmp:
+                    from urllib.parse import urlparse as _urlparse, parse_qs as _parse_qs
+                    _qs = _parse_qs(_urlparse(cover_cmp).query)
+                    if 'url' in _qs:
+                        cover_cmp = _qs['url'][0]
+
                 # Find the matching preview by URL and use its filename
                 for preview in pack.previews:
-                    if preview.url == pack.cover_url and preview.filename:
+                    if preview.url == cover_cmp and preview.filename:
                         local_path = previews_dir / preview.filename
                         if local_path.exists():
                             thumbnail = f"/previews/{name}/resources/previews/{preview.filename}"
@@ -1636,9 +1644,17 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
         # Transform cover_url to match preview URL format (/previews/ instead of /packs/)
         cover_url = None
         if pack.cover_url:
+            # Normalize: strip proxy wrapper if present
+            cover_cmp = pack.cover_url
+            if '/api/browse/image-proxy' in cover_cmp:
+                from urllib.parse import urlparse as _urlparse, parse_qs as _parse_qs
+                _qs = _parse_qs(_urlparse(cover_cmp).query)
+                if 'url' in _qs:
+                    cover_cmp = _qs['url'][0]
+
             # Find matching preview and use its URL (which uses /previews/ format)
             for p in previews:
-                if pack.cover_url and p["filename"] in pack.cover_url:
+                if p["filename"] in cover_cmp:
                     cover_url = p["url"]
                     break
 
