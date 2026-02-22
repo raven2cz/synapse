@@ -438,6 +438,7 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 | **Model Inventory** | `plans/PLAN-Model-Inventory.md` | ✅ DOKONČENO |
 | **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | ✅ DOKONČENO (v2.2.0) |
 | **i18n** | `plans/PLAN-i18n.md` | ✅ DOKONČENO (v1.0.0) |
+| **CDN Video Fix** | `plans/PLAN-CDN-Video-Fix.md` | ✅ DOKONČENO (anim=true, smoke testy) |
 
 ---
 

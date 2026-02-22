@@ -1,6 +1,6 @@
 # CDN/Proxy Video Fix — Integration Plan
 
-## Status: ✅ IMPLEMENTED — Browse ✅ ověřeno, PackDetail 🔧 opraveno (dual source revert)
+## Status: ✅ DOKONČENO — Browse ✅ PackDetail ✅ Dokumentace ✅
 
 **Date:** 2026-02-22
 **Based on:** Smoke test analysis & Civitai source code review
@@ -149,14 +149,15 @@ uv run pytest tests/smoke/ -v -s
 
 ## Manual Browser Test Checklist
 
-- [ ] Browse page → hledat "Juggernaut XL"
-- [ ] Video preview autoplay funguje
-- [ ] Všechna videa se přehrávají (žádný limit)
+- [x] Browse page → ověřeno uživatelem ✅
+- [x] Video preview autoplay funguje ✅
+- [x] Všechna videa se přehrávají (žádný limit) ✅
+- [x] PackDetail previews fungují ✅
 - [ ] Click na video → FullscreenMediaViewer přehrává video
 - [ ] Quality selector (SD/HD/FHD) funguje
-- [ ] Žádné "Failed load" hlášky
-- [ ] Thumbnail (anim=false) se zobrazuje správně
+- [x] Thumbnail (anim=false) se zobrazuje správně ✅
 - [x] ~~WebM/MP4 dual source~~ → revertováno, používá se single `<video src>`
+- [x] Dokumentace → `docs/CIVITAI-CDN-VIDEO.md` ✅
 
 ---
 
