@@ -18,6 +18,7 @@ import { BreathingOrb } from '@/components/ui/BreathingOrb'
 import type { MediaType } from '@/lib/media'
 import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
 import { getAdapter, isProviderAvailable, getDefaultProvider } from '@/lib/api/searchAdapters'
+import { fromProxyUrl } from '@/lib/utils/civitaiTransformers'
 
 interface ModelPreview {
   url: string
@@ -486,7 +487,7 @@ export function BrowsePage() {
                   download_videos: options.downloadVideos,
                   include_nsfw: options.includeNsfw,
                   download_from_all_versions: options.downloadFromAllVersions,
-                  thumbnail_url: thumbnailUrl,
+                  thumbnail_url: thumbnailUrl ? fromProxyUrl(thumbnailUrl) : thumbnailUrl,
                   pack_name: customPackName,  // Custom pack name if user edited it
                 }),
               })

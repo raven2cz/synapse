@@ -42,6 +42,20 @@ export function toProxyUrl(url: string): string {
   return `/api/browse/image-proxy?url=${encodeURIComponent(url)}`
 }
 
+/**
+ * Extract original Civitai CDN URL from a proxy-wrapped URL.
+ * Inverse of toProxyUrl(). Returns the URL unchanged if not proxied.
+ */
+export function fromProxyUrl(url: string): string {
+  if (!url || !url.includes('/api/browse/image-proxy')) return url
+  try {
+    const u = new URL(url, 'http://localhost')
+    return u.searchParams.get('url') || url
+  } catch {
+    return url
+  }
+}
+
 // =============================================================================
 // Media Detection (MUST match backend!)
 // =============================================================================

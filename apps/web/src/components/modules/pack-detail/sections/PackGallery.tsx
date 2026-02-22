@@ -61,9 +61,6 @@ export interface PackGalleryProps {
 // Component
 // =============================================================================
 
-const INITIAL_PAGE_SIZE = 24
-const PAGE_SIZE = 24
-
 export function PackGallery({
   previews,
   onPreviewClick,
@@ -74,7 +71,6 @@ export function PackGallery({
   const { t } = useTranslation()
   const [cardSize, setCardSize] = useState<CardSize>(initialSize)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [visibleCount, setVisibleCount] = useState(INITIAL_PAGE_SIZE)
 
   // Zoom functions
   const zoomIn = () => {
@@ -214,7 +210,7 @@ export function PackGallery({
       >
         {/* Grid - uses constants for responsive sizing */}
         <div className={clsx('grid', GRID_CLASSES[cardSize])}>
-          {previews.slice(0, visibleCount).map((preview, idx) => (
+          {previews.map((preview, idx) => (
           <div
             key={idx}
             className={clsx(
@@ -279,24 +275,7 @@ export function PackGallery({
         ))}
         </div>
 
-        {/* Load More button */}
-        {visibleCount < previews.length && (
-          <div className="flex justify-center mt-4">
-            <button
-              onClick={() => setVisibleCount(c => c + PAGE_SIZE)}
-              className={clsx(
-                'px-6 py-2.5 rounded-xl',
-                'text-sm font-medium text-text-secondary',
-                'bg-slate-dark/80 hover:bg-slate-mid/50',
-                'border border-slate-mid/50 hover:border-synapse/40',
-                'transition-all duration-200',
-                'hover:text-synapse'
-              )}
-            >
-              {t('pack.gallery.loadMore', { remaining: previews.length - visibleCount })}
-            </button>
-          </div>
-        )}
+
       </div>
       {/* Fade overlay when collapsed to indicate more content */}
       <div
