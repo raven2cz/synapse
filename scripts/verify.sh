@@ -40,7 +40,7 @@ QUICK_MODE=false
 VERBOSE=false
 
 # Test filters
-PYTEST_MARKERS=""
+PYTEST_MARKERS="not smoke"
 PYTEST_PATHS="tests/"
 
 # ============================================================================
@@ -68,6 +68,8 @@ show_help() {
     echo "  --integration     Run only integration tests (tests/integration/)"
     echo "  --store           Run only store tests (tests/store/)"
     echo "  --lint            Run only lint/architecture tests (tests/lint/)"
+    echo "  --smoke           Run offline smoke tests (CDN/proxy pipeline)"
+    echo "  --smoke-live      Run all smoke tests including live CDN"
     echo "  --no-slow         Exclude tests marked @pytest.mark.slow"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
@@ -107,7 +109,7 @@ while [[ $# -gt 0 ]]; do
         --quick|-q)
             QUICK_MODE=true
             RUN_BUILD=false
-            PYTEST_MARKERS="not slow"
+            PYTEST_MARKERS="not slow and not smoke"
             shift
             ;;
         --verbose|-v)
@@ -149,6 +151,24 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lint)
             PYTEST_PATHS="tests/lint/"
+            shift
+            ;;
+        --smoke)
+            PYTEST_PATHS="tests/smoke/"
+            PYTEST_MARKERS="not live"
+            RUN_BACKEND=true
+            RUN_FRONTEND=false
+            RUN_TYPES=false
+            RUN_BUILD=false
+            shift
+            ;;
+        --smoke-live)
+            PYTEST_PATHS="tests/smoke/"
+            PYTEST_MARKERS=""
+            RUN_BACKEND=true
+            RUN_FRONTEND=false
+            RUN_TYPES=false
+            RUN_BUILD=false
             shift
             ;;
         --no-slow)

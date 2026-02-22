@@ -56,7 +56,7 @@ function getCivitaiThumbnailUrl(url: string, width: number = 450): string {
       }
     }
 
-    const newParams = `anim=false,transcode=true,width=${width},optimized=true`
+    const newParams = `anim=false,transcode=true,width=${width}`
 
     if (paramsIndex >= 0) {
       pathParts[paramsIndex] = newParams
@@ -92,7 +92,7 @@ function getCivitaiVideoUrl(url: string, width: number = 450): string {
       }
     }
 
-    const newParams = `transcode=true,width=${width},optimized=true`
+    const newParams = `anim=true,transcode=true,width=${width}`
 
     if (paramsIndex >= 0) {
       pathParts[paramsIndex] = newParams
@@ -430,10 +430,10 @@ export function MediaPreview({
       )}
 
       {/* Video Element - Only rendered when needed */}
+      {/* Uses dual <source> tags (WebM + MP4) like Civitai's EdgeVideo for better browser compatibility */}
       {isVideo && !videoError && (
         <video
           ref={videoRef}
-          src={isVideoVisible ? videoUrl : undefined}
           className={clsx(
             'absolute inset-0 w-full h-full object-cover',
             'transition-all duration-500 ease-out',
@@ -443,11 +443,17 @@ export function MediaPreview({
           loop
           muted={isMuted}
           playsInline
-          autoPlay={autoPlay && isVideoVisible}
           preload={isVideoVisible || forceVideoDisplay ? "auto" : "none"}
           onLoadedData={handleVideoLoadedData}
           onError={handleVideoError}
-        />
+        >
+          {isVideoVisible && videoUrl && (
+            <>
+              <source src={videoUrl.replace(/\.mp4$/i, '.webm')} type="video/webm" />
+              <source src={videoUrl} type="video/mp4" />
+            </>
+          )}
+        </video>
       )}
 
       {/* Loading placeholder - Shown when image loading or video fallback loading */}

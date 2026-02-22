@@ -76,7 +76,7 @@ function getCivitaiVideoUrl(url: string, quality: VideoQuality = 'sd'): string {
     const urlObj = new URL(url)
     const parts = urlObj.pathname.split('/')
     const idx = parts.findIndex(p => p.includes('=') || p.startsWith('width'))
-    const params = `transcode=true,width=${QUALITY_WIDTHS[quality]},optimized=true`
+    const params = `anim=true,transcode=true,width=${QUALITY_WIDTHS[quality]}`
     if (idx >= 0) parts[idx] = params
     else if (parts.length >= 3) parts.splice(-1, 0, params)
     const lastIdx = parts.length - 1
@@ -92,7 +92,7 @@ function getCivitaiThumbnailUrl(url: string, width = 450): string {
     const urlObj = new URL(url)
     const parts = urlObj.pathname.split('/')
     const idx = parts.findIndex(p => p.includes('=') || p.startsWith('width'))
-    const params = `anim=false,transcode=true,width=${width},optimized=true`
+    const params = `anim=false,transcode=true,width=${width}`
     if (idx >= 0) parts[idx] = params
     else if (parts.length >= 3) parts.splice(-1, 0, params)
     urlObj.pathname = parts.join('/')
@@ -490,12 +490,15 @@ export function FullscreenMediaViewer({
       const vUrl = isCivitaiDirectUrl(item.url) ? getCivitaiVideoUrl(item.url, videoQuality) : item.url
       return (
         <div className="relative w-full h-full flex items-center justify-center select-none">
-          <video ref={videoRef} src={vUrl} poster={thumb} loop={isLooping} muted={isMuted} playsInline
+          <video ref={videoRef} poster={thumb} loop={isLooping} muted={isMuted} playsInline
             className={clsx('transition-all duration-300', getVideoClass())} onClick={togglePlay}
             onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)}
             onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
             onDurationChange={(e) => setDuration(e.currentTarget.duration)}
-            onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onLoadedData={() => setIsBuffering(false)} />
+            onWaiting={() => setIsBuffering(true)} onCanPlay={() => setIsBuffering(false)} onLoadedData={() => setIsBuffering(false)}>
+            <source src={vUrl.replace(/\.mp4$/i, '.webm')} type="video/webm" />
+            <source src={vUrl} type="video/mp4" />
+          </video>
           {isBuffering && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Loader2 className="w-12 h-12 text-white animate-spin" /></div>}
         </div>
       )

@@ -293,7 +293,7 @@ def get_video_thumbnail_url(
 
     Example:
         >>> get_video_thumbnail_url("https://image.civitai.com/.../UUID/transcode=true/video.jpeg")
-        'https://image.civitai.com/.../UUID/anim=false,transcode=true,width=450,optimized=true/video.jpeg'
+        'https://image.civitai.com/.../UUID/anim=false,transcode=true,width=450/video.jpeg'
     """
     if not url:
         return url
@@ -326,7 +326,7 @@ def get_video_thumbnail_url(
             break
 
     # Build new params string for static thumbnail
-    new_params = f"anim=false,transcode=true,width={width},optimized=true"
+    new_params = f"anim=false,transcode=true,width={width}"
 
     if param_idx >= 0:
         # Replace existing params

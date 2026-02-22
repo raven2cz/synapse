@@ -226,8 +226,10 @@ function buildCivitaiImageUrl(
   }
 
   // Build params based on type
+  // CRITICAL: Videos MUST have anim=true for Cloudflare to serve directly.
+  // Without it, CDN redirects to B2 storage → 401 auth failure.
   const params = isVideo
-    ? `transcode=true,width=${width}`
+    ? `anim=true,transcode=true,width=${width}`
     : `width=${width}`
 
   return `${cdnBase}/${uuid}/${params}/${name}`
@@ -419,8 +421,9 @@ function buildMeilisearchImageUrl(
 
   // Build params - Civitai uses comma-separated path params, NOT query strings
   // Example: /uuid/width=450/filename.jpeg
+  // CRITICAL: Videos MUST have anim=true for Cloudflare to serve directly.
   const params = isVideo
-    ? `transcode=true,width=${width}`
+    ? `anim=true,transcode=true,width=${width}`
     : `width=${width}`
 
   return `${cdnBase}/${uuid}/${params}/${name}`

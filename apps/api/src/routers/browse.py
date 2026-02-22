@@ -526,11 +526,10 @@ async def proxy_image(url: str, request: Request):
 
         client: httpx.AsyncClient = request.app.state.http_client
 
-        # Use short timeout for video URLs — B2 storage returns 401 for
-        # transcoded .mp4 redirects anyway, so fail fast and let the
-        # frontend fall back to the thumbnail (anim=false) which works.
+        # With anim=true, video URLs serve directly from Cloudflare (no B2 redirect).
+        # Use uniform 30s timeout for both images and videos.
         is_video = decoded_url.lower().endswith('.mp4')
-        timeout = 5.0 if is_video else 30.0
+        timeout = 30.0
 
         # Don't auto-follow redirects: Civitai CDN redirects to B2 storage
         # (image-b2.civitai.com) or DO Spaces which reject custom headers.

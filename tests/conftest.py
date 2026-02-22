@@ -72,6 +72,15 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "database: marks tests requiring database setup"
     )
+    config.addinivalue_line(
+        "markers", "smoke: CDN/proxy smoke tests"
+    )
+    config.addinivalue_line(
+        "markers", "live: requires live Civitai CDN network access"
+    )
+    config.addinivalue_line(
+        "markers", "proxy: requires proxy server or TestClient"
+    )
 
 
 # =============================================================================
@@ -191,3 +200,5 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.integration)
         elif "e2e" in parts:
             item.add_marker(pytest.mark.e2e)
+        elif "smoke" in parts:
+            item.add_marker(pytest.mark.smoke)
