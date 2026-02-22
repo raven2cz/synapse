@@ -522,22 +522,29 @@ async def proxy_image(url: str, request: Request):
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": "https://civitai.com/",
         }
+        minimal_headers = {"User-Agent": headers["User-Agent"]}
 
         client: httpx.AsyncClient = request.app.state.http_client
 
         # Don't auto-follow redirects: Civitai CDN redirects to B2 storage
-        # (image-b2.civitai.com) which returns 401 when it receives custom
-        # headers like Referer and Accept that are meant for the CDN.
+        # (image-b2.civitai.com) or DO Spaces which reject custom headers.
         resp = await client.get(decoded_url, headers=headers, follow_redirects=False)
 
-        # Handle redirect manually with minimal headers for B2 storage
+        # Handle redirect manually with minimal headers for external storage
         if resp.status_code in (301, 302, 307, 308):
             redirect_url = resp.headers.get('location', '')
             if redirect_url:
-                logger.debug(f"Image proxy redirect: {parsed.netloc} -> {redirect_url[:80]}...")
-                resp = await client.get(redirect_url, headers={
-                    "User-Agent": headers["User-Agent"],
-                })
+                resp = await client.get(redirect_url, headers=minimal_headers)
+
+        # Retry once on transient server errors (Civitai CDN 500/503)
+        if resp.status_code in (500, 502, 503):
+            import asyncio
+            await asyncio.sleep(1)
+            resp = await client.get(decoded_url, headers=headers, follow_redirects=False)
+            if resp.status_code in (301, 302, 307, 308):
+                redirect_url = resp.headers.get('location', '')
+                if redirect_url:
+                    resp = await client.get(redirect_url, headers=minimal_headers)
 
         resp.raise_for_status()
 
@@ -555,10 +562,10 @@ async def proxy_image(url: str, request: Request):
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
     except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to proxy image (HTTP {e.response.status_code}): {decoded_url[:100]}")
-        raise HTTPException(status_code=502, detail="Failed to fetch image")
+        logger.warning(f"Image proxy failed (HTTP {e.response.status_code}): {decoded_url[:100]}")
+        raise HTTPException(status_code=502, detail=f"Upstream error {e.response.status_code}")
     except httpx.HTTPError as e:
-        logger.error(f"Failed to proxy image: {e}")
+        logger.warning(f"Image proxy failed: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")
 
 
