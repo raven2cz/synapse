@@ -534,7 +534,7 @@ async def proxy_image(url: str, request: Request):
         if resp.status_code in (301, 302, 307, 308):
             redirect_url = resp.headers.get('location', '')
             if redirect_url:
-                resp = await client.get(redirect_url, headers=minimal_headers)
+                resp = await client.get(redirect_url, headers={})
 
         # Retry once on transient server errors (Civitai CDN 500/503)
         if resp.status_code in (500, 502, 503):
@@ -544,7 +544,7 @@ async def proxy_image(url: str, request: Request):
             if resp.status_code in (301, 302, 307, 308):
                 redirect_url = resp.headers.get('location', '')
                 if redirect_url:
-                    resp = await client.get(redirect_url, headers=minimal_headers)
+                    resp = await client.get(redirect_url, headers={})
 
         resp.raise_for_status()
 

@@ -418,10 +418,10 @@ function buildMeilisearchImageUrl(
   const name = (img.name as string) || (isVideo ? 'video.mp4' : 'image.jpeg')
 
   // Build params - Civitai uses comma-separated path params, NOT query strings
-  // Example: /uuid/width=450,optimized=true/filename.jpeg
+  // Example: /uuid/width=450/filename.jpeg
   const params = isVideo
-    ? `transcode=true,width=${width},optimized=true`
-    : `width=${width},optimized=true`
+    ? `transcode=true,width=${width}`
+    : `width=${width}`
 
   return `${cdnBase}/${uuid}/${params}/${name}`
 }
