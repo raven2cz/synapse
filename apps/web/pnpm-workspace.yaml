@@ -1,0 +1,3 @@
+overrides:
+  '@avatar-engine/core': link:../../../avatar-engine/packages/core
+  '@avatar-engine/react': link:../../../avatar-engine/packages/react

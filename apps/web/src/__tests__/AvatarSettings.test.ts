@@ -241,21 +241,28 @@ describe('AvatarSettings', () => {
     it('should show error when both queries fail', () => {
       const isErrorConfig = true
       const isErrorProviders = true
-      const isError = isErrorConfig && isErrorProviders
+      const isError = isErrorConfig || isErrorProviders
       expect(isError).toBe(true)
     })
 
-    it('should not show error if config succeeds but providers fail', () => {
+    it('should show error if config succeeds but providers fail', () => {
       const isErrorConfig = false
       const isErrorProviders = true
-      const isError = isErrorConfig && isErrorProviders
-      expect(isError).toBe(false)
+      const isError = isErrorConfig || isErrorProviders
+      expect(isError).toBe(true)
+    })
+
+    it('should show error if providers succeed but config fails', () => {
+      const isErrorConfig = true
+      const isErrorProviders = false
+      const isError = isErrorConfig || isErrorProviders
+      expect(isError).toBe(true)
     })
 
     it('should not show error when both succeed', () => {
       const isErrorConfig = false
       const isErrorProviders = false
-      const isError = isErrorConfig && isErrorProviders
+      const isError = isErrorConfig || isErrorProviders
       expect(isError).toBe(false)
     })
   })

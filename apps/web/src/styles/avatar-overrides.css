@@ -1,0 +1,28 @@
+/**
+ * CSS Bridge: Synapse colors → Avatar Engine CSS custom properties
+ *
+ * Synapse and avatar-engine share the same color palette.
+ * These variables ensure avatar-engine components render
+ * with Synapse's exact color values.
+ */
+
+:root {
+  /* Accent colors */
+  --ae-accent-rgb: 99 102 241;         /* synapse #6366f1 */
+  --ae-pulse-rgb: 139 92 246;          /* pulse #8b5cf6 */
+  --ae-neural-rgb: 6 182 212;          /* neural #06b6d4 */
+
+  /* Background surfaces */
+  --ae-bg-obsidian-rgb: 10 10 15;      /* obsidian */
+  --ae-bg-darker-rgb: 15 15 23;        /* slate-darker */
+  --ae-bg-deep-rgb: 18 18 26;          /* slate-deep */
+  --ae-bg-base-rgb: 19 19 27;          /* slate-base */
+  --ae-bg-dark-rgb: 22 22 31;          /* slate-dark */
+  --ae-bg-mid-rgb: 26 26 46;           /* slate-mid */
+  --ae-bg-light-rgb: 42 42 66;         /* slate-light */
+
+  /* Text */
+  --ae-text-primary-rgb: 248 250 252;
+  --ae-text-secondary-rgb: 148 163 184;
+  --ae-text-muted-rgb: 100 116 139;
+}

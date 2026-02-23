@@ -1,69 +1,61 @@
 /**
- * AvatarProvider — Context provider for avatar-engine integration.
+ * AvatarProvider — Context provider wrapping the real @avatar-engine/react hooks.
  *
- * Wraps the avatar-engine React hooks when the library is available.
- * When not available, provides a fallback context with `available: false`
- * so downstream components can render appropriate UI (setup guides, etc.)
+ * Calls useAvatarChat() ONCE at app root → single persistent WebSocket connection.
+ * All chat state (messages, connection, provider, permissions) flows down via context.
+ * Provides sendWithContext() that prepends page context to messages.
  *
  * Usage:
  *   <AvatarProvider>
- *     <App />
+ *     <LayoutInner />    ← uses useAvatar() to get chat + providers + compactRef
  *   </AvatarProvider>
- *
- * In components:
- *   const { available, state } = useAvatar()
  */
 
-import { createContext, useContext, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getAvatarStatus, avatarKeys, type AvatarStatus } from '../../lib/avatar/api'
+import { createContext, useContext, useMemo, useRef, useCallback, type ReactNode } from 'react'
+import { useAvatarChat, useAvailableProviders } from '@avatar-engine/react'
+import type { UseAvatarChatReturn } from '@avatar-engine/react'
+import { usePageContextStore } from '../../stores/pageContextStore'
+import { buildContextPayload, formatContextForMessage } from '../../lib/avatar/context'
 
 interface AvatarContextValue {
-  /** Whether the avatar engine is fully ready (engine + provider + enabled) */
-  available: boolean
-  /** Current state: ready | no_provider | no_engine | setup_required | disabled | loading */
-  state: AvatarStatus['state'] | 'loading' | 'error'
-  /** Full status response from backend */
-  status: AvatarStatus | null
-  /** Whether we're still loading the initial status */
-  isLoading: boolean
+  chat: UseAvatarChatReturn
+  /** sendMessage with page context prefix injected automatically */
+  sendWithContext: (text: string) => void
+  providers: Set<string> | null
+  compactRef: React.MutableRefObject<(() => void) | null>
 }
 
-const AvatarContext = createContext<AvatarContextValue>({
-  available: false,
-  state: 'loading',
-  status: null,
-  isLoading: true,
-})
+const AvatarContext = createContext<AvatarContextValue | null>(null)
 
-export function useAvatar() {
-  return useContext(AvatarContext)
-}
+export function AvatarProvider({ children }: { children: ReactNode }) {
+  const wsUrl = useMemo(() => {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${location.host}/api/avatar/ws`
+  }, [])
 
-interface AvatarProviderProps {
-  children: ReactNode
-}
+  const chat = useAvatarChat(wsUrl, { apiBase: '/api/avatar' })
+  const providers = useAvailableProviders()
+  const compactRef = useRef<(() => void) | null>(null)
 
-export function AvatarProvider({ children }: AvatarProviderProps) {
-  const { data: status, isLoading, isError } = useQuery({
-    queryKey: avatarKeys.status(),
-    queryFn: getAvatarStatus,
-    staleTime: 60_000, // Re-check every minute
-    retry: 1,
-    // Don't refetch aggressively — status changes rarely
-    refetchOnWindowFocus: false,
-  })
-
-  const value: AvatarContextValue = {
-    available: status?.available ?? false,
-    state: isLoading ? 'loading' : isError ? 'error' : (status?.state ?? 'disabled'),
-    status: status ?? null,
-    isLoading,
-  }
+  // Wrap sendMessage to prepend page context
+  const sendWithContext = useCallback((text: string) => {
+    const { current, previous } = usePageContextStore.getState()
+    // Use previous page context (where user came from) — more useful for avatar
+    const payload = buildContextPayload(previous ?? current)
+    const prefix = formatContextForMessage(payload)
+    const fullMessage = prefix ? `${prefix}\n\n${text}` : text
+    chat.sendMessage(fullMessage)
+  }, [chat.sendMessage])
 
   return (
-    <AvatarContext.Provider value={value}>
+    <AvatarContext.Provider value={{ chat, sendWithContext, providers, compactRef }}>
       {children}
     </AvatarContext.Provider>
   )
+}
+
+export function useAvatar() {
+  const ctx = useContext(AvatarContext)
+  if (!ctx) throw new Error('useAvatar must be used within AvatarProvider')
+  return ctx
 }

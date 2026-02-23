@@ -10,7 +10,6 @@ import { forwardRef, useImperativeHandle, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
-  Sparkles,
   Bot,
   Shield,
   Zap,
@@ -21,19 +20,22 @@ import {
   XCircle,
   AlertCircle,
   Info,
-  Users,
 } from 'lucide-react'
 import clsx from 'clsx'
+import { AvatarBust, AvatarPicker, SafetyModeSelector } from '@avatar-engine/react'
+import { AVATARS, getAvatarById, DEFAULT_AVATAR_ID, LS_SELECTED_AVATAR } from '@avatar-engine/core'
+import type { SafetyMode } from '@avatar-engine/core'
+import { useAvatar } from '../../avatar/AvatarProvider'
 import {
   getAvatarConfig,
   getAvatarProviders,
   getAvatarAvatars,
+  getAvatarStatus,
   avatarKeys,
   type AvatarConfig,
-  type AvatarProvider,
+  type AvatarProvider as AvatarProviderType,
   type AvatarAvatars,
 } from '../../../lib/avatar/api'
-import { useAvatar } from '../../avatar/AvatarProvider'
 
 // =============================================================================
 // Types
@@ -82,26 +84,6 @@ function StatCard({ label, value, color = 'synapse', icon }: StatCardProps) {
         <div className={clsx('text-lg font-bold', STAT_COLORS[color])}>{value}</div>
       </div>
     </div>
-  )
-}
-
-// =============================================================================
-// Safety Badge
-// =============================================================================
-
-function SafetyBadge({ mode }: { mode: string }) {
-  const { t } = useTranslation()
-  const styles = {
-    safe: { bg: 'bg-success/10 border-success/30', text: 'text-success' },
-    ask: { bg: 'bg-amber-400/10 border-amber-400/30', text: 'text-amber-400' },
-    unrestricted: { bg: 'bg-red-400/10 border-red-400/30', text: 'text-red-400' },
-  }
-  const style = styles[mode as keyof typeof styles] || styles.safe
-
-  return (
-    <span className={clsx('px-3 py-1 rounded-lg text-xs font-semibold border', style.bg, style.text)}>
-      {t(`settingsAvatar.safety.${mode}`, mode)}
-    </span>
   )
 }
 
@@ -157,8 +139,20 @@ function ProviderMiniCard({
 
 export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSettings(_props, ref) {
   const { t } = useTranslation()
-  const { status } = useAvatar()
+  const { chat } = useAvatar()
   const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
+    try { return localStorage.getItem(LS_SELECTED_AVATAR) || DEFAULT_AVATAR_ID } catch { return DEFAULT_AVATAR_ID }
+  })
+  const selectedAvatar = getAvatarById(selectedAvatarId)
+
+  const { data: status } = useQuery<import('../../../lib/avatar/api').AvatarStatus>({
+    queryKey: avatarKeys.status(),
+    queryFn: getAvatarStatus,
+    staleTime: 60_000,
+    retry: 1,
+  })
 
   const { data: config, isLoading: isLoadingConfig, isError: isErrorConfig } = useQuery<AvatarConfig>({
     queryKey: avatarKeys.config(),
@@ -167,7 +161,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
     retry: 1,
   })
 
-  const { data: providers, isLoading: isLoadingProviders, isError: isErrorProviders } = useQuery<AvatarProvider[]>({
+  const { data: providers, isLoading: isLoadingProviders, isError: isErrorProviders } = useQuery<AvatarProviderType[]>({
     queryKey: avatarKeys.providers(),
     queryFn: getAvatarProviders,
     staleTime: 60_000,
@@ -188,7 +182,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
   }), [])
 
   const isLoading = isLoadingConfig || isLoadingProviders
-  const isError = isErrorConfig && isErrorProviders
+  const isError = isErrorConfig || isErrorProviders
 
   if (isLoading) {
     return (
@@ -269,14 +263,13 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div
-              className={clsx(
-                'w-12 h-12 rounded-xl flex items-center justify-center',
-                'bg-gradient-to-br from-purple-500/20 to-synapse/20',
-                'border border-purple-500/30 shadow-lg shadow-purple-500/20'
-              )}
-            >
-              <Sparkles className="w-6 h-6 text-purple-400" />
+            <div className="w-12 h-16 rounded-xl overflow-hidden border border-purple-500/30 shadow-lg shadow-purple-500/20 bg-gradient-to-br from-purple-500/10 to-synapse/10">
+              <AvatarBust
+                avatar={selectedAvatar}
+                engineState={chat.engineState}
+                hasText={false}
+                avatarBasePath="/avatars"
+              />
             </div>
             <div>
               <h2 className="text-xl font-bold text-text-primary">
@@ -380,17 +373,16 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
               'bg-slate-dark/30 border border-slate-light/20'
             )}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-sm text-text-primary font-medium">
-                  {t('settingsAvatar.currentSafety')}
-                </div>
-                <div className="text-xs text-text-muted mt-1">
-                  {t(`settingsAvatar.safety.${config?.safety || 'safe'}Desc`)}
-                </div>
-              </div>
-              <SafetyBadge mode={config?.safety || 'safe'} />
+            <div className="pointer-events-none">
+              <SafetyModeSelector
+                value={(config?.safety || 'safe') as SafetyMode}
+                onChange={() => {}}
+                provider={config?.provider}
+              />
             </div>
+            <p className="text-xs text-text-muted mt-2">
+              {t('settingsAvatar.safetyConfigHint')}
+            </p>
           </div>
         </div>
 
@@ -433,7 +425,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
 
             {skillsExpanded && skills && (
               <div className="px-4 pb-4 border-t border-slate-light/10">
-                {skills.builtin.length > 0 && (
+                {skills.builtin?.length > 0 && (
                   <div className="mt-3">
                     <div className="text-xs text-text-muted font-semibold uppercase mb-2">
                       {t('settingsAvatar.builtinLabel')}
@@ -450,7 +442,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
                     </div>
                   </div>
                 )}
-                {skills.custom.length > 0 && (
+                {skills.custom?.length > 0 && (
                   <div className="mt-3">
                     <div className="text-xs text-purple-400 font-semibold uppercase mb-2">
                       {t('settingsAvatar.customLabel')}
@@ -481,44 +473,55 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
 
           <div
             className={clsx(
-              'p-4 rounded-xl',
+              'p-4 rounded-xl relative',
               'bg-slate-dark/30 border border-slate-light/20'
             )}
           >
-            <div className="flex items-center gap-2 mb-3">
-              <Users className="w-4 h-4 text-text-muted" />
-              <span className="text-sm text-text-primary">
-                {t('settingsAvatar.builtinAvatars')}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(avatars?.builtin || []).map((a) => (
-                <span
-                  key={a.id}
-                  className="px-3 py-1.5 rounded-lg bg-slate-light/10 text-xs text-text-secondary border border-slate-light/20"
-                >
-                  {a.name}
-                </span>
-              ))}
-            </div>
-            {(avatars?.custom?.length || 0) > 0 && (
-              <div className="mt-3">
-                <div className="text-xs text-purple-400 font-semibold mb-2">
-                  {t('settingsAvatar.customLabel')}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {avatars!.custom.map((a) => (
-                    <span
-                      key={a.id}
-                      className="px-3 py-1.5 rounded-lg bg-purple-500/10 text-xs text-purple-400 border border-purple-500/20"
-                    >
-                      {a.name}
-                    </span>
-                  ))}
-                </div>
+            {/* Avatar preview + info */}
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-16 h-24 rounded-xl overflow-hidden border border-slate-light/30 bg-slate-mid/30 flex-shrink-0">
+                <AvatarBust
+                  avatar={selectedAvatar}
+                  engineState={chat.engineState}
+                  hasText={false}
+                  avatarBasePath="/avatars"
+                />
               </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-text-primary">
+                  {selectedAvatar?.name || selectedAvatarId}
+                </div>
+                <div className="text-xs text-text-muted mt-0.5">
+                  {t('settingsAvatar.avatarCount', { builtin: AVATARS.length, custom: avatars?.custom?.length || 0 })}
+                </div>
+                <button
+                  onClick={() => setPickerOpen(true)}
+                  className={clsx(
+                    'mt-2 px-3 py-1.5 rounded-lg text-xs font-medium',
+                    'bg-synapse/10 text-synapse border border-synapse/30',
+                    'hover:bg-synapse/20 transition-colors'
+                  )}
+                >
+                  {t('settingsAvatar.changeAvatar')}
+                </button>
+              </div>
+            </div>
+
+            {/* AvatarPicker overlay */}
+            {pickerOpen && (
+              <AvatarPicker
+                selectedId={selectedAvatarId}
+                onSelect={(id) => {
+                  setSelectedAvatarId(id)
+                  try { localStorage.setItem(LS_SELECTED_AVATAR, id) } catch {}
+                  setPickerOpen(false)
+                }}
+                onClose={() => setPickerOpen(false)}
+                avatarBasePath="/avatars"
+              />
             )}
-            <p className="text-xs text-text-muted mt-3">
+
+            <p className="text-xs text-text-muted">
               {t('settingsAvatar.avatarsHint')}
             </p>
           </div>

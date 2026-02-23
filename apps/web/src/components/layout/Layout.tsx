@@ -1,28 +1,140 @@
-import { ReactNode } from 'react'
+/**
+ * Layout — Main app shell with @avatar-engine/react AvatarWidget.
+ *
+ * AvatarWidget handles FAB / CompactChat / Fullscreen internally.
+ * The existing Synapse UI (Header, Sidebar, page content) is rendered
+ * via renderBackground — always visible behind all avatar modes.
+ *
+ * PermissionDialog (ACP) is a sibling OUTSIDE AvatarWidget.
+ */
+
+import { useEffect, type ReactNode } from 'react'
+import { useLocation } from 'react-router-dom'
+import {
+  AvatarWidget,
+  PermissionDialog,
+  StatusBar,
+  ChatPanel,
+} from '@avatar-engine/react'
+import type { EngineState } from '@avatar-engine/core'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { ToastContainer } from '../ui/Toast'
-import { AvatarProvider } from '../avatar/AvatarProvider'
-import { AvatarFab } from '../avatar/AvatarFab'
+import { AvatarProvider, useAvatar } from '../avatar/AvatarProvider'
+import { SuggestionChips } from '../avatar/SuggestionChips'
+import { usePageContextStore } from '../../stores/pageContextStore'
 
 interface LayoutProps {
   children: ReactNode
 }
 
+function LayoutInner({ children }: LayoutProps) {
+  const { chat, sendWithContext, providers, compactRef } = useAvatar()
+  const { pathname } = useLocation()
+
+  // Track page context for suggestions (Iterace 5)
+  useEffect(() => {
+    usePageContextStore.getState().setContext(pathname)
+  }, [pathname])
+
+  return (
+    <>
+      {/* ACP Permission Dialog — OUTSIDE AvatarWidget (sibling) */}
+      <PermissionDialog
+        request={chat.permissionRequest}
+        onRespond={chat.sendPermissionResponse}
+      />
+
+      {/* AvatarWidget — handles FAB/Compact/Fullscreen INTERNALLY */}
+      <AvatarWidget
+        messages={chat.messages}
+        sendMessage={sendWithContext}
+        stopResponse={chat.stopResponse}
+        isStreaming={chat.isStreaming}
+        connected={chat.connected}
+        wasConnected={chat.wasConnected}
+        initDetail={chat.initDetail}
+        error={chat.error}
+        diagnostic={chat.diagnostic}
+        provider={chat.provider}
+        model={chat.model}
+        version={chat.version}
+        engineState={chat.engineState}
+        thinkingSubject={chat.thinking.active ? chat.thinking.subject : ''}
+        toolName={chat.toolName}
+        pendingFiles={chat.pendingFiles}
+        uploading={chat.uploading}
+        uploadFile={chat.uploadFile}
+        removeFile={chat.removeFile}
+        switching={chat.switching}
+        activeOptions={chat.activeOptions}
+        availableProviders={providers}
+        switchProvider={chat.switchProvider}
+        onCompactModeRef={compactRef}
+        avatarBasePath="/avatars"
+        renderBackground={() => (
+          <div className="min-h-screen bg-obsidian flex flex-col">
+            <Header />
+            <div className="flex flex-1">
+              <Sidebar />
+              <main className="flex-1 p-6">
+                {children}
+              </main>
+            </div>
+            <ToastContainer />
+          </div>
+        )}
+      >
+        {/* Fullscreen children — rendered when mode === 'fullscreen' */}
+        <div className="h-full flex flex-col overflow-hidden">
+          <StatusBar
+            connected={chat.connected}
+            provider={chat.provider}
+            model={chat.model}
+            version={chat.version}
+            cwd={chat.cwd}
+            engineState={chat.engineState as EngineState}
+            capabilities={chat.capabilities}
+            sessionId={chat.sessionId}
+            sessionTitle={chat.sessionTitle}
+            cost={chat.cost}
+            switching={chat.switching}
+            activeOptions={chat.activeOptions}
+            availableProviders={providers}
+            onSwitch={chat.switchProvider}
+            onResume={chat.resumeSession}
+            onNewSession={chat.newSession}
+            onCompactMode={() => compactRef.current?.()}
+          />
+          <main className="flex-1 flex flex-col min-h-0">
+            {chat.messages.length === 0 && (
+              <div className="px-4 pt-3">
+                <SuggestionChips onSelect={sendWithContext} />
+              </div>
+            )}
+            <ChatPanel
+              messages={chat.messages}
+              onSend={sendWithContext}
+              onStop={chat.stopResponse}
+              onClear={chat.clearHistory}
+              isStreaming={chat.isStreaming}
+              connected={chat.connected}
+              pendingFiles={chat.pendingFiles}
+              uploading={chat.uploading}
+              onUpload={chat.uploadFile}
+              onRemoveFile={chat.removeFile}
+            />
+          </main>
+        </div>
+      </AvatarWidget>
+    </>
+  )
+}
+
 export function Layout({ children }: LayoutProps) {
   return (
     <AvatarProvider>
-      <div className="min-h-screen bg-obsidian flex flex-col">
-        <Header />
-        <div className="flex flex-1">
-          <Sidebar />
-          <main className="flex-1 p-6">
-            {children}
-          </main>
-        </div>
-        <ToastContainer />
-        <AvatarFab />
-      </div>
+      <LayoutInner>{children}</LayoutInner>
     </AvatarProvider>
   )
 }

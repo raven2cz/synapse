@@ -1714,7 +1714,10 @@
     "customLabel": "Custom",
     "avatarsTitle": "Avatars",
     "builtinAvatars": "8 built-in avatar characters",
+    "avatarCount": "{{builtin}} built-in, {{custom}} custom",
+    "changeAvatar": "Change Avatar",
     "avatarsHint": "Custom avatars can be added in the avatars/ directory. See avatar-engine documentation.",
+    "safetyConfigHint": "Safety mode is configured in avatar.yaml. Restart Synapse after changes.",
     "configFile": "Configuration File",
     "configFileHint": "Edit this file to change provider, safety mode, and other settings. Restart Synapse after changes.",
     "loadFailed": "Failed to load avatar configuration. Check that the backend is running."
@@ -1737,7 +1740,39 @@
     "suggestions": {
       "inventory": "How much disk space are my models using?",
       "parameters": "Explain CFG Scale and recommended values",
-      "dependencies": "Which packs have missing dependencies?"
+      "dependencies": "Which packs have missing dependencies?",
+      "packsPage": {
+        "overview": "Give me an overview of my installed packs",
+        "unresolved": "Which packs have unresolved dependencies?",
+        "recommend": "Recommend a workflow for my packs"
+      },
+      "packDetail": {
+        "explain": "Explain what {{packName}} does",
+        "dependencies": "Check dependencies for {{packName}}",
+        "workflow": "Generate a workflow for {{packName}}"
+      },
+      "inventoryPage": {
+        "diskUsage": "How much disk space are my models using?",
+        "orphans": "Are there any orphan blobs I can clean up?",
+        "cleanup": "Help me free up disk space"
+      },
+      "browsePage": {
+        "recommend": "Recommend a model for anime style",
+        "compare": "Compare SDXL vs Flux checkpoints",
+        "trending": "What models are trending right now?"
+      },
+      "downloadsPage": {
+        "status": "What's the status of my downloads?",
+        "queue": "Are there any failed downloads to retry?"
+      },
+      "profilesPage": {
+        "explain": "Explain how profiles work",
+        "conflicts": "Are there any file conflicts between profiles?"
+      },
+      "settingsPage": {
+        "optimize": "Suggest optimal settings for my setup",
+        "providers": "Help me configure AI providers"
+      }
     },
     "setup": {
       "title": "AI Assistant",

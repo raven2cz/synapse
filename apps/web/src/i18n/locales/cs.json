@@ -1724,7 +1724,10 @@
     "customLabel": "Vlastní",
     "avatarsTitle": "Avatary",
     "builtinAvatars": "8 vestavěných avatarů",
+    "avatarCount": "{{builtin}} vestavěných, {{custom}} vlastních",
+    "changeAvatar": "Změnit avatar",
     "avatarsHint": "Vlastní avatary lze přidat do adresáře avatars/. Viz dokumentace avatar-engine.",
+    "safetyConfigHint": "Bezpečnostní režim se nastavuje v avatar.yaml. Po změnách restartujte Synapse.",
     "configFile": "Konfigurační soubor",
     "configFileHint": "Upravte tento soubor pro změnu poskytovatele, bezpečnostního režimu a dalších nastavení. Po změnách restartujte Synapse.",
     "loadFailed": "Nepodařilo se načíst konfiguraci avatara. Zkontrolujte, zda běží backend."
@@ -1747,7 +1750,39 @@
     "suggestions": {
       "inventory": "Kolik místa zabírají moje modely?",
       "parameters": "Vysvětli CFG Scale a doporučené hodnoty",
-      "dependencies": "Které packy mají chybějící závislosti?"
+      "dependencies": "Které packy mají chybějící závislosti?",
+      "packsPage": {
+        "overview": "Dej mi přehled nainstalovaných packů",
+        "unresolved": "Které packy mají nevyřešené závislosti?",
+        "recommend": "Doporuč workflow pro moje packy"
+      },
+      "packDetail": {
+        "explain": "Vysvětli, co dělá {{packName}}",
+        "dependencies": "Zkontroluj závislosti pro {{packName}}",
+        "workflow": "Vygeneruj workflow pro {{packName}}"
+      },
+      "inventoryPage": {
+        "diskUsage": "Kolik místa zabírají moje modely?",
+        "orphans": "Jsou nějaké osiřelé bloby k vyčištění?",
+        "cleanup": "Pomoz mi uvolnit místo na disku"
+      },
+      "browsePage": {
+        "recommend": "Doporuč model pro anime styl",
+        "compare": "Porovnej SDXL vs Flux checkpointy",
+        "trending": "Jaké modely jsou teď populární?"
+      },
+      "downloadsPage": {
+        "status": "Jaký je stav mých stahování?",
+        "queue": "Jsou nějaká neúspěšná stahování k opakování?"
+      },
+      "profilesPage": {
+        "explain": "Vysvětli, jak fungují profily",
+        "conflicts": "Jsou nějaké konflikty souborů mezi profily?"
+      },
+      "settingsPage": {
+        "optimize": "Navrhni optimální nastavení pro můj setup",
+        "providers": "Pomoz mi nakonfigurovat AI poskytovatele"
+      }
     },
     "setup": {
       "title": "AI Asistent",

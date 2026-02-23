@@ -8,7 +8,6 @@ import {
   Settings,
   Layers,
   HardDrive,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -26,7 +25,6 @@ const navItems = [
   { to: '/profiles', icon: Layers, labelKey: 'nav.profiles' },
   { to: '/browse', icon: Search, labelKey: 'nav.browse' },
   { to: '/downloads', icon: Download, labelKey: 'nav.downloads', badgeType: 'downloads' as const },
-  { to: '/avatar', icon: Sparkles, labelKey: 'nav.avatar' },
   { to: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]
 
