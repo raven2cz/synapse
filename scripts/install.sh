@@ -177,6 +177,24 @@ else
     echo -e "${YELLOW}    The AI assistant will be disabled. Synapse works fine without it.${NC}"
 fi
 
+# Install MCP SDK for Synapse Store tools
+MCP_INSTALLED=false
+if [ "$USE_UV" = true ]; then
+    if uv pip install --python .venv/bin/python "mcp>=1.0" 2>/dev/null; then
+        MCP_INSTALLED=true
+    fi
+else
+    if .venv/bin/pip install "mcp>=1.0" 2>/dev/null; then
+        MCP_INSTALLED=true
+    fi
+fi
+
+if [ "$MCP_INSTALLED" = true ]; then
+    echo -e "${GREEN}  ✓ MCP SDK installed (Synapse Store tools for AI avatar)${NC}"
+else
+    echo -e "${YELLOW}  ! MCP SDK not available. AI avatar will not have store tools.${NC}"
+fi
+
 # Create avatar config directory and default config
 mkdir -p ~/.synapse/avatar/skills
 if [ ! -f ~/.synapse/avatar.yaml ]; then

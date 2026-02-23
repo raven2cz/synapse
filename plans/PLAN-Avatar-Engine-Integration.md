@@ -1536,5 +1536,96 @@ synapse/
 
 ---
 
-*Last Updated: 2026-02-22*
-*Status: PLANNING — čeká na schválení*
+## MANDATORY: Post-Iteration Review & Test Coverage Process
+
+**Platí pro KAŽDOU iteraci (1-9). NESMÍ se přeskočit.**
+
+### Po dokončení každé iterace provést:
+
+#### 1. Code Review — 3 nezávislé review (POVINNÉ)
+
+**a) Claude review (self-review):**
+- [ ] Přečíst KAŽDÝ nový/změněný soubor
+- [ ] Zkontrolovat error handling, thread safety, validaci vstupů, import guardy, cachování
+
+**b) Gemini review (přes avatar-engine nebo přímo):**
+```bash
+gemini -p "Review files <seznam> for bugs, security, error handling, code quality" --yolo
+```
+
+**c) Codex review (přes codex CLI):**
+```bash
+codex review --uncommitted    # nebo: codex review --base main
+```
+
+Viz CLAUDE.md sekce "POVINNÉ: Review po každé iteraci/fázi" pro kompletní instrukce.
+
+#### 2. Test Pyramid — POVINNÉ pro každou iteraci
+```
+        /\
+       /  \        Smoke/E2E (3-7)   — celý lifecycle, reálný Store
+      /    \
+     /------\
+    /        \     Integration (8-15) — 2+ komponenty, mockovaný HTTP
+   /          \
+  /------------\
+ /              \  Unit (30-60)      — 1 třída/funkce, vše mockované
+/________________\
+```
+
+Každá iterace MUSÍ mít:
+- **Unit testy** — pokrytí všech public funkcí, error paths, edge cases
+- **Integrační testy** — interakce mezi komponentami, reálné Store fixtures
+- **Smoke/E2E testy** — celý flow od začátku do konce, pouze HTTP mockované
+
+#### 3. Verifikace
+```bash
+./scripts/verify.sh --quick    # Po každé změně
+./scripts/verify.sh            # Před commitem
+```
+
+#### 4. Záznam do PLANu
+Po dokončení iterace přidat do tohoto souboru:
+- ✅ stav implementace + testů
+- Počet testů (unit/integration/smoke)
+- Nalezené a opravené issue z review
+
+---
+
+## Iteration Status Log
+
+### Iterace 1: Foundation ✅ IMPL+INTEG (review 2026-02-23)
+- **Kód:** config.py, routes.py, __init__.py, frontend components
+- **Testy:** 24 unit + 4 integration + 3 smoke = **31 testů**
+- **Claude review fixes:**
+  - Přidána validace `provider` a `safety` polí v config.py
+  - Přidáno cachování config/providers v routes.py (30s TTL)
+  - Odstraněn unused `Optional` import z routes.py
+  - Přesunut `import os` na top-level v config.py
+- **Gemini review (2026-02-23):** 2 nálezy — LOW (`Path.home()` fallback, 30s cache delay). Oba přijatelné.
+- **Codex review (2026-02-23):** 1 nález — HIGH (upload DoS in avatar_engine). Irrelevant — review přečetl avatar-engine soubory, ne synapse.
+
+### Iterace 2: MCP Store Tools ✅ IMPL+INTEG (review 2026-02-23)
+- **Kód:** store_server.py (10 nástrojů), __main__.py, __init__.py
+- **Testy:** 64 unit + 12 integration + 8 smoke = **84 testů**
+- **Claude review fixes:**
+  - Thread-safe Store singleton (`threading.Lock` + double-check)
+  - Přidáno `logger.error`/`logger.debug` logging do všech exception handlerů
+  - Přejmenován `filter` → `name_filter` (shadowed builtin)
+  - Přidány type annotations (`Any`) na všechny `_impl` funkce
+  - Přidán `mcp is None` guard v `__main__.py`
+  - Robustní import guard v `__init__.py` (try/except + logging)
+  - `hasattr()` → `getattr(..., None)` pro hires parametry
+  - Přidáno 21 nových unit testů (error paths, missing branches, validation)
+  - Přidáno 8 smoke testů (full lifecycle, empty store, routes)
+- **Gemini review (2026-02-23):** 3 nálezy:
+  - MEDIUM: `check_all_updates()` rate limiting pro velké knihovny → **Opraveno** (přidán warning do tool description)
+  - LOW: Storage stats iterace přes packy → přijatelné pro typický rozsah
+  - MEDIUM: Thread safety Store → Store má file locking, MCP stdio = single client
+- **Codex review (2026-02-23):** 1 nález:
+  - P2: `_get_store()` nerespektuje SYNAPSE_ROOT → **False positive** (get_config() již čte env var)
+
+---
+
+*Last Updated: 2026-02-23*
+*Status: Iterace 1-2 DOKONČENY s 3-review (Claude+Gemini+Codex). Iterace 3 ČEKÁ.*

@@ -456,12 +456,59 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 
 ```
 1. Implementovat feature
-2. Napsat/aktualizovat testy
+2. Napsat/aktualizovat testy (unit + integration + smoke/E2E)
 3. ./scripts/verify.sh --quick    # Rychlá kontrola
 4. Opravit případné chyby
 5. ./scripts/verify.sh            # Plná verifikace
 6. Commit pouze pokud projde
 ```
+
+### ⭐ POVINNÉ: Review po každé iteraci/fázi
+
+Po dokončení každé iterace (nejen před commitem) provést **3 nezávislé review**:
+
+#### 1. Claude review (automatický)
+Přečíst KAŽDÝ nový/změněný soubor, zkontrolovat:
+- Error handling (žádné tiché `except: pass`)
+- Thread safety, validace vstupů, import guardy
+- Cachování (žádné zbytečné I/O na každém requestu)
+
+#### 2. Gemini review (přímé CLI ze synapse adresáře)
+```bash
+# Z kořene synapse projektu:
+gemini -p "You are a senior code reviewer. Review the following files for bugs, security issues, missing error handling, and code quality: <seznam souborů>. Provide numbered issues with severity." --yolo
+```
+
+#### 3. Codex review (přímé CLI ze synapse adresáře)
+```bash
+# Z kořene synapse projektu — VŽDY specifikovat scope (commit/soubory):
+codex review --commit <SHA>                  # Review konkrétního commitu
+codex exec "Review these files for bugs, security, error handling: <seznam souborů>"  # Explicitní seznam
+```
+**POZOR:** `codex review --uncommitted` reviewuje CELÉ repo diff, ne jen konkrétní fázi! Proto vždy specifikovat buď commit SHA nebo explicitní seznam souborů.
+
+#### Alternativně: přes avatar-engine
+```bash
+cd ~/git/github/avatar-engine && uv run avatar -w /home/box/git/github/synapse \
+  chat -p gemini --yolo --no-stream "<review prompt>"
+```
+**Pozor:** `-w` flag musí být PŘED subcommandem `chat`. Přímé CLI je spolehlivější pro cross-repo review.
+
+#### Avatar-engine info
+- **Umístění:** `~/git/github/avatar-engine`
+- **Spuštění (avatar CLI):** `cd ~/git/github/avatar-engine && uv run avatar chat -p <provider> ...`
+- **Přímé CLI:** `gemini -p "..."` / `codex review` / `codex exec "..."`
+- **Providery:** `gemini`, `claude`, `codex`
+- **Dokumentace:** `~/git/github/avatar-engine/README.md`
+
+#### Po review
+1. **Zvalidovat** nálezy ze všech 3 review
+2. **Implementovat** opravy pro validní nálezy
+3. **Test pyramid** — ověřit, že existují VŠECHNY tři typy testů:
+   - Unit testy (30-60): error paths, edge cases, all branches
+   - Integration testy (8-15): reálné komponenty, mockovaný HTTP
+   - Smoke/E2E testy (3-7): celý lifecycle, reálný Store
+4. **Zaznamenat do PLANu** — stav, počet testů, nalezené issues, kdo co našel
 
 ---
 

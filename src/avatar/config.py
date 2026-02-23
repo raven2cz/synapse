@@ -6,6 +6,7 @@ The config file controls provider selection, safety mode, skills, and MCP server
 """
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -95,7 +96,6 @@ def load_avatar_config(
     Returns AvatarConfig with resolved paths and merged defaults.
     """
     if synapse_root is None:
-        import os
         synapse_root = Path(
             os.environ.get("SYNAPSE_ROOT", DEFAULT_SYNAPSE_ROOT)
         ).expanduser().resolve()
@@ -141,6 +141,26 @@ def load_avatar_config(
         _raw=raw_config,
     )
 
+    # Validate provider
+    valid_providers = ("gemini", "claude", "codex")
+    if config.provider not in valid_providers:
+        logger.warning(
+            "Unknown avatar provider '%s', expected one of %s. Falling back to 'gemini'.",
+            config.provider,
+            valid_providers,
+        )
+        config.provider = "gemini"
+
+    # Validate safety mode
+    valid_safety = ("safe", "ask", "unrestricted")
+    if config.safety not in valid_safety:
+        logger.warning(
+            "Unknown safety mode '%s', expected one of %s. Falling back to 'safe'.",
+            config.safety,
+            valid_safety,
+        )
+        config.safety = "safe"
+
     # Parse provider configs
     for provider_name in ("gemini", "claude", "codex"):
         if provider_name in raw_config:
@@ -159,7 +179,7 @@ def detect_available_providers() -> List[Dict[str, Any]]:
 
     Returns list of provider info dicts with name, command, installed status.
     """
-    import shutil
+    import shutil  # noqa: module-level import not desired (optional dependency context)
 
     providers = [
         {

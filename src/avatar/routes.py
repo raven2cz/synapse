@@ -11,16 +11,39 @@ When avatar-engine IS installed, additional routes are mounted by the engine its
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
 from . import AVATAR_ENGINE_AVAILABLE, AVATAR_ENGINE_VERSION
 from .config import detect_available_providers, load_avatar_config
+from .skills import build_system_prompt, list_skills
 
 logger = logging.getLogger(__name__)
 
 avatar_router = APIRouter(tags=["avatar"])
+
+# Lightweight config/provider cache (avoids re-reading YAML + shutil.which on every request)
+_cache: Dict[str, Any] = {"config": None, "providers": None, "ts": 0.0}
+_CACHE_TTL = 30.0  # seconds
+
+
+def _get_cached_config():
+    """Load config with a short TTL cache."""
+    now = time.monotonic()
+    if _cache["config"] is None or (now - _cache["ts"]) > _CACHE_TTL:
+        _cache["config"] = load_avatar_config()
+        _cache["providers"] = detect_available_providers()
+        _cache["ts"] = now
+    return _cache["config"], _cache["providers"]
+
+
+def invalidate_avatar_cache() -> None:
+    """Force cache refresh (e.g. after config change)."""
+    _cache["config"] = None
+    _cache["providers"] = None
+    _cache["ts"] = 0.0
 
 
 @avatar_router.get("/status")
@@ -31,8 +54,7 @@ def avatar_status() -> Dict[str, Any]:
     Always returns 200 — the availability info is in the response body.
     Frontend uses this to decide whether to show AI features.
     """
-    config = load_avatar_config()
-    providers = detect_available_providers()
+    config, providers = _get_cached_config()
     any_provider_installed = any(p["installed"] for p in providers)
 
     # Determine state (matches plan: STATE 1/2/3)
@@ -72,7 +94,8 @@ def avatar_config_endpoint() -> Dict[str, Any]:
 
     Used by Settings UI to populate the AI Assistant tab.
     """
-    config = load_avatar_config()
+    config, _ = _get_cached_config()
+    skills = list_skills(config)
     return {
         "enabled": config.enabled,
         "provider": config.provider,
@@ -80,12 +103,23 @@ def avatar_config_endpoint() -> Dict[str, Any]:
         "max_history": config.max_history,
         "has_config_file": config.config_path is not None and config.config_path.exists(),
         "config_path": str(config.config_path) if config.config_path else None,
-        "skills_count": _count_skills(config),
+        "skills_count": {
+            "builtin": len(skills["builtin"]),
+            "custom": len(skills["custom"]),
+        },
+        "skills": skills,
         "provider_configs": {
             name: {"model": prov.model, "enabled": prov.enabled}
             for name, prov in config.providers.items()
         },
     }
+
+
+@avatar_router.get("/skills")
+def avatar_skills_endpoint() -> Dict[str, Any]:
+    """List available skills with metadata."""
+    config, _ = _get_cached_config()
+    return list_skills(config)
 
 
 def _count_skills(config) -> Dict[str, int]:
@@ -120,14 +154,17 @@ def try_mount_avatar_engine(app) -> bool:
             logger.info("Avatar Engine disabled in config — skipping mount")
             return False
 
+        system_prompt = build_system_prompt(config)
+
         avatar_app = create_avatar_app(
             provider=config.provider,
             config_path=str(config.config_path) if config.config_path else None,
+            system_prompt=system_prompt,
         )
         app.mount("/api/avatar/engine", avatar_app)
         logger.info("Avatar Engine mounted at /api/avatar/engine")
         return True
 
     except Exception as e:
-        logger.warning(f"Failed to mount Avatar Engine: {e}")
+        logger.warning("Failed to mount Avatar Engine: %s", e)
         return False

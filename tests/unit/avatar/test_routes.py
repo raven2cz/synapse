@@ -18,8 +18,17 @@ from src.avatar.routes import (
     avatar_config_endpoint,
     avatar_providers,
     avatar_status,
+    invalidate_avatar_cache,
     try_mount_avatar_engine,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_avatar_cache():
+    """Invalidate avatar route cache before each test."""
+    invalidate_avatar_cache()
+    yield
+    invalidate_avatar_cache()
 
 
 class TestAvatarStatusEndpoint:
