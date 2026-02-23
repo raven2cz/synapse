@@ -757,10 +757,24 @@ KROK 8+: Iterace 8-9 — Library upgrade, polish, docs
 
 ## Iterace 6-9 (BUDOUCÍ — beze změny oproti v1.0.0)
 
-### Iterace 6: Advanced MCP Tools ❌
-- Import MCP server: import_from_url, analyze_civitai_model, compare_versions, extract_parameters
-- Workflow MCP server: generate_default_workflow, suggest_workflow, analyze_workflow, validate_workflow
-- Dependency MCP server: find_matching_model, search_local_inventory, suggest_compatible_models
+### Iterace 6: Advanced MCP Tools ✅ HOTOVO (57 testů, 3 review)
+
+Rozšíření store_server.py o 11 nových tools (celkem 21). Čistě backendová změna.
+
+| Skupina | Tools | Popis |
+|---------|-------|-------|
+| Civitai (4) | search_civitai, analyze_civitai_model, compare_model_versions, import_civitai_model | Hledání, analýza, porovnání verzí, import (WRITE) |
+| Workflow (4) | scan_workflow, scan_workflow_file, check_workflow_availability, list_custom_nodes | Analýza ComfyUI workflow, cross-ref s inventářem |
+| Dependencies (3) | resolve_workflow_dependencies, find_model_by_hash, suggest_asset_sources | Resoluce zdrojů, hash lookup, source suggestions |
+
+| Soubor | Řádků | Popis |
+|--------|-------|-------|
+| `src/avatar/mcp/store_server.py` | 1290 | 21 MCP tools (10 store + 11 nových) |
+| `src/avatar/mcp/__init__.py` | 26 | Docstring update |
+| `tests/helpers/fixtures.py` | 330 | +search_models, +get_model_by_hash, +parse_civitai_url, +_FakeVersionResult |
+
+**Security:** `scan_workflow_file` omezeno na `.json` extension (Gemini+Codex review nález).
+**Reviews:** Claude ✅ (1 fix: dead code), Gemini ✅ (1 fix: path traversal), Codex ✅ (2 fixes: path security + unresolved node logic)
 
 ### Iterace 7: Migrace src/ai/ → Avatar Engine ❌
 - AvatarAIService (batch operace přes engine.chat_sync)
@@ -788,7 +802,8 @@ KROK 8+: Iterace 8-9 — Library upgrade, polish, docs
 | 3 Skills | 45 | — | 45 | ✅ |
 | 4 Avatars | 45 | 27 | 72 | ✅ |
 | 5 Context | — | 88 | 88 | ✅ |
-| **CELKEM** | **205** | **174** | **379** | ✅ |
+| 6 MCP Advanced | 57 | — | 57 | ✅ |
+| **CELKEM** | **262** | **174** | **436** | ✅ |
 
 ---
 
@@ -854,5 +869,5 @@ KROK 8+: Iterace 8-9 — Library upgrade, polish, docs
 
 ---
 
-*Last Updated: 2026-02-23 (KROKY 1-5 dokončeny)*
-*Status: Backend Iterace 1-3 ✅, Iterace 4 ✅, Iterace 5 ✅. Frontend PŘEDĚLÁNO s @avatar-engine/react. KROKY 1-5 dokončeny.*
+*Last Updated: 2026-02-23 (KROKY 1-5 + Iterace 6 dokončeny)*
+*Status: Iterace 1-6 ✅. 21 MCP tools, 436 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react.*

@@ -1,17 +1,31 @@
 """
-Synapse Store MCP Server — Read-only tools for AI avatar.
+Synapse Store MCP Server — Tools for AI avatar.
 
-Provides 10 tools for querying packs, inventory, backup status,
-and storage statistics. Uses FastMCP with stdio transport.
+Provides 21 tools for querying packs, inventory, backup status,
+storage statistics, Civitai interaction, workflow analysis, and
+dependency resolution. Uses FastMCP with stdio transport.
 
 All tool implementations are in _*_impl() functions for testability
 without requiring the mcp package.
+
+Tool groups:
+  - Store (10): list_packs, get_pack_details, search_packs, get_pack_parameters,
+    get_inventory_summary, find_orphan_blobs, find_missing_blobs, get_backup_status,
+    check_pack_updates, get_storage_stats
+  - Civitai (4): search_civitai, analyze_civitai_model, compare_model_versions,
+    import_civitai_model
+  - Workflow (4): scan_workflow, scan_workflow_file, check_workflow_availability,
+    list_custom_nodes
+  - Dependencies (3): resolve_workflow_dependencies, find_model_by_hash,
+    suggest_asset_sources
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -539,6 +553,626 @@ def _get_storage_stats_impl(store: Any = None) -> str:
 
 
 # =============================================================================
+# Civitai tool implementations (Group A)
+# =============================================================================
+
+
+def _search_civitai_impl(
+    store: Any = None,
+    civitai: Any = None,
+    query: str = "",
+    types: str = "",
+    sort: str = "Most Downloaded",
+    limit: int = 10,
+) -> str:
+    """Search for models on Civitai."""
+    try:
+        if not query:
+            return "Error: query is required."
+
+        if civitai is None:
+            if store is None:
+                store = _get_store()
+            civitai = store.pack_service.civitai
+
+        type_list = [t.strip() for t in types.split(",") if t.strip()] if types else None
+
+        response = civitai.search_models(
+            query=query,
+            types=type_list,
+            sort=sort,
+            limit=limit,
+        )
+
+        items = response.get("items", [])
+        if not items:
+            return f"No models found on Civitai matching '{query}'."
+
+        lines = [f"Found {len(items)} model{'s' if len(items) != 1 else ''} on Civitai:", ""]
+
+        for i, model in enumerate(items, 1):
+            name = model.get("name", "Unknown")
+            model_type = model.get("type", "Unknown")
+            model_id = model.get("id", 0)
+            versions = model.get("modelVersions", [])
+            version_count = len(versions)
+            latest = versions[0].get("name", "") if versions else ""
+            base = versions[0].get("baseModel", "") if versions else ""
+
+            lines.append(f"{i}. {name} ({model_type}, ID: {model_id})")
+            info_parts = []
+            if version_count:
+                info_parts.append(f"{version_count} version{'s' if version_count != 1 else ''}")
+            if latest:
+                info_parts.append(f"Latest: {latest}")
+            if base:
+                info_parts.append(f"Base: {base}")
+            if info_parts:
+                lines.append(f"   {', '.join(info_parts)}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("search_civitai failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _analyze_civitai_model_impl(
+    store: Any = None,
+    civitai: Any = None,
+    url: str = "",
+) -> str:
+    """Analyze a Civitai model: versions, files, base model, tags."""
+    try:
+        if not url:
+            return "Error: url is required."
+
+        if civitai is None:
+            if store is None:
+                store = _get_store()
+            civitai = store.pack_service.civitai
+
+        model_id, version_id = civitai.parse_civitai_url(url)
+        model_data = civitai.get_model(model_id)
+
+        name = model_data.get("name", "Unknown")
+        model_type = model_data.get("type", "Unknown")
+        tags = model_data.get("tags", [])
+        creator = model_data.get("creator", {})
+        creator_name = creator.get("username", "Unknown") if creator else "Unknown"
+        description = model_data.get("description", "")
+        if description and len(description) > 300:
+            description = description[:300] + "..."
+
+        lines = [
+            f"Model: {name}",
+            f"Type: {model_type}",
+            f"ID: {model_id}",
+            f"Creator: {creator_name}",
+        ]
+
+        if tags:
+            lines.append(f"Tags: {', '.join(tags[:10])}")
+        if description:
+            lines.append(f"Description: {description}")
+
+        versions = model_data.get("modelVersions", [])
+        lines.append(f"\nVersions ({len(versions)}):")
+
+        for v in versions:
+            v_name = v.get("name", "")
+            v_id = v.get("id", 0)
+            base = v.get("baseModel", "")
+            files = v.get("files", [])
+            total_size = sum(f.get("sizeKB", 0) for f in files)
+            trained_words = v.get("trainedWords", [])
+
+            lines.append(f"\n  {v_name} (ID: {v_id})")
+            if base:
+                lines.append(f"    Base Model: {base}")
+            if files:
+                lines.append(f"    Files: {len(files)}, Total: {_format_size(int(total_size * 1024))}")
+                for f in files:
+                    f_name = f.get("name", "")
+                    f_size = f.get("sizeKB", 0)
+                    primary = " [primary]" if f.get("primary") else ""
+                    lines.append(f"      - {f_name} ({_format_size(int(f_size * 1024))}){primary}")
+            if trained_words:
+                lines.append(f"    Trigger Words: {', '.join(trained_words)}")
+
+        return "\n".join(lines)
+    except ValueError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        logger.error("analyze_civitai_model failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _compare_model_versions_impl(
+    store: Any = None,
+    civitai: Any = None,
+    url: str = "",
+) -> str:
+    """Compare versions of a Civitai model side-by-side."""
+    try:
+        if not url:
+            return "Error: url is required."
+
+        if civitai is None:
+            if store is None:
+                store = _get_store()
+            civitai = store.pack_service.civitai
+
+        model_id, _ = civitai.parse_civitai_url(url)
+        model_data = civitai.get_model(model_id)
+
+        name = model_data.get("name", "Unknown")
+        versions = model_data.get("modelVersions", [])
+
+        if len(versions) < 2:
+            return f"Model '{name}' has only {len(versions)} version — nothing to compare."
+
+        lines = [f"Version comparison for {name}:", ""]
+
+        # Header
+        lines.append(f"{'Property':<20} | " + " | ".join(
+            f"{v.get('name', '?'):<20}" for v in versions[:5]
+        ))
+        lines.append("-" * (22 + 23 * min(len(versions), 5)))
+
+        # Base model
+        lines.append(f"{'Base Model':<20} | " + " | ".join(
+            f"{v.get('baseModel', 'N/A'):<20}" for v in versions[:5]
+        ))
+
+        # File count
+        lines.append(f"{'Files':<20} | " + " | ".join(
+            f"{len(v.get('files', [])):<20}" for v in versions[:5]
+        ))
+
+        # Total size
+        sizes = []
+        for v in versions[:5]:
+            total_kb = sum(f.get("sizeKB", 0) for f in v.get("files", []))
+            sizes.append(_format_size(int(total_kb * 1024)))
+        lines.append(f"{'Total Size':<20} | " + " | ".join(
+            f"{s:<20}" for s in sizes
+        ))
+
+        # Trained words
+        lines.append(f"{'Trigger Words':<20} | " + " | ".join(
+            f"{len(v.get('trainedWords', [])):<20}" for v in versions[:5]
+        ))
+
+        # Published date
+        lines.append(f"{'Published':<20} | " + " | ".join(
+            f"{(v.get('publishedAt', 'N/A') or 'N/A')[:10]:<20}" for v in versions[:5]
+        ))
+
+        if len(versions) > 5:
+            lines.append(f"\n... and {len(versions) - 5} more versions")
+
+        return "\n".join(lines)
+    except ValueError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        logger.error("compare_model_versions failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _import_civitai_model_impl(
+    store: Any = None,
+    civitai: Any = None,
+    url: str = "",
+    pack_name: str = "",
+    download_previews: bool = True,
+) -> str:
+    """Import a model from Civitai into the Synapse store.
+
+    WARNING: This modifies the store. Creates pack directory, downloads model
+    files (potentially several GB).
+    """
+    try:
+        if not url:
+            return "Error: url is required."
+
+        if store is None:
+            store = _get_store()
+
+        kwargs: dict[str, Any] = {
+            "url": url,
+            "download_previews": download_previews,
+        }
+        if pack_name:
+            kwargs["pack_name"] = pack_name
+
+        pack = store.import_civitai(**kwargs)
+
+        lines = [
+            f"Successfully imported pack: {pack.name}",
+            "",
+            f"  Type: {pack.pack_type.value if hasattr(pack.pack_type, 'value') else pack.pack_type}",
+        ]
+        if pack.base_model:
+            lines.append(f"  Base Model: {pack.base_model}")
+        lines.append(f"  Dependencies: {len(pack.dependencies)}")
+        if pack.source and pack.source.url:
+            lines.append(f"  Source: {pack.source.url}")
+
+        return "\n".join(lines)
+    except ValueError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        logger.error("import_civitai_model failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+# =============================================================================
+# Workflow tool implementations (Group B)
+# =============================================================================
+
+
+def _scan_workflow_impl(
+    workflow_json: str = "",
+) -> str:
+    """Scan a ComfyUI workflow JSON for model dependencies and custom nodes."""
+    try:
+        if not workflow_json:
+            return "Error: workflow_json is required."
+
+        try:
+            workflow_data = json.loads(workflow_json)
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON — {e}"
+
+        from src.workflows.scanner import WorkflowScanner
+
+        scanner = WorkflowScanner()
+        result = scanner.scan_workflow(workflow_data)
+        unique_assets = scanner.get_unique_assets(result)
+
+        lines = ["Workflow Scan Results:", ""]
+
+        if result.errors:
+            lines.append(f"Warnings: {', '.join(result.errors)}")
+            lines.append("")
+
+        lines.append(f"Nodes: {len(result.all_nodes)}")
+        lines.append(f"Assets: {len(unique_assets)}")
+        lines.append(f"Custom Nodes: {len(result.custom_node_types)}")
+
+        if unique_assets:
+            lines.append("\nModel Dependencies:")
+            for asset in unique_assets:
+                kind = asset.asset_type.value if hasattr(asset.asset_type, "value") else str(asset.asset_type)
+                lines.append(f"  - {asset.name} ({kind}, from {asset.node_type})")
+
+        if result.custom_node_types:
+            lines.append("\nCustom Node Types:")
+            for node_type in sorted(result.custom_node_types):
+                lines.append(f"  - {node_type}")
+
+        if not unique_assets and not result.custom_node_types:
+            lines.append("\nNo model dependencies or custom nodes found.")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("scan_workflow failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _scan_workflow_file_impl(
+    path: str = "",
+) -> str:
+    """Scan a ComfyUI workflow file for dependencies."""
+    try:
+        if not path:
+            return "Error: path is required."
+
+        file_path = Path(path).resolve()
+
+        # Security: only allow .json files
+        if file_path.suffix.lower() != ".json":
+            return f"Error: Only .json workflow files are supported, got: {file_path.suffix}"
+
+        if not file_path.exists():
+            return f"Error: File not found: {path}"
+
+        from src.workflows.scanner import WorkflowScanner
+
+        scanner = WorkflowScanner()
+        result = scanner.scan_file(file_path)
+
+        if result.errors:
+            return f"Error scanning file: {', '.join(result.errors)}"
+
+        unique_assets = scanner.get_unique_assets(result)
+
+        lines = [f"Workflow: {file_path.name}", ""]
+        lines.append(f"Nodes: {len(result.all_nodes)}")
+        lines.append(f"Assets: {len(unique_assets)}")
+        lines.append(f"Custom Nodes: {len(result.custom_node_types)}")
+
+        if unique_assets:
+            lines.append("\nModel Dependencies:")
+            for asset in unique_assets:
+                kind = asset.asset_type.value if hasattr(asset.asset_type, "value") else str(asset.asset_type)
+                lines.append(f"  - {asset.name} ({kind})")
+
+        if result.custom_node_types:
+            lines.append("\nCustom Node Types:")
+            for node_type in sorted(result.custom_node_types):
+                lines.append(f"  - {node_type}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("scan_workflow_file failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _check_workflow_availability_impl(
+    store: Any = None,
+    workflow_json: str = "",
+) -> str:
+    """Check which workflow dependencies are locally available."""
+    try:
+        if not workflow_json:
+            return "Error: workflow_json is required."
+
+        try:
+            workflow_data = json.loads(workflow_json)
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON — {e}"
+
+        if store is None:
+            store = _get_store()
+
+        from src.workflows.scanner import WorkflowScanner
+
+        scanner = WorkflowScanner()
+        result = scanner.scan_workflow(workflow_data)
+        unique_assets = scanner.get_unique_assets(result)
+
+        if not unique_assets:
+            return "No model dependencies found in workflow."
+
+        # Cross-reference with inventory
+        inventory_response = store.get_inventory()
+        local_names = set()
+        for item in inventory_response.items:
+            local_names.add(item.display_name)
+
+        available = []
+        missing = []
+        for asset in unique_assets:
+            if asset.name in local_names:
+                available.append(asset)
+            else:
+                missing.append(asset)
+
+        lines = [f"Dependency Availability ({len(unique_assets)} total):", ""]
+
+        if available:
+            lines.append(f"Available locally ({len(available)}):")
+            for a in available:
+                kind = a.asset_type.value if hasattr(a.asset_type, "value") else str(a.asset_type)
+                lines.append(f"  ✓ {a.name} ({kind})")
+
+        if missing:
+            lines.append(f"\nMissing ({len(missing)}):")
+            for m in missing:
+                kind = m.asset_type.value if hasattr(m.asset_type, "value") else str(m.asset_type)
+                lines.append(f"  ✗ {m.name} ({kind})")
+
+        if not missing:
+            lines.append("\nAll dependencies are available locally!")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("check_workflow_availability failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _list_custom_nodes_impl(
+    workflow_json: str = "",
+) -> str:
+    """List custom node packages required by a workflow with git URLs."""
+    try:
+        if not workflow_json:
+            return "Error: workflow_json is required."
+
+        try:
+            workflow_data = json.loads(workflow_json)
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON — {e}"
+
+        from src.workflows.scanner import WorkflowScanner
+        from src.workflows.resolver import DependencyResolver
+
+        scanner = WorkflowScanner()
+        result = scanner.scan_workflow(workflow_data)
+
+        if not result.custom_node_types:
+            return "No custom nodes found in workflow."
+
+        resolver = DependencyResolver()
+        node_deps = resolver.resolve_custom_nodes(result.custom_node_types)
+
+        lines = [f"Custom Nodes ({len(result.custom_node_types)} types, {len(node_deps)} packages):", ""]
+
+        if node_deps:
+            lines.append("Resolved packages:")
+            for dep in node_deps:
+                lines.append(f"  - {dep.name}")
+                lines.append(f"    URL: {dep.git_url}")
+                if dep.pip_requirements:
+                    lines.append(f"    Pip: {', '.join(dep.pip_requirements)}")
+
+        # Show unresolved node types — check both KNOWN_CUSTOM_NODES and registry
+        resolved_types = set()
+        for nt in result.custom_node_types:
+            if nt.startswith("cnr:"):
+                continue
+            if nt in DependencyResolver.KNOWN_CUSTOM_NODES:
+                resolved_types.add(nt)
+            elif resolver.node_registry.find_pack_for_node(nt):
+                resolved_types.add(nt)
+
+        truly_unresolved = result.custom_node_types - resolved_types - {
+            nt for nt in result.custom_node_types if nt.startswith("cnr:")
+        }
+        if truly_unresolved:
+            lines.append(f"\nUnresolved node types ({len(truly_unresolved)}):")
+            for nt in sorted(truly_unresolved):
+                lines.append(f"  ? {nt}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("list_custom_nodes failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+# =============================================================================
+# Dependency resolution tool implementations (Group C)
+# =============================================================================
+
+
+def _resolve_workflow_deps_impl(
+    workflow_json: str = "",
+) -> str:
+    """Resolve all workflow dependencies with download sources."""
+    try:
+        if not workflow_json:
+            return "Error: workflow_json is required."
+
+        try:
+            workflow_data = json.loads(workflow_json)
+        except json.JSONDecodeError as e:
+            return f"Error: Invalid JSON — {e}"
+
+        from src.workflows.scanner import WorkflowScanner
+        from src.workflows.resolver import DependencyResolver
+
+        scanner = WorkflowScanner()
+        result = scanner.scan_workflow(workflow_data)
+
+        resolver = DependencyResolver()
+        asset_deps, node_deps = resolver.resolve_workflow_dependencies(result)
+
+        if not asset_deps and not node_deps:
+            return "No dependencies found in workflow."
+
+        lines = ["Resolved Dependencies:", ""]
+
+        if asset_deps:
+            lines.append(f"Model Assets ({len(asset_deps)}):")
+            for dep in asset_deps:
+                kind = dep.asset_type.value if hasattr(dep.asset_type, "value") else str(dep.asset_type)
+                source = dep.source.value if hasattr(dep.source, "value") else str(dep.source)
+                lines.append(f"  - {dep.name} ({kind})")
+                lines.append(f"    Source: {source}")
+                if hasattr(dep, "huggingface") and dep.huggingface:
+                    lines.append(f"    HF Repo: {dep.huggingface.repo_id}")
+                    lines.append(f"    HF File: {dep.huggingface.filename}")
+
+        if node_deps:
+            lines.append(f"\nCustom Node Packages ({len(node_deps)}):")
+            for dep in node_deps:
+                lines.append(f"  - {dep.name}")
+                lines.append(f"    Git: {dep.git_url}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("resolve_workflow_deps failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _find_model_by_hash_impl(
+    store: Any = None,
+    civitai: Any = None,
+    hash_value: str = "",
+) -> str:
+    """Find a model on Civitai by SHA256 or AutoV2 hash."""
+    try:
+        if not hash_value:
+            return "Error: hash_value is required."
+
+        if civitai is None:
+            if store is None:
+                store = _get_store()
+            civitai = store.pack_service.civitai
+
+        result = civitai.get_model_by_hash(hash_value)
+
+        if result is None:
+            return f"No model found for hash: {hash_value}"
+
+        lines = [f"Found model version for hash {hash_value[:16]}...:", ""]
+        lines.append(f"  Version: {result.name} (ID: {result.id})")
+        lines.append(f"  Model ID: {result.model_id}")
+        if hasattr(result, "base_model") and result.base_model:
+            lines.append(f"  Base Model: {result.base_model}")
+        if hasattr(result, "model_name"):
+            lines.append(f"  Model Name: {result.model_name}")
+
+        if hasattr(result, "files") and result.files:
+            lines.append(f"  Files: {len(result.files)}")
+            for f in result.files:
+                f_name = f.get("name", "") if isinstance(f, dict) else getattr(f, "name", "")
+                lines.append(f"    - {f_name}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("find_model_by_hash failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+def _suggest_asset_sources_impl(
+    asset_names: str = "",
+) -> str:
+    """Suggest download sources for asset names."""
+    try:
+        if not asset_names:
+            return "Error: asset_names is required (comma-separated list)."
+
+        names = [n.strip() for n in asset_names.split(",") if n.strip()]
+        if not names:
+            return "Error: No valid asset names provided."
+
+        from src.workflows.scanner import ScannedAsset
+        from src.workflows.resolver import DependencyResolver
+        from src.core.models import AssetType
+
+        resolver = DependencyResolver()
+
+        lines = [f"Source suggestions for {len(names)} asset{'s' if len(names) != 1 else ''}:", ""]
+
+        for name in names:
+            # Create a minimal ScannedAsset for pattern matching
+            asset = ScannedAsset(
+                name=name,
+                asset_type=AssetType.UNKNOWN,
+                node_type="Unknown",
+                node_id=0,
+            )
+            source = resolver.suggest_asset_source(asset)
+            source_str = source.value if hasattr(source, "value") else str(source)
+
+            lines.append(f"  - {name}")
+            lines.append(f"    Suggested source: {source_str}")
+
+            # Add extra info for known HF models
+            if name in resolver.KNOWN_HF_MODELS:
+                hf_info = resolver.KNOWN_HF_MODELS[name]
+                lines.append(f"    HF Repo: {hf_info['repo_id']}")
+                lines.append(f"    HF File: {hf_info['filename']}")
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("suggest_asset_sources failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
+# =============================================================================
 # MCP Tool registration (only when mcp is available)
 # =============================================================================
 
@@ -594,5 +1228,66 @@ if MCP_AVAILABLE:
     def get_storage_stats() -> str:
         """Get detailed storage statistics: total size, per-kind breakdown, largest packs."""
         return _get_storage_stats_impl()
+
+    # ----- Civitai tools (Group A) -----
+
+    @mcp.tool()
+    def search_civitai(query: str, types: str = "", sort: str = "Most Downloaded", limit: int = 10) -> str:
+        """Search for models on Civitai. Filter by types (comma-separated: LORA, Checkpoint, etc.) and sort order."""
+        return _search_civitai_impl(query=query, types=types, sort=sort, limit=limit)
+
+    @mcp.tool()
+    def analyze_civitai_model(url: str) -> str:
+        """Analyze a Civitai model URL: all versions, files, sizes, base model, trigger words, tags."""
+        return _analyze_civitai_model_impl(url=url)
+
+    @mcp.tool()
+    def compare_model_versions(url: str) -> str:
+        """Compare all versions of a Civitai model side-by-side: base model, size, files, trigger words."""
+        return _compare_model_versions_impl(url=url)
+
+    @mcp.tool()
+    def import_civitai_model(url: str, pack_name: str = "", download_previews: bool = True) -> str:
+        """Import a model from Civitai into the Synapse store. WARNING: This modifies the store — creates pack directory and downloads model files (potentially several GB)."""
+        return _import_civitai_model_impl(url=url, pack_name=pack_name, download_previews=download_previews)
+
+    # ----- Workflow tools (Group B) -----
+
+    @mcp.tool()
+    def scan_workflow(workflow_json: str) -> str:
+        """Analyze a ComfyUI workflow JSON string for model dependencies and custom node requirements."""
+        return _scan_workflow_impl(workflow_json=workflow_json)
+
+    @mcp.tool()
+    def scan_workflow_file(path: str) -> str:
+        """Analyze a ComfyUI workflow file (.json) for model dependencies and custom nodes."""
+        return _scan_workflow_file_impl(path=path)
+
+    @mcp.tool()
+    def check_workflow_availability(workflow_json: str) -> str:
+        """Check which workflow model dependencies are locally available in the Synapse store."""
+        return _check_workflow_availability_impl(workflow_json=workflow_json)
+
+    @mcp.tool()
+    def list_custom_nodes(workflow_json: str) -> str:
+        """List custom node packages required by a workflow with git repository URLs."""
+        return _list_custom_nodes_impl(workflow_json=workflow_json)
+
+    # ----- Dependency resolution tools (Group C) -----
+
+    @mcp.tool()
+    def resolve_workflow_dependencies(workflow_json: str) -> str:
+        """Resolve all workflow dependencies: maps assets to download sources (Civitai/HuggingFace/local) and custom nodes to git repos."""
+        return _resolve_workflow_deps_impl(workflow_json=workflow_json)
+
+    @mcp.tool()
+    def find_model_by_hash(hash_value: str) -> str:
+        """Find a model on Civitai by SHA256 or AutoV2 hash. Useful for identifying unknown model files."""
+        return _find_model_by_hash_impl(hash_value=hash_value)
+
+    @mcp.tool()
+    def suggest_asset_sources(asset_names: str) -> str:
+        """Suggest download sources for model files. Provide comma-separated asset names (e.g. 'model.safetensors, vae.safetensors')."""
+        return _suggest_asset_sources_impl(asset_names=asset_names)
 else:
     mcp = None

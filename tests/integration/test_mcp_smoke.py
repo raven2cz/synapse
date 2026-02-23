@@ -281,6 +281,178 @@ class TestSkillsSmoke:
 
 
 @pytest.mark.integration
+class TestCivitaiToolsPipeline:
+    """Smoke: search → analyze → compare → import pipeline."""
+
+    def test_analyze_then_import_then_details(self, smoke_store):
+        """Analyze model, import it, then verify details are consistent."""
+        from src.avatar.mcp.store_server import (
+            _analyze_civitai_model_impl,
+            _import_civitai_model_impl,
+            _get_pack_details_impl,
+        )
+
+        ctx, fake_civitai = smoke_store
+
+        # Analyze
+        analyze_result = _analyze_civitai_model_impl(
+            civitai=fake_civitai,
+            url="https://civitai.com/models/1001",
+        )
+        assert "RealVisXL" in analyze_result
+        assert "Checkpoint" in analyze_result
+
+        # Import
+        _import_pack(ctx, 1001)
+
+        # Details should be consistent with analyze
+        details = _get_pack_details_impl(store=ctx.store, pack_name="RealVisXL")
+        assert "Pack: RealVisXL" in details
+        assert "Source: civitai" in details
+
+    def test_search_then_analyze_then_compare(self, smoke_store):
+        """Search → analyze → compare pipeline with FakeCivitaiClient."""
+        from src.avatar.mcp.store_server import (
+            _search_civitai_impl,
+            _analyze_civitai_model_impl,
+            _compare_model_versions_impl,
+        )
+
+        _, fake_civitai = smoke_store
+
+        # Search
+        search_result = _search_civitai_impl(civitai=fake_civitai, query="RealVis")
+        assert "RealVisXL" in search_result
+
+        # Analyze
+        analyze_result = _analyze_civitai_model_impl(
+            civitai=fake_civitai,
+            url="https://civitai.com/models/1001",
+        )
+        assert "Versions (1)" in analyze_result
+
+        # Compare (single version → "only 1 version")
+        compare_result = _compare_model_versions_impl(
+            civitai=fake_civitai,
+            url="https://civitai.com/models/1001",
+        )
+        assert "only 1 version" in compare_result
+
+
+@pytest.mark.integration
+class TestWorkflowPipeline:
+    """Smoke: scan → check availability → resolve deps pipeline."""
+
+    def test_scan_then_check_availability(self, smoke_store):
+        """Scan workflow, import pack, then check availability."""
+        from src.avatar.mcp.store_server import (
+            _scan_workflow_impl,
+            _check_workflow_availability_impl,
+        )
+        import json
+
+        ctx, _ = smoke_store
+        _import_pack(ctx, 1001)
+
+        workflow = json.dumps({
+            "nodes": [
+                {
+                    "id": 1, "type": "CheckpointLoaderSimple",
+                    "widgets_values": ["realvisxl_v4.safetensors"],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+                {
+                    "id": 2, "type": "LoraLoader",
+                    "widgets_values": ["not_imported.safetensors", 0.8, 0.8],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+            ]
+        })
+
+        # Scan finds both
+        scan = _scan_workflow_impl(workflow_json=workflow)
+        assert "realvisxl_v4.safetensors" in scan
+        assert "not_imported.safetensors" in scan
+
+        # Availability: one available, one missing
+        avail = _check_workflow_availability_impl(store=ctx.store, workflow_json=workflow)
+        assert "Missing" in avail
+        assert "not_imported.safetensors" in avail
+
+    def test_resolve_deps_then_suggest_sources(self, smoke_store):
+        """Resolve deps → suggest sources pipeline."""
+        from src.avatar.mcp.store_server import (
+            _resolve_workflow_deps_impl,
+            _suggest_asset_sources_impl,
+        )
+        import json
+
+        workflow = json.dumps({
+            "nodes": [
+                {
+                    "id": 1, "type": "CheckpointLoaderSimple",
+                    "widgets_values": ["umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+            ]
+        })
+
+        # Resolve — should identify HuggingFace source
+        resolve_result = _resolve_workflow_deps_impl(workflow_json=workflow)
+        assert "huggingface" in resolve_result
+
+        # Suggest sources — should match
+        suggest_result = _suggest_asset_sources_impl(
+            asset_names="umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        )
+        assert "huggingface" in suggest_result
+        assert "HF Repo:" in suggest_result
+
+    def test_scan_file_then_list_nodes_then_resolve(self, smoke_store, tmp_path):
+        """Scan file → list custom nodes → resolve deps pipeline."""
+        from src.avatar.mcp.store_server import (
+            _scan_workflow_file_impl,
+            _list_custom_nodes_impl,
+            _resolve_workflow_deps_impl,
+        )
+        import json
+
+        workflow_data = {
+            "nodes": [
+                {
+                    "id": 1, "type": "CheckpointLoaderSimple",
+                    "widgets_values": ["model.safetensors"],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+                {
+                    "id": 2, "type": "VHS_VideoCombine",
+                    "widgets_values": [],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+            ]
+        }
+
+        # Write file
+        workflow_file = tmp_path / "workflow.json"
+        workflow_file.write_text(json.dumps(workflow_data))
+
+        # Scan file
+        file_result = _scan_workflow_file_impl(path=str(workflow_file))
+        assert "model.safetensors" in file_result
+        assert "VHS_VideoCombine" in file_result
+
+        # List custom nodes
+        workflow_json = json.dumps(workflow_data)
+        nodes_result = _list_custom_nodes_impl(workflow_json=workflow_json)
+        assert "ComfyUI-VideoHelperSuite" in nodes_result
+
+        # Resolve deps
+        resolve_result = _resolve_workflow_deps_impl(workflow_json=workflow_json)
+        assert "Model Assets" in resolve_result
+        assert "Custom Node Packages" in resolve_result
+
+
+@pytest.mark.integration
 class TestAvatarRouteSmoke:
     """Smoke tests for avatar API routes."""
 

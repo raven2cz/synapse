@@ -1106,3 +1106,642 @@ class TestRoutesCaching:
 
         assert _cache["config"] is None
         assert _cache["ts"] == 0.0
+
+
+# =============================================================================
+# Civitai tools (Group A)
+# =============================================================================
+
+
+def _make_fake_civitai(models=None):
+    """Create a mock CivitaiClient."""
+    civitai = MagicMock()
+    if models is None:
+        models = []
+    civitai.search_models.return_value = {
+        "items": models,
+        "metadata": {"totalItems": len(models), "currentPage": 1, "pageSize": 10},
+    }
+    return civitai
+
+
+class TestSearchCivitai:
+    """Test _search_civitai_impl."""
+
+    def test_found(self):
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        models = [
+            {
+                "id": 123, "name": "RealVis", "type": "Checkpoint",
+                "modelVersions": [{"name": "v4.0", "baseModel": "SDXL 1.0"}],
+            }
+        ]
+        civitai = _make_fake_civitai(models)
+
+        result = _search_civitai_impl(civitai=civitai, query="RealVis")
+        assert "Found 1 model" in result
+        assert "RealVis" in result
+        assert "Checkpoint" in result
+        assert "ID: 123" in result
+
+    def test_empty_results(self):
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        civitai = _make_fake_civitai([])
+
+        result = _search_civitai_impl(civitai=civitai, query="nonexistent")
+        assert "No models found" in result
+
+    def test_missing_query(self):
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        result = _search_civitai_impl(civitai=MagicMock(), query="")
+        assert "query is required" in result
+
+    def test_api_error(self):
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        civitai = MagicMock()
+        civitai.search_models.side_effect = RuntimeError("API down")
+
+        result = _search_civitai_impl(civitai=civitai, query="test")
+        assert "Error:" in result
+
+
+class TestAnalyzeCivitaiModel:
+    """Test _analyze_civitai_model_impl."""
+
+    def test_model_with_versions(self):
+        from src.avatar.mcp.store_server import _analyze_civitai_model_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (123, None)
+        civitai.get_model.return_value = {
+            "id": 123, "name": "TestModel", "type": "LORA",
+            "tags": ["style", "anime"],
+            "creator": {"username": "ArtistX"},
+            "description": "A nice model",
+            "modelVersions": [
+                {
+                    "id": 456, "name": "v2.0", "baseModel": "SDXL",
+                    "files": [{"name": "test.safetensors", "sizeKB": 2048, "primary": True}],
+                    "trainedWords": ["style_x"],
+                },
+                {
+                    "id": 457, "name": "v1.0", "baseModel": "SD 1.5",
+                    "files": [{"name": "test_v1.safetensors", "sizeKB": 1024}],
+                    "trainedWords": [],
+                },
+            ],
+        }
+
+        result = _analyze_civitai_model_impl(civitai=civitai, url="https://civitai.com/models/123")
+        assert "Model: TestModel" in result
+        assert "Type: LORA" in result
+        assert "Creator: ArtistX" in result
+        assert "style, anime" in result
+        assert "Versions (2)" in result
+        assert "v2.0" in result
+        assert "v1.0" in result
+        assert "test.safetensors" in result
+        assert "style_x" in result
+
+    def test_single_version(self):
+        from src.avatar.mcp.store_server import _analyze_civitai_model_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (99, None)
+        civitai.get_model.return_value = {
+            "id": 99, "name": "Simple", "type": "VAE",
+            "tags": [], "creator": None, "description": "",
+            "modelVersions": [
+                {"id": 100, "name": "v1", "baseModel": "SDXL", "files": [], "trainedWords": []},
+            ],
+        }
+
+        result = _analyze_civitai_model_impl(civitai=civitai, url="https://civitai.com/models/99")
+        assert "Model: Simple" in result
+        assert "Versions (1)" in result
+
+    def test_invalid_url(self):
+        from src.avatar.mcp.store_server import _analyze_civitai_model_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.side_effect = ValueError("Invalid Civitai URL: bad")
+
+        result = _analyze_civitai_model_impl(civitai=civitai, url="bad")
+        assert "Error:" in result
+
+    def test_api_error(self):
+        from src.avatar.mcp.store_server import _analyze_civitai_model_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (123, None)
+        civitai.get_model.side_effect = RuntimeError("API error")
+
+        result = _analyze_civitai_model_impl(civitai=civitai, url="https://civitai.com/models/123")
+        assert "Error:" in result
+
+
+class TestCompareModelVersions:
+    """Test _compare_model_versions_impl."""
+
+    def test_multiple_versions(self):
+        from src.avatar.mcp.store_server import _compare_model_versions_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (123, None)
+        civitai.get_model.return_value = {
+            "id": 123, "name": "TestModel", "type": "LORA",
+            "modelVersions": [
+                {
+                    "name": "v2.0", "baseModel": "SDXL",
+                    "files": [{"sizeKB": 2048}], "trainedWords": ["a", "b"],
+                    "publishedAt": "2026-01-15T10:00:00Z",
+                },
+                {
+                    "name": "v1.0", "baseModel": "SD 1.5",
+                    "files": [{"sizeKB": 1024}], "trainedWords": ["a"],
+                    "publishedAt": "2025-06-01T10:00:00Z",
+                },
+            ],
+        }
+
+        result = _compare_model_versions_impl(civitai=civitai, url="https://civitai.com/models/123")
+        assert "Version comparison" in result
+        assert "v2.0" in result
+        assert "v1.0" in result
+        assert "Base Model" in result
+
+    def test_single_version(self):
+        from src.avatar.mcp.store_server import _compare_model_versions_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (123, None)
+        civitai.get_model.return_value = {
+            "id": 123, "name": "Solo", "type": "LORA",
+            "modelVersions": [{"name": "v1.0"}],
+        }
+
+        result = _compare_model_versions_impl(civitai=civitai, url="https://civitai.com/models/123")
+        assert "only 1 version" in result
+
+    def test_api_error(self):
+        from src.avatar.mcp.store_server import _compare_model_versions_impl
+
+        civitai = MagicMock()
+        civitai.parse_civitai_url.return_value = (123, None)
+        civitai.get_model.side_effect = RuntimeError("boom")
+
+        result = _compare_model_versions_impl(civitai=civitai, url="https://civitai.com/models/123")
+        assert "Error:" in result
+
+
+class TestImportCivitaiModel:
+    """Test _import_civitai_model_impl."""
+
+    def test_successful_import(self):
+        from src.avatar.mcp.store_server import _import_civitai_model_impl
+
+        pack = MagicMock()
+        pack.name = "ImportedPack"
+        pack_type = MagicMock()
+        pack_type.value = "lora"
+        pack.pack_type = pack_type
+        pack.base_model = "SDXL"
+        pack.dependencies = [MagicMock(), MagicMock()]
+        source = MagicMock()
+        source.url = "https://civitai.com/models/123"
+        pack.source = source
+
+        store = MagicMock()
+        store.import_civitai.return_value = pack
+
+        result = _import_civitai_model_impl(store=store, url="https://civitai.com/models/123")
+        assert "Successfully imported" in result
+        assert "ImportedPack" in result
+        assert "lora" in result
+        assert "Dependencies: 2" in result
+
+    def test_custom_name(self):
+        from src.avatar.mcp.store_server import _import_civitai_model_impl
+
+        pack = MagicMock()
+        pack.name = "CustomName"
+        pack_type = MagicMock()
+        pack_type.value = "checkpoint"
+        pack.pack_type = pack_type
+        pack.base_model = None
+        pack.dependencies = []
+        pack.source = None
+
+        store = MagicMock()
+        store.import_civitai.return_value = pack
+
+        result = _import_civitai_model_impl(store=store, url="https://civitai.com/models/123", pack_name="CustomName")
+        assert "CustomName" in result
+        store.import_civitai.assert_called_once()
+        call_kwargs = store.import_civitai.call_args[1]
+        assert call_kwargs["pack_name"] == "CustomName"
+
+    def test_invalid_url(self):
+        from src.avatar.mcp.store_server import _import_civitai_model_impl
+
+        store = MagicMock()
+        store.import_civitai.side_effect = ValueError("Invalid URL")
+
+        result = _import_civitai_model_impl(store=store, url="bad-url")
+        assert "Error:" in result
+
+    def test_import_error(self):
+        from src.avatar.mcp.store_server import _import_civitai_model_impl
+
+        store = MagicMock()
+        store.import_civitai.side_effect = RuntimeError("Download failed")
+
+        result = _import_civitai_model_impl(store=store, url="https://civitai.com/models/123")
+        assert "Error:" in result
+
+
+# =============================================================================
+# Workflow tools (Group B)
+# =============================================================================
+
+
+def _make_workflow_json(nodes=None):
+    """Create a workflow JSON string."""
+    import json
+    return json.dumps({"nodes": nodes or []})
+
+
+class TestScanWorkflow:
+    """Test _scan_workflow_impl."""
+
+    def test_workflow_with_assets_and_nodes(self):
+        from src.avatar.mcp.store_server import _scan_workflow_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["sdxl_base.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+            {
+                "id": 2, "type": "LoraLoader",
+                "widgets_values": ["detail_tweaker.safetensors", 0.8, 0.8],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+            {
+                "id": 3, "type": "VHS_VideoCombine",
+                "widgets_values": [],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _scan_workflow_impl(workflow_json=workflow)
+        assert "Workflow Scan Results" in result
+        assert "Nodes: 3" in result
+        assert "sdxl_base.safetensors" in result
+        assert "detail_tweaker.safetensors" in result
+        assert "VHS_VideoCombine" in result
+
+    def test_empty_workflow(self):
+        from src.avatar.mcp.store_server import _scan_workflow_impl
+
+        result = _scan_workflow_impl(workflow_json=_make_workflow_json([]))
+        assert "No model dependencies or custom nodes found" in result
+
+    def test_invalid_json(self):
+        from src.avatar.mcp.store_server import _scan_workflow_impl
+
+        result = _scan_workflow_impl(workflow_json="{bad json")
+        assert "Invalid JSON" in result
+
+    def test_no_assets(self):
+        from src.avatar.mcp.store_server import _scan_workflow_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "SaveImage",
+                "widgets_values": ["output"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _scan_workflow_impl(workflow_json=workflow)
+        assert "No model dependencies or custom nodes found" in result
+
+
+class TestScanWorkflowFile:
+    """Test _scan_workflow_file_impl."""
+
+    def test_valid_file(self, tmp_path):
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+        import json
+
+        workflow_file = tmp_path / "test.json"
+        workflow_file.write_text(json.dumps({
+            "nodes": [
+                {
+                    "id": 1, "type": "CheckpointLoaderSimple",
+                    "widgets_values": ["model.safetensors"],
+                    "inputs": {}, "outputs": [], "properties": {},
+                },
+            ]
+        }))
+
+        result = _scan_workflow_file_impl(path=str(workflow_file))
+        assert "test.json" in result
+        assert "model.safetensors" in result
+
+    def test_nonexistent_file(self):
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+
+        result = _scan_workflow_file_impl(path="/tmp/no_such_file_12345.json")
+        assert "File not found" in result
+
+    def test_non_json_extension_rejected(self, tmp_path):
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+
+        # Security: non-json files should be rejected
+        txt_file = tmp_path / "secret.txt"
+        txt_file.write_text("secret data")
+
+        result = _scan_workflow_file_impl(path=str(txt_file))
+        assert "Only .json" in result
+
+    def test_invalid_json_file(self, tmp_path):
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+
+        bad_file = tmp_path / "bad.json"
+        bad_file.write_text("{not valid json")
+
+        result = _scan_workflow_file_impl(path=str(bad_file))
+        assert "Error" in result
+
+
+class TestCheckWorkflowAvailability:
+    """Test _check_workflow_availability_impl."""
+
+    def test_all_available(self):
+        from src.avatar.mcp.store_server import _check_workflow_availability_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["model_a.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        # Mock store inventory
+        item = MagicMock()
+        item.display_name = "model_a.safetensors"
+        response = MagicMock()
+        response.items = [item]
+
+        store = MagicMock()
+        store.get_inventory.return_value = response
+
+        result = _check_workflow_availability_impl(store=store, workflow_json=workflow)
+        assert "Available locally" in result
+        assert "model_a.safetensors" in result
+        assert "All dependencies are available locally" in result
+
+    def test_some_missing(self):
+        from src.avatar.mcp.store_server import _check_workflow_availability_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["model_a.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+            {
+                "id": 2, "type": "LoraLoader",
+                "widgets_values": ["missing_lora.safetensors", 0.8, 0.8],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        item = MagicMock()
+        item.display_name = "model_a.safetensors"
+        response = MagicMock()
+        response.items = [item]
+
+        store = MagicMock()
+        store.get_inventory.return_value = response
+
+        result = _check_workflow_availability_impl(store=store, workflow_json=workflow)
+        assert "Available locally (1)" in result
+        assert "Missing (1)" in result
+        assert "missing_lora.safetensors" in result
+
+    def test_empty_workflow(self):
+        from src.avatar.mcp.store_server import _check_workflow_availability_impl
+
+        result = _check_workflow_availability_impl(store=MagicMock(), workflow_json=_make_workflow_json([]))
+        assert "No model dependencies found" in result
+
+
+class TestListCustomNodes:
+    """Test _list_custom_nodes_impl."""
+
+    def test_known_nodes_resolved(self):
+        from src.avatar.mcp.store_server import _list_custom_nodes_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "VHS_VideoCombine",
+                "widgets_values": [],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _list_custom_nodes_impl(workflow_json=workflow)
+        assert "ComfyUI-VideoHelperSuite" in result
+        assert "github.com" in result
+
+    def test_unknown_node(self):
+        from src.avatar.mcp.store_server import _list_custom_nodes_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "SomeRandomCustomNode",
+                "widgets_values": [],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _list_custom_nodes_impl(workflow_json=workflow)
+        assert "Unresolved" in result
+        assert "SomeRandomCustomNode" in result
+
+    def test_no_custom_nodes(self):
+        from src.avatar.mcp.store_server import _list_custom_nodes_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["model.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _list_custom_nodes_impl(workflow_json=workflow)
+        assert "No custom nodes found" in result
+
+
+# =============================================================================
+# Dependency resolution tools (Group C)
+# =============================================================================
+
+
+class TestResolveWorkflowDeps:
+    """Test _resolve_workflow_deps_impl."""
+
+    def test_mixed_sources(self):
+        from src.avatar.mcp.store_server import _resolve_workflow_deps_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["umt5_xxl_fp8_e4m3fn_scaled.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+            {
+                "id": 2, "type": "VHS_VideoCombine",
+                "widgets_values": [],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _resolve_workflow_deps_impl(workflow_json=workflow)
+        assert "Model Assets" in result
+        assert "huggingface" in result
+        assert "Custom Node Packages" in result
+
+    def test_all_local(self):
+        from src.avatar.mcp.store_server import _resolve_workflow_deps_impl
+
+        workflow = _make_workflow_json([
+            {
+                "id": 1, "type": "CheckpointLoaderSimple",
+                "widgets_values": ["random_local_model.safetensors"],
+                "inputs": {}, "outputs": [], "properties": {},
+            },
+        ])
+
+        result = _resolve_workflow_deps_impl(workflow_json=workflow)
+        assert "Model Assets" in result
+        assert "random_local_model.safetensors" in result
+
+    def test_empty_workflow(self):
+        from src.avatar.mcp.store_server import _resolve_workflow_deps_impl
+
+        result = _resolve_workflow_deps_impl(workflow_json=_make_workflow_json([]))
+        assert "No dependencies found" in result
+
+
+class TestFindModelByHash:
+    """Test _find_model_by_hash_impl."""
+
+    def test_found(self):
+        from src.avatar.mcp.store_server import _find_model_by_hash_impl
+
+        version = MagicMock()
+        version.name = "v2.0"
+        version.id = 456
+        version.model_id = 123
+        version.base_model = "SDXL"
+        version.model_name = "TestModel"
+        version.files = [{"name": "test.safetensors"}]
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = version
+
+        result = _find_model_by_hash_impl(civitai=civitai, hash_value="abcdef1234567890")
+        assert "Found model version" in result
+        assert "v2.0" in result
+        assert "TestModel" in result
+
+    def test_not_found(self):
+        from src.avatar.mcp.store_server import _find_model_by_hash_impl
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        result = _find_model_by_hash_impl(civitai=civitai, hash_value="deadbeef")
+        assert "No model found" in result
+
+    def test_api_error(self):
+        from src.avatar.mcp.store_server import _find_model_by_hash_impl
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.side_effect = RuntimeError("API error")
+
+        result = _find_model_by_hash_impl(civitai=civitai, hash_value="abcdef")
+        assert "Error:" in result
+
+
+class TestSuggestAssetSources:
+    """Test _suggest_asset_sources_impl."""
+
+    def test_known_hf_model(self):
+        from src.avatar.mcp.store_server import _suggest_asset_sources_impl
+
+        result = _suggest_asset_sources_impl(
+            asset_names="umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        )
+        assert "huggingface" in result
+        assert "HF Repo:" in result
+
+    def test_civitai_pattern(self):
+        from src.avatar.mcp.store_server import _suggest_asset_sources_impl
+
+        result = _suggest_asset_sources_impl(asset_names="anime_pony_v5.safetensors")
+        assert "civitai" in result
+
+    def test_unknown_model(self):
+        from src.avatar.mcp.store_server import _suggest_asset_sources_impl
+
+        result = _suggest_asset_sources_impl(asset_names="completely_unknown_file.bin")
+        assert "local" in result
+
+    def test_empty_input(self):
+        from src.avatar.mcp.store_server import _suggest_asset_sources_impl
+
+        result = _suggest_asset_sources_impl(asset_names="")
+        assert "asset_names is required" in result
+
+
+class TestNewImplFunctionsImportable:
+    """Test that all new _impl functions are importable without mcp."""
+
+    def test_all_new_impls_importable(self):
+        from src.avatar.mcp.store_server import (
+            _search_civitai_impl,
+            _analyze_civitai_model_impl,
+            _compare_model_versions_impl,
+            _import_civitai_model_impl,
+            _scan_workflow_impl,
+            _scan_workflow_file_impl,
+            _check_workflow_availability_impl,
+            _list_custom_nodes_impl,
+            _resolve_workflow_deps_impl,
+            _find_model_by_hash_impl,
+            _suggest_asset_sources_impl,
+        )
+
+        assert callable(_search_civitai_impl)
+        assert callable(_analyze_civitai_model_impl)
+        assert callable(_compare_model_versions_impl)
+        assert callable(_import_civitai_model_impl)
+        assert callable(_scan_workflow_impl)
+        assert callable(_scan_workflow_file_impl)
+        assert callable(_check_workflow_availability_impl)
+        assert callable(_list_custom_nodes_impl)
+        assert callable(_resolve_workflow_deps_impl)
+        assert callable(_find_model_by_hash_impl)
+        assert callable(_suggest_asset_sources_impl)

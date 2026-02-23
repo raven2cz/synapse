@@ -101,13 +101,35 @@ class FakeFile:
         return result
 
 
+class _FakeVersionResult:
+    """Lightweight wrapper to mimic CivitaiModelVersion for get_model_by_hash."""
+
+    def __init__(self, version: FakeModelVersion, model: FakeModel):
+        self.id = version.id
+        self.model_id = version.model_id
+        self.name = version.name
+        self.base_model = version.base_model
+        self.files = version.files
+        self.images = version.images
+        self.trained_words = version.trained_words
+        self._model = model
+
+    @property
+    def model_name(self) -> str:
+        return self._model.name
+
+    @property
+    def model_type(self) -> str:
+        return self._model.type
+
+
 class FakeCivitaiClient:
     """
     Fake Civitai client for offline testing.
-    
+
     Usage:
         client = FakeCivitaiClient()
-        
+
         # Add fake models
         client.add_model(FakeModel(
             id=12345,
@@ -121,39 +143,93 @@ class FakeCivitaiClient:
                 )
             ]
         ))
-        
+
         # Use in tests
         model = client.get_model(12345)
     """
-    
+
     def __init__(self):
         self.models: Dict[int, FakeModel] = {}
         self.versions: Dict[int, FakeModelVersion] = {}
         self.download_handler: Optional[callable] = None
-    
+
     def add_model(self, model: FakeModel) -> None:
         """Add a fake model."""
         self.models[model.id] = model
         for version in model.versions:
             self.versions[version.id] = version
-    
+
     def get_model(self, model_id: int) -> Dict[str, Any]:
         """Get model by ID."""
         if model_id not in self.models:
             raise ValueError(f"Model not found: {model_id}")
         return self.models[model_id].to_dict()
-    
+
     def get_model_version(self, version_id: int) -> Dict[str, Any]:
         """Get model version by ID."""
         if version_id not in self.versions:
             raise ValueError(f"Version not found: {version_id}")
         return self.versions[version_id].to_dict()
-    
+
     def download_preview_image(self, preview: Any, dest: Path) -> None:
         """Fake preview download."""
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Write a small fake image
         dest.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+
+    def search_models(
+        self,
+        query: Optional[str] = None,
+        types: Optional[List[str]] = None,
+        sort: Optional[str] = None,
+        limit: int = 20,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Search models by name substring. Returns Civitai API-style response."""
+        results = []
+        for model in self.models.values():
+            # Filter by query (name substring)
+            if query and query.lower() not in model.name.lower():
+                continue
+            # Filter by types
+            if types and model.type not in types:
+                continue
+            results.append(model.to_dict())
+
+        return {
+            "items": results[:limit],
+            "metadata": {"totalItems": len(results), "currentPage": 1, "pageSize": limit},
+        }
+
+    def get_model_by_hash(self, hash_value: str) -> Optional[Any]:
+        """Find model version by file hash (SHA256). Returns CivitaiModelVersion-like or None."""
+        hash_upper = hash_value.upper()
+        for model in self.models.values():
+            for version in model.versions:
+                for file_dict in version.files:
+                    hashes = file_dict.get("hashes", {})
+                    if hashes.get("SHA256", "").upper() == hash_upper:
+                        # Return a simple object matching CivitaiModelVersion interface
+                        return _FakeVersionResult(version, model)
+        return None
+
+    def parse_civitai_url(self, url: str) -> tuple:
+        """Parse Civitai URL to extract (model_id, version_id)."""
+        import re
+        from urllib.parse import urlparse, parse_qs
+
+        parsed = urlparse(url)
+        path_match = re.match(r'/models/(\d+)', parsed.path)
+        if not path_match:
+            raise ValueError(f"Invalid Civitai URL: {url}")
+
+        model_id = int(path_match.group(1))
+        query_params = parse_qs(parsed.query)
+        version_id = None
+        if "modelVersionId" in query_params:
+            version_id = int(query_params["modelVersionId"][0])
+
+        return model_id, version_id
 
 
 class TestStoreContext:
