@@ -10,9 +10,11 @@ These routes work regardless of whether avatar-engine is installed.
 When avatar-engine IS installed, additional routes are mounted by the engine itself.
 """
 
+import json
 import logging
 import time
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 
@@ -84,7 +86,8 @@ def avatar_status() -> Dict[str, Any]:
 @avatar_router.get("/providers")
 def avatar_providers() -> List[Dict[str, Any]]:
     """List available AI CLI providers on this system."""
-    return detect_available_providers()
+    _, providers = _get_cached_config()
+    return providers
 
 
 @avatar_router.get("/config")
@@ -122,17 +125,70 @@ def avatar_skills_endpoint() -> Dict[str, Any]:
     return list_skills(config)
 
 
-def _count_skills(config) -> Dict[str, int]:
-    """Count built-in and custom skills."""
-    builtin = 0
-    custom = 0
+# Built-in avatar IDs (shipped with avatar-engine)
+BUILTIN_AVATARS = [
+    {"id": "bella", "name": "Bella"},
+    {"id": "heart", "name": "Heart"},
+    {"id": "nicole", "name": "Nicole"},
+    {"id": "sky", "name": "Sky"},
+    {"id": "adam", "name": "Adam"},
+    {"id": "michael", "name": "Michael"},
+    {"id": "george", "name": "George"},
+    {"id": "astronautka", "name": "Astronautka"},
+]
 
-    if config.skills_dir and config.skills_dir.exists():
-        builtin = len(list(config.skills_dir.glob("*.md")))
-    if config.custom_skills_dir and config.custom_skills_dir.exists():
-        custom = len(list(config.custom_skills_dir.glob("*.md")))
+
+@avatar_router.get("/avatars")
+def avatar_avatars_endpoint() -> Dict[str, Any]:
+    """
+    List available avatars: built-in + custom.
+
+    Custom avatars are subdirectories of avatars_dir containing avatar.json.
+    """
+    config, _ = _get_cached_config()
+
+    builtin = [
+        {"id": a["id"], "name": a["name"], "category": "builtin"}
+        for a in BUILTIN_AVATARS
+    ]
+
+    custom = _list_custom_avatars(config.avatars_dir)
 
     return {"builtin": builtin, "custom": custom}
+
+
+_MAX_AVATAR_JSON_SIZE = 1_048_576  # 1 MB guard
+
+
+def _list_custom_avatars(avatars_dir: Optional[Path]) -> List[Dict[str, Any]]:
+    """Scan avatars_dir for subdirectories containing avatar.json."""
+    result: List[Dict[str, Any]] = []
+    if avatars_dir is None or not avatars_dir.is_dir():
+        return result
+
+    for entry in sorted(avatars_dir.iterdir()):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        avatar_json = entry / "avatar.json"
+        if not avatar_json.is_file():
+            continue
+        try:
+            size = avatar_json.stat().st_size
+            if size > _MAX_AVATAR_JSON_SIZE:
+                logger.warning("Skipping oversized avatar.json in %s (%d bytes)", entry.name, size)
+                continue
+            data = json.loads(avatar_json.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            result.append({
+                "id": entry.name,
+                "name": data.get("name", entry.name),
+                "category": "custom",
+            })
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Skipping custom avatar %s: %s", entry.name, e)
+
+    return result
 
 
 def try_mount_avatar_engine(app) -> bool:

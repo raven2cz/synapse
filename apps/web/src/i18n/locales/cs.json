@@ -1691,6 +1691,44 @@
       "apply": "Použít aktualizaci"
     }
   },
+  "settingsAvatar": {
+    "title": "AI Asistent (Avatar Engine)",
+    "subtitle": "AI asistent poháněný avatar-engine",
+    "configReadOnly": "Nastavení se spravují přes konfigurační soubor avatar.yaml:",
+    "installed": "Nainstalováno",
+    "notInstalled": "Nenainstalováno",
+    "none": "Žádný",
+    "activeProvider": "Aktivní poskytovatel",
+    "availableProvider": "Dostupný",
+    "stats": {
+      "engine": "Engine",
+      "provider": "Poskytovatel",
+      "safety": "Bezpečnostní režim",
+      "skills": "Dovednosti"
+    },
+    "providersTitle": "AI Poskytovatelé",
+    "safetyTitle": "Bezpečnostní režim",
+    "currentSafety": "Aktuální bezpečnostní režim",
+    "safety": {
+      "safe": "Bezpečný",
+      "safeDesc": "Všechny příkazy vyžadují explicitní schválení před spuštěním.",
+      "ask": "Dotázat se",
+      "askDesc": "AI se zeptá před spuštěním potenciálně nebezpečných příkazů.",
+      "unrestricted": "Neomezený",
+      "unrestrictedDesc": "Příkazy se spouští bez potvrzení. Používejte opatrně."
+    },
+    "skillsTitle": "Dovednosti",
+    "builtinSkills": "{{count}} vestavěných",
+    "customSkills": "{{count}} vlastních",
+    "builtinLabel": "Vestavěné",
+    "customLabel": "Vlastní",
+    "avatarsTitle": "Avatary",
+    "builtinAvatars": "8 vestavěných avatarů",
+    "avatarsHint": "Vlastní avatary lze přidat do adresáře avatars/. Viz dokumentace avatar-engine.",
+    "configFile": "Konfigurační soubor",
+    "configFileHint": "Upravte tento soubor pro změnu poskytovatele, bezpečnostního režimu a dalších nastavení. Po změnách restartujte Synapse.",
+    "loadFailed": "Nepodařilo se načíst konfiguraci avatara. Zkontrolujte, zda běží backend."
+  },
   "avatar": {
     "title": "AI Asistent",
     "loading": "Připojování k AI asistentovi...",

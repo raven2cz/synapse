@@ -257,7 +257,7 @@ export class TrpcBridgeAdapter implements SearchAdapter {
    * Uses image.getInfinite which requires modelVersionId (NOT modelId!).
    * 15s timeout protects against Civitai hangs.
    */
-  async getModelPreviews(modelId: number, versionId: number): Promise<ModelPreview[]> {
+  async getModelPreviews(_modelId: number, versionId: number): Promise<ModelPreview[]> {
     const bridge = window.SynapseSearchBridge
     if (!bridge?.getModelImages) {
       throw new Error('Bridge getModelImages not available')

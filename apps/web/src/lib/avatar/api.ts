@@ -35,7 +35,31 @@ export interface AvatarConfig {
   has_config_file: boolean
   config_path: string | null
   skills_count: { builtin: number; custom: number }
+  skills?: AvatarSkills
   provider_configs: Record<string, { model: string; enabled: boolean }>
+}
+
+export interface AvatarSkillInfo {
+  name: string
+  path: string
+  size: number
+  category: 'builtin' | 'custom'
+}
+
+export interface AvatarSkills {
+  builtin: AvatarSkillInfo[]
+  custom: AvatarSkillInfo[]
+}
+
+export interface AvatarInfo {
+  id: string
+  name: string
+  category: 'builtin' | 'custom'
+}
+
+export interface AvatarAvatars {
+  builtin: AvatarInfo[]
+  custom: AvatarInfo[]
 }
 
 // --- Query key factory ---
@@ -45,6 +69,8 @@ export const avatarKeys = {
   status: () => [...avatarKeys.all, 'status'] as const,
   providers: () => [...avatarKeys.all, 'providers'] as const,
   config: () => [...avatarKeys.all, 'config'] as const,
+  skills: () => [...avatarKeys.all, 'skills'] as const,
+  avatars: () => [...avatarKeys.all, 'avatars'] as const,
 }
 
 // --- API functions ---
@@ -64,5 +90,17 @@ export async function getAvatarProviders(): Promise<AvatarProvider[]> {
 export async function getAvatarConfig(): Promise<AvatarConfig> {
   const res = await fetch(`${API_BASE}/config`)
   if (!res.ok) throw new Error('Failed to fetch avatar config')
+  return res.json()
+}
+
+export async function getAvatarSkills(): Promise<AvatarSkills> {
+  const res = await fetch(`${API_BASE}/skills`)
+  if (!res.ok) throw new Error('Failed to fetch avatar skills')
+  return res.json()
+}
+
+export async function getAvatarAvatars(): Promise<AvatarAvatars> {
+  const res = await fetch(`${API_BASE}/avatars`)
+  if (!res.ok) throw new Error('Failed to fetch avatar avatars')
   return res.json()
 }

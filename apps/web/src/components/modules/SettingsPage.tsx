@@ -9,6 +9,7 @@ import { toast } from '../../stores/toastStore'
 import type { BackupStatus, BackupConfigRequest } from './inventory/types'
 import { formatBytes } from '../../lib/utils/format'
 import { AIServicesSettings, type AIServicesSettingsHandle } from './settings/AIServicesSettings'
+import { AvatarSettings, type AvatarSettingsHandle } from './settings/AvatarSettings'
 import { LanguageSettings } from './settings/LanguageSettings'
 
 interface SettingsResponse {
@@ -43,6 +44,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const { nsfwBlurEnabled, setNsfwBlur, autoCheckUpdates, setAutoCheckUpdates } = useSettingsStore()
   const aiSettingsRef = useRef<AIServicesSettingsHandle>(null)
+  const avatarSettingsRef = useRef<AvatarSettingsHandle>(null)
   const [comfyuiPath, setComfyuiPath] = useState('~/ComfyUI')
   const [civitaiToken, setCivitaiToken] = useState('')
   const [hfToken, setHfToken] = useState('')
@@ -192,6 +194,11 @@ export function SettingsPage() {
       // Include AI settings save if there are unsaved changes
       if (aiSettingsRef.current?.hasChanges()) {
         savePromises.push(aiSettingsRef.current.save())
+      }
+
+      // Include Avatar settings save if there are unsaved changes
+      if (avatarSettingsRef.current?.hasChanges()) {
+        savePromises.push(avatarSettingsRef.current.save())
       }
 
       // Execute all saves
@@ -643,7 +650,10 @@ export function SettingsPage() {
         {/* 6. AI Services Settings */}
         <AIServicesSettings ref={aiSettingsRef} />
 
-        {/* 7. Diagnostics */}
+        {/* 7. Avatar Engine (AI Assistant) Settings */}
+        <AvatarSettings ref={avatarSettingsRef} />
+
+        {/* 8. Diagnostics */}
         <Card>
           <div className="flex items-center justify-between">
             <div>

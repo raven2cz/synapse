@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.avatar.routes import (
-    _count_skills,
     avatar_config_endpoint,
     avatar_providers,
     avatar_status,
@@ -233,55 +232,6 @@ class TestTryMountAvatarEngine:
 
         assert result is True
         app.mount.assert_called_once_with("/api/avatar/engine", mock_avatar_app)
-
-
-class TestCountSkills:
-    """Skill counting utility."""
-
-    def test_counts_builtin_skills(self, tmp_path):
-        skills_dir = tmp_path / "skills"
-        skills_dir.mkdir()
-        (skills_dir / "basics.md").write_text("# basics")
-        (skills_dir / "advanced.md").write_text("# advanced")
-
-        config = _make_config()
-        config.skills_dir = skills_dir
-        config.custom_skills_dir = tmp_path / "nonexistent"
-
-        result = _count_skills(config)
-        assert result["builtin"] == 2
-        assert result["custom"] == 0
-
-    def test_counts_custom_skills(self, tmp_path):
-        custom_dir = tmp_path / "custom-skills"
-        custom_dir.mkdir()
-        (custom_dir / "my-skill.md").write_text("# custom")
-
-        config = _make_config()
-        config.skills_dir = tmp_path / "nonexistent"
-        config.custom_skills_dir = custom_dir
-
-        result = _count_skills(config)
-        assert result["builtin"] == 0
-        assert result["custom"] == 1
-
-    def test_no_skills_dirs(self, tmp_path):
-        config = _make_config()
-        config.skills_dir = tmp_path / "nonexistent"
-        config.custom_skills_dir = tmp_path / "also-nonexistent"
-
-        result = _count_skills(config)
-        assert result["builtin"] == 0
-        assert result["custom"] == 0
-
-    def test_none_skill_dirs(self):
-        config = _make_config()
-        config.skills_dir = None
-        config.custom_skills_dir = None
-
-        result = _count_skills(config)
-        assert result["builtin"] == 0
-        assert result["custom"] == 0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────

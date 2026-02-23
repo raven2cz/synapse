@@ -1681,6 +1681,44 @@
       "apply": "Apply Update"
     }
   },
+  "settingsAvatar": {
+    "title": "AI Assistant (Avatar Engine)",
+    "subtitle": "AI assistant powered by avatar-engine",
+    "configReadOnly": "Settings are managed via avatar.yaml config file:",
+    "installed": "Installed",
+    "notInstalled": "Not installed",
+    "none": "None",
+    "activeProvider": "Active provider",
+    "availableProvider": "Available",
+    "stats": {
+      "engine": "Engine",
+      "provider": "Provider",
+      "safety": "Safety Mode",
+      "skills": "Skills"
+    },
+    "providersTitle": "AI Providers",
+    "safetyTitle": "Safety Mode",
+    "currentSafety": "Current Safety Mode",
+    "safety": {
+      "safe": "Safe",
+      "safeDesc": "All commands require explicit approval before execution.",
+      "ask": "Ask",
+      "askDesc": "AI will ask before running potentially dangerous commands.",
+      "unrestricted": "Unrestricted",
+      "unrestrictedDesc": "Commands execute without confirmation. Use with caution."
+    },
+    "skillsTitle": "Skills",
+    "builtinSkills": "{{count}} built-in",
+    "customSkills": "{{count}} custom",
+    "builtinLabel": "Built-in",
+    "customLabel": "Custom",
+    "avatarsTitle": "Avatars",
+    "builtinAvatars": "8 built-in avatar characters",
+    "avatarsHint": "Custom avatars can be added in the avatars/ directory. See avatar-engine documentation.",
+    "configFile": "Configuration File",
+    "configFileHint": "Edit this file to change provider, safety mode, and other settings. Restart Synapse after changes.",
+    "loadFailed": "Failed to load avatar configuration. Check that the backend is running."
+  },
   "avatar": {
     "title": "AI Assistant",
     "loading": "Connecting to AI assistant...",
