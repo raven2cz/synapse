@@ -1,0 +1,58 @@
+# ⬢ Synapse — Avatar Engine Configuration
+#
+# This file configures the AI assistant powered by avatar-engine.
+# Copy to ~/.synapse/avatar.yaml and customize as needed.
+#
+# Documentation: docs/AVATAR-CONFIG.md
+
+# Default AI provider (gemini | claude | codex)
+provider: "gemini"
+
+# System prompt (injected into all providers)
+# Skills from ~/.synapse/avatar/skills/ are appended automatically.
+system_prompt: |
+  You are a Synapse AI assistant — an expert in AI model management,
+  ComfyUI workflows, Stable Diffusion, and image generation.
+
+  You have access to Synapse tools via MCP. Use them to help the user
+  manage their model inventory, import packs, resolve dependencies,
+  and optimize generation parameters.
+
+  The user's model store is at ~/.synapse/store.
+  Always be helpful, concise, and proactive.
+
+# MCP servers (Synapse tools available to the AI)
+mcp_servers:
+  synapse-store:
+    command: "python"
+    args: ["-m", "src.avatar.mcp.store_server"]
+    env:
+      SYNAPSE_ROOT: "~/.synapse"
+
+# --- Provider-specific configuration ---
+
+gemini:
+  model: "gemini-3-pro-preview"
+  # approval_mode: "yolo"    # yolo | ask | deny
+  # acp_enabled: true
+
+claude:
+  model: "claude-sonnet-4-5"
+  # permission_mode: "acceptEdits"
+  # allowed_tools:
+  #   - "Read"
+  #   - "Grep"
+  #   - "mcp__synapse-store__*"
+
+codex:
+  model: ""
+  # auth_method: "chatgpt"
+
+# --- Engine settings ---
+
+engine:
+  working_dir: "~/.synapse"
+  max_history: 100
+  auto_restart: true
+  # Safety mode: safe (default) | ask (Gemini only) | unrestricted
+  safety_instructions: "safe"

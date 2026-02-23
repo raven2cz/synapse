@@ -153,6 +153,60 @@ fi
 echo ""
 
 # ============================================================================
+# Avatar Engine (optional)
+# ============================================================================
+
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Installing Avatar Engine (optional AI assistant)...${NC}"
+echo ""
+
+AVATAR_INSTALLED=false
+if [ "$USE_UV" = true ]; then
+    if uv pip install --python .venv/bin/python "avatar-engine[web]" 2>/dev/null; then
+        AVATAR_INSTALLED=true
+    fi
+else
+    if .venv/bin/pip install "avatar-engine[web]" 2>/dev/null; then
+        AVATAR_INSTALLED=true
+    fi
+fi
+
+if [ "$AVATAR_INSTALLED" = true ]; then
+    echo -e "${GREEN}  ✓ Avatar Engine installed${NC}"
+else
+    echo -e "${YELLOW}  ! Avatar Engine not available (package not yet published)${NC}"
+    echo -e "${YELLOW}    The AI assistant will be disabled. Synapse works fine without it.${NC}"
+fi
+
+# Create avatar config directory and default config
+mkdir -p ~/.synapse/avatar/skills
+if [ ! -f ~/.synapse/avatar.yaml ]; then
+    if [ -f "$PROJECT_ROOT/config/avatar.yaml.example" ]; then
+        cp "$PROJECT_ROOT/config/avatar.yaml.example" ~/.synapse/avatar.yaml
+        echo -e "${GREEN}  ✓ Default avatar config created at ~/.synapse/avatar.yaml${NC}"
+    fi
+fi
+
+# Copy bundled skills
+if [ -d "$PROJECT_ROOT/config/avatar/skills" ]; then
+    cp "$PROJECT_ROOT/config/avatar/skills/"*.md ~/.synapse/avatar/skills/ 2>/dev/null
+    SKILL_COUNT=$(ls ~/.synapse/avatar/skills/*.md 2>/dev/null | wc -l)
+    echo -e "${GREEN}  ✓ ${SKILL_COUNT} skill files installed${NC}"
+fi
+
+# Detect AI CLI providers
+echo ""
+echo -e "  ${CYAN}AI CLI Provider Detection:${NC}"
+for CLI_NAME in gemini claude codex; do
+    if command -v "$CLI_NAME" &> /dev/null; then
+        echo -e "  ${GREEN}  ✓ $CLI_NAME found${NC}"
+    else
+        echo -e "  ${YELLOW}  - $CLI_NAME not found${NC}"
+    fi
+done
+
+echo ""
+
+# ============================================================================
 # Node.js Dependencies
 # ============================================================================
 

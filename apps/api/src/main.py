@@ -38,6 +38,7 @@ from src.store.api import (
     search_router,
     ai_router,  # AI services (provider detection, parameter extraction)
 )
+from src.avatar.routes import avatar_router, try_mount_avatar_engine
 from .core.config import settings
 
 # Configure logging - INFO level for normal operation
@@ -151,6 +152,10 @@ app.include_router(search_router, prefix="/api/search", tags=["Search"])
 
 # AI Services - provider detection, parameter extraction, caching
 app.include_router(ai_router, prefix="/api", tags=["AI"])
+
+# Avatar Engine - AI assistant (graceful degradation when not installed)
+app.include_router(avatar_router, prefix="/api/avatar", tags=["Avatar"])
+try_mount_avatar_engine(app)
 
 # Serve preview images - V2 Store path
 from pathlib import Path

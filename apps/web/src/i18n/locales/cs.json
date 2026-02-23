@@ -712,7 +712,8 @@
     "inventory": "Inventář",
     "profiles": "Profily",
     "settings": "Nastavení",
-    "downloads": "Stahování"
+    "downloads": "Stahování",
+    "avatar": "AI Asistent"
   },
   "header": {
     "tagline": "Správce modelů založený na packách",
@@ -1688,6 +1689,51 @@
       "updateModelInfo": "Synchronizovat informace o modelu",
       "updateModelInfoDesc": "Aktualizovat trigger slova, základní model a další metadata z Civitai.",
       "apply": "Použít aktualizaci"
+    }
+  },
+  "avatar": {
+    "title": "AI Asistent",
+    "loading": "Připojování k AI asistentovi...",
+    "fab": {
+      "openChat": "Otevřít AI asistenta",
+      "setupRequired": "AI Asistent — Vyžadováno nastavení"
+    },
+    "chat": {
+      "welcomeMessage": "Ahoj! Jsem tvůj Synapse AI asistent. Mohu ti pomoci spravovat packy, řešit závislosti, vysvětlit parametry generování a další. Co bys chtěl/a udělat?",
+      "placeholder": "Avatar Engine zatím není připojen. Tento chat bude plně funkční po instalaci a konfiguraci avatar-engine.",
+      "thinking": "Přemýšlím...",
+      "inputPlaceholder": "Zeptej se na modely, parametry, závislosti...",
+      "enterHint": "Enter pro odeslání · Shift+Enter pro nový řádek",
+      "skillsCount": "{{count}} dovedností"
+    },
+    "suggestions": {
+      "inventory": "Kolik místa zabírají moje modely?",
+      "parameters": "Vysvětli CFG Scale a doporučené hodnoty",
+      "dependencies": "Které packy mají chybějící závislosti?"
+    },
+    "setup": {
+      "title": "AI Asistent",
+      "description": "Synapse obsahuje volitelného AI asistenta poháněného avatar-engine. Může ti pomoci spravovat inventář modelů, řešit závislosti, generovat workflow a vysvětlit parametry generování.",
+      "statusTitle": "Aktuální stav",
+      "engineLabel": "Avatar Engine",
+      "providerLabel": "AI Poskytovatel (CLI)",
+      "providersTitle": "Dostupní poskytovatelé",
+      "installed": "Připraveno",
+      "notInstalled": "Nenainstalováno",
+      "stepsTitle": "Kroky nastavení",
+      "step1Title": "Nainstalovat avatar-engine",
+      "step1Desc": "pip install avatar-engine[web]",
+      "step2Title": "Nainstalovat AI CLI poskytovatele",
+      "step2Desc": "Nainstalujte Gemini CLI, Claude Code nebo Codex CLI",
+      "step3Title": "Restartovat Synapse",
+      "step3Desc": "AI asistent bude dostupný po restartu",
+      "featuresTitle": "Co AI umí",
+      "feature1": "Chytré řešení",
+      "feature1Desc": "Najít správný model pro libovolnou závislost napříč lokálním inventářem, Civitai a HuggingFace",
+      "feature2": "Generování workflow",
+      "feature2Desc": "Generovat ComfyUI workflow optimalizované pro vaše modely a parametry",
+      "feature3": "MCP nástroje",
+      "feature3Desc": "Spravovat inventář, kontrolovat aktualizace a analyzovat modely přirozenou konverzací"
     }
   }
 }
