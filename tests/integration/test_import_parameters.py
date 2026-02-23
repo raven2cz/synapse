@@ -124,7 +124,7 @@ class TestParameterExtractionDuringImport:
     @pytest.fixture(autouse=True)
     def _mock_ai(self):
         """Use rule_based AI provider only (no Ollama/Gemini/Claude network calls)."""
-        with patch('src.ai.AIService', return_value=_RuleBasedOnlyAIService()):
+        with patch('src.ai.get_ai_service', return_value=_RuleBasedOnlyAIService()):
             yield
 
     def test_import_extracts_parameters_from_description(

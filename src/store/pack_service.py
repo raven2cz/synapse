@@ -533,13 +533,13 @@ class PackService:
 
         # Extract parameters from description using AI (with rule-based fallback)
         if pack.description:
-            from src.ai import AIService
+            from src.ai import get_ai_service
             from .models import GenerationParameters
 
             logger.info(f"[parameter-extraction] Extracting from description (length: {len(pack.description)})")
 
             try:
-                ai_service = AIService()
+                ai_service = get_ai_service()
                 result = ai_service.extract_parameters(pack.description)
 
                 if result.success and result.output:

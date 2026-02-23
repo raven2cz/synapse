@@ -3403,9 +3403,9 @@ def extract_pack_parameters(
                     confidence=0.0,
                 )
 
-            from src.ai import AIService
+            from src.ai import get_ai_service
 
-            ai_service = AIService()
+            ai_service = get_ai_service()
             ai_result = ai_service.extract_parameters(pack.description)
 
             if ai_result.success and ai_result.output:
@@ -5167,6 +5167,10 @@ class AISettingsResponse(BaseModel):
     log_level: str = "INFO"
     log_prompts: bool = False
     log_responses: bool = False
+    use_avatar_engine: bool = False
+    avatar_engine_provider: str = "gemini"
+    avatar_engine_model: str = ""
+    avatar_engine_timeout: int = 120
 
 
 class AISettingsUpdateRequest(BaseModel):
@@ -5185,6 +5189,10 @@ class AISettingsUpdateRequest(BaseModel):
     log_level: Optional[str] = None
     log_prompts: Optional[bool] = None
     log_responses: Optional[bool] = None
+    use_avatar_engine: Optional[bool] = None
+    avatar_engine_provider: Optional[str] = None
+    avatar_engine_model: Optional[str] = None
+    avatar_engine_timeout: Optional[int] = None
 
 
 @ai_router.get("/providers", response_model=AIDetectionResponse)
@@ -5215,9 +5223,9 @@ def detect_providers():
 @ai_router.post("/extract", response_model=AIExtractionResponse)
 def extract_parameters(request: AIExtractionRequest):
     """Extract generation parameters from description using AI."""
-    from src.ai import AIService, AIServicesSettings
+    from src.ai import get_ai_service, AIServicesSettings
 
-    service = AIService(AIServicesSettings.load())
+    service = get_ai_service(AIServicesSettings.load())
     result = service.extract_parameters(
         description=request.description,
         use_cache=request.use_cache,
@@ -5237,9 +5245,9 @@ def extract_parameters(request: AIExtractionRequest):
 @ai_router.get("/cache/stats", response_model=AICacheStatsResponse)
 def get_cache_stats():
     """Get AI cache statistics."""
-    from src.ai import AIService, AIServicesSettings
+    from src.ai import get_ai_service, AIServicesSettings
 
-    service = AIService(AIServicesSettings.load())
+    service = get_ai_service(AIServicesSettings.load())
     stats = service.get_cache_stats()
 
     return AICacheStatsResponse(**stats)
@@ -5248,9 +5256,9 @@ def get_cache_stats():
 @ai_router.delete("/cache")
 def clear_cache():
     """Clear all AI cache entries."""
-    from src.ai import AIService, AIServicesSettings
+    from src.ai import get_ai_service, AIServicesSettings
 
-    service = AIService(AIServicesSettings.load())
+    service = get_ai_service(AIServicesSettings.load())
     count = service.clear_cache()
 
     return {"cleared": count}
@@ -5259,9 +5267,9 @@ def clear_cache():
 @ai_router.post("/cache/cleanup")
 def cleanup_cache():
     """Remove expired AI cache entries."""
-    from src.ai import AIService, AIServicesSettings
+    from src.ai import get_ai_service, AIServicesSettings
 
-    service = AIService(AIServicesSettings.load())
+    service = get_ai_service(AIServicesSettings.load())
     count = service.cleanup_cache()
 
     return {"cleaned": count}
@@ -5290,6 +5298,10 @@ def get_ai_settings():
         log_level=settings.log_level,
         log_prompts=settings.log_prompts,
         log_responses=settings.log_responses,
+        use_avatar_engine=settings.use_avatar_engine,
+        avatar_engine_provider=settings.avatar_engine_provider,
+        avatar_engine_model=settings.avatar_engine_model,
+        avatar_engine_timeout=settings.avatar_engine_timeout,
     )
 
 
@@ -5354,6 +5366,18 @@ def update_ai_settings(request: AISettingsUpdateRequest):
     if request.log_responses is not None:
         settings.log_responses = request.log_responses
 
+    if request.use_avatar_engine is not None:
+        settings.use_avatar_engine = request.use_avatar_engine
+
+    if request.avatar_engine_provider is not None:
+        settings.avatar_engine_provider = request.avatar_engine_provider
+
+    if request.avatar_engine_model is not None:
+        settings.avatar_engine_model = request.avatar_engine_model
+
+    if request.avatar_engine_timeout is not None:
+        settings.avatar_engine_timeout = request.avatar_engine_timeout
+
     # Save to disk
     if not settings.save():
         raise HTTPException(status_code=500, detail="Failed to save AI settings to disk")
@@ -5376,6 +5400,10 @@ def update_ai_settings(request: AISettingsUpdateRequest):
         log_level=settings.log_level,
         log_prompts=settings.log_prompts,
         log_responses=settings.log_responses,
+        use_avatar_engine=settings.use_avatar_engine,
+        avatar_engine_provider=settings.avatar_engine_provider,
+        avatar_engine_model=settings.avatar_engine_model,
+        avatar_engine_timeout=settings.avatar_engine_timeout,
     )
 
 

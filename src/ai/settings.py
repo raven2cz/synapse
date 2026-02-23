@@ -8,9 +8,10 @@ Uses str instead of Enum for flexibility - new providers/tasks can be added with
 import json
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,45 @@ def _get_settings_path() -> Path:
     """Get path to AI settings file."""
     root = Path(os.environ.get("SYNAPSE_ROOT", Path.home() / ".synapse" / "store"))
     return root / "data" / "ai_settings.json"
+
+
+# Avatar Engine CLI binaries in preference order
+_AVATAR_CLI_MAP = {
+    "gemini": "gemini",
+    "claude": "claude",
+    "codex": "codex",
+}
+
+
+def _detect_avatar_engine() -> Tuple[bool, str]:
+    """
+    Detect if avatar-engine is available and find best provider CLI.
+
+    Checks:
+    1. avatar_engine package is importable
+    2. At least one supported CLI (gemini, claude, codex) is in PATH
+
+    Returns:
+        (available, best_provider) — e.g. (True, "gemini") or (False, "gemini")
+    """
+    # Check if avatar-engine is installed
+    try:
+        import avatar_engine  # noqa: F401
+    except ImportError:
+        return False, "gemini"
+
+    # Check for CLI binaries in preference order
+    for provider, binary in _AVATAR_CLI_MAP.items():
+        if shutil.which(binary):
+            logger.debug(f"[ai-settings] Avatar engine available: {provider} ({binary})")
+            return True, provider
+
+    logger.debug("[ai-settings] Avatar engine installed but no CLI found in PATH")
+    return False, "gemini"
+
+
+# Cached result of auto-detection (runs once at import time)
+_AVATAR_DEFAULTS: Tuple[bool, str] = _detect_avatar_engine()
 
 
 # Well-known providers (for UI hints, but not restricting)
@@ -144,6 +184,12 @@ class AIServicesSettings:
     log_prompts: bool = False  # Verbose: log full prompts
     log_responses: bool = False  # Verbose: log raw responses
 
+    # Avatar Engine integration (auto-detected at startup, overridable)
+    use_avatar_engine: bool = False  # Overridden by get_defaults() / from_dict()
+    avatar_engine_provider: str = "gemini"  # "gemini" | "claude" | "codex"
+    avatar_engine_model: str = ""  # Empty = provider default
+    avatar_engine_timeout: int = 120  # Seconds
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -162,6 +208,10 @@ class AIServicesSettings:
             "log_level": self.log_level,
             "log_prompts": self.log_prompts,
             "log_responses": self.log_responses,
+            "use_avatar_engine": self.use_avatar_engine,
+            "avatar_engine_provider": self.avatar_engine_provider,
+            "avatar_engine_model": self.avatar_engine_model,
+            "avatar_engine_timeout": self.avatar_engine_timeout,
         }
 
     @classmethod
@@ -191,12 +241,20 @@ class AIServicesSettings:
             log_level=data.get("log_level", "INFO"),
             log_prompts=data.get("log_prompts", False),
             log_responses=data.get("log_responses", False),
+            use_avatar_engine=data.get("use_avatar_engine", _AVATAR_DEFAULTS[0]),
+            avatar_engine_provider=data.get("avatar_engine_provider", _AVATAR_DEFAULTS[1]),
+            avatar_engine_model=data.get("avatar_engine_model", ""),
+            avatar_engine_timeout=data.get("avatar_engine_timeout", 120),
         )
 
     @classmethod
     def get_defaults(cls) -> "AIServicesSettings":
         """Get default settings with standard provider configurations."""
         settings = cls()
+
+        # Auto-detect avatar-engine availability
+        settings.use_avatar_engine = _AVATAR_DEFAULTS[0]
+        settings.avatar_engine_provider = _AVATAR_DEFAULTS[1]
 
         # Default provider configs
         settings.providers = {

@@ -101,9 +101,9 @@ class TestExtractParameters:
 
     def test_extract_parameters_success(self, client):
         """Should extract parameters from description."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.extract_parameters.return_value = MagicMock(
                 success=True,
                 output={"cfg_scale": 7, "steps": 25},
@@ -130,9 +130,9 @@ class TestExtractParameters:
 
     def test_extract_parameters_failure(self, client):
         """Should return error on extraction failure."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.extract_parameters.return_value = MagicMock(
                 success=False,
                 output=None,
@@ -157,9 +157,9 @@ class TestExtractParameters:
 
     def test_extract_parameters_with_cache(self, client):
         """Should use cache when specified."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.extract_parameters.return_value = MagicMock(
                 success=True,
                 output={"cfg_scale": 7},
@@ -194,9 +194,9 @@ class TestCacheStats:
 
     def test_get_cache_stats(self, client):
         """Should return cache statistics."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.get_cache_stats.return_value = {
                 "cache_dir": "/tmp/ai_cache",
                 "entry_count": 42,
@@ -224,9 +224,9 @@ class TestClearCache:
 
     def test_clear_cache(self, client):
         """Should clear all cache entries."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.clear_cache.return_value = 42
 
             response = client.delete("/api/ai/cache")
@@ -246,9 +246,9 @@ class TestCleanupCache:
 
     def test_cleanup_cache(self, client):
         """Should cleanup expired cache entries."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
             mock_service.cleanup_cache.return_value = 10
 
             response = client.post("/api/ai/cache/cleanup")
@@ -283,6 +283,10 @@ class TestGetSettings:
             mock_settings.log_level = "INFO"
             mock_settings.log_prompts = False
             mock_settings.log_responses = False
+            mock_settings.use_avatar_engine = False
+            mock_settings.avatar_engine_provider = "gemini"
+            mock_settings.avatar_engine_model = ""
+            mock_settings.avatar_engine_timeout = 120
             mock_settings.providers = {
                 "ollama": MagicMock(to_dict=lambda: {"enabled": True, "model": "qwen2.5:14b"}),
             }
@@ -315,9 +319,9 @@ class TestAIAPIIntegration:
 
     def test_full_extraction_flow(self, client):
         """Should handle full extraction flow."""
-        with patch("src.ai.AIService") as mock_cls:
+        with patch("src.ai.get_ai_service") as mock_factory:
             mock_service = MagicMock()
-            mock_cls.return_value = mock_service
+            mock_factory.return_value = mock_service
 
             # First call - no cache
             mock_service.extract_parameters.return_value = MagicMock(
