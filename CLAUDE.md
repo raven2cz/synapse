@@ -69,8 +69,10 @@ synapse/
 
 ### ⭐ Verifikace projektu (VŽDY před commitem!)
 ```bash
-./scripts/verify.sh            # Kompletní verifikace
+./scripts/verify.sh            # Standardní CI (bez external testů)
 ./scripts/verify.sh --quick    # Rychlá verifikace
+./scripts/verify.sh --external # Včetně reálných CDN/API testů
+./scripts/verify.sh --full     # VŠECHNY testy (před releasem)
 ./scripts/verify.sh --help     # Zobrazit všechny možnosti
 ```
 
@@ -204,6 +206,9 @@ interface FullscreenMediaItem {
 # Verbose výstup
 ./scripts/verify.sh --verbose
 
+# E2E testy (Playwright — vyžaduje běžící servery)
+./scripts/verify.sh --e2e
+
 # Nápověda
 ./scripts/verify.sh --help
 ```
@@ -233,7 +238,8 @@ tests/
 ```python
 @pytest.mark.slow         # Dlouhotrvající testy
 @pytest.mark.integration  # Vyžadují více komponent
-@pytest.mark.civitai      # Civitai API testy
+@pytest.mark.external     # Reálné externí služby (CDN/API) — vyloučeno z CI by default
+@pytest.mark.civitai      # Civitai API testy (podmnožina external)
 @pytest.mark.e2e          # End-to-end testy
 ```
 
@@ -242,6 +248,8 @@ Použití:
 uv run pytest -m "not slow"           # Bez pomalých testů
 uv run pytest -m "integration"        # Pouze integrační
 uv run pytest -m "not integration"    # Bez integračních
+uv run pytest -m "external"           # Pouze reálné CDN/API testy
+uv run pytest -m "not external"       # Bez externích (default CI)
 ```
 
 ### Jak psát testy
@@ -294,6 +302,27 @@ pnpm test -- --ui      # UI mode
 ```
 
 Umístění: `apps/web/src/__tests__/`
+
+### E2E testy (Playwright)
+
+```bash
+cd apps/web
+pnpm e2e                         # All Tier 1 tests (offline, no AI provider)
+pnpm e2e --grep-invert @live     # Same as above (explicit)
+pnpm e2e --grep @live            # Tier 2 tests (requires running AI provider)
+pnpm e2e:headed                  # Headed mode (visual debug)
+pnpm e2e:ui                      # Interactive Playwright UI
+```
+
+Umístění: `apps/web/e2e/`
+
+**Tier 1 (offline):** `avatar-ui.spec.ts`, `avatar-suggestions.spec.ts`, `avatar-settings.spec.ts`
+- Testují DOM, vizuální přítomnost, přechody, navigaci
+- Nevyžadují AI provider
+
+**Tier 2 (@live):** `avatar-chat.spec.ts`, `avatar-settings.spec.ts` (1 test)
+- Označené `@live` v názvu testu
+- Vyžadují běžící backend + frontend + minimálně jeden AI provider CLI
 
 ### Požadavky na testy
 

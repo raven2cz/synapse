@@ -17,6 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+import asyncio
 import logging
 import os
 import traceback
@@ -68,6 +69,17 @@ class StatusEndpointFilter(logging.Filter):
 logging.getLogger("uvicorn.access").addFilter(StatusEndpointFilter())
 
 
+async def _start_avatar_engine(mgr) -> None:
+    """Background task: start avatar engine (may take seconds for AI init)."""
+    try:
+        await mgr.start_engine()
+        logger.info("Avatar Engine started successfully")
+    except asyncio.CancelledError:
+        logger.info("Avatar Engine startup cancelled")
+    except Exception as exc:
+        logger.error("Avatar Engine startup failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle: shared HTTP client for async proxying."""
@@ -83,7 +95,29 @@ async def lifespan(app: FastAPI):
     logger.info(f"  ComfyUI path: {settings.comfyui_path}")
     logger.info(f"  Data path: {settings.synapse_data_path}")
     logger.info("=" * 50)
+
+    # Initialize avatar engine if mounted (sub-app lifespan not auto-triggered)
+    avatar_mgr = getattr(app.state, "avatar_manager", None)
+    avatar_task = None
+    if avatar_mgr:
+        await avatar_mgr.prepare()
+        if avatar_mgr.ws_bridge:
+            avatar_mgr.ws_bridge.set_loop(asyncio.get_running_loop())
+        avatar_task = asyncio.create_task(_start_avatar_engine(avatar_mgr))
+
     yield
+
+    if avatar_task:
+        avatar_task.cancel()
+        try:
+            await avatar_task
+        except asyncio.CancelledError:
+            pass
+    if avatar_mgr:
+        try:
+            await avatar_mgr.shutdown()
+        except Exception as exc:
+            logger.warning("Avatar Engine shutdown error: %s", exc)
     await app.state.http_client.aclose()
 
 

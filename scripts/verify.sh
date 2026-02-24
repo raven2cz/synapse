@@ -37,11 +37,12 @@ RUN_FRONTEND=true
 RUN_TYPES=true
 RUN_BUILD=true
 RUN_AVATAR=true
+RUN_E2E=false
 QUICK_MODE=false
 VERBOSE=false
 
-# Test filters
-PYTEST_MARKERS="not smoke"
+# Test filters — external tests (real CDN/API) excluded by default
+PYTEST_MARKERS="not smoke and not external"
 PYTEST_PATHS="tests/"
 
 # ============================================================================
@@ -72,12 +73,17 @@ show_help() {
     echo "  --smoke           Run offline smoke tests (CDN/proxy pipeline)"
     echo "  --smoke-live      Run all smoke tests including live CDN"
     echo "  --no-slow         Exclude tests marked @pytest.mark.slow"
+    echo "  --external        Include external tests (real CDN/API calls)"
+    echo "  --full            Run ALL tests (external + slow + smoke)"
     echo "  --avatar          Run only avatar-engine version checks"
     echo "  --no-avatar       Skip avatar-engine version checks"
+    echo "  --e2e             Run Playwright E2E tests (requires running servers)"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./scripts/verify.sh                    # Full verification"
+    echo "  ./scripts/verify.sh                    # Standard CI (no external)"
     echo "  ./scripts/verify.sh --quick            # Fast verification"
+    echo "  ./scripts/verify.sh --external         # Include real CDN/API tests"
+    echo "  ./scripts/verify.sh --full             # ALL tests (pre-release)"
     echo "  ./scripts/verify.sh --backend --unit   # Only Python unit tests"
     echo "  ./scripts/verify.sh -b --no-slow       # Backend without slow tests"
     echo "  ./scripts/verify.sh --lint             # Architecture checks only"
@@ -95,7 +101,8 @@ show_help() {
     echo -e "${BOLD}Pytest Markers:${NC}"
     echo "  @pytest.mark.slow         # Long-running tests"
     echo "  @pytest.mark.integration  # Require multiple components"
-    echo "  @pytest.mark.civitai      # Civitai API related"
+    echo "  @pytest.mark.external     # Real external services (excluded by default)"
+    echo "  @pytest.mark.civitai      # Civitai API related (subset of external)"
     echo ""
 }
 
@@ -112,7 +119,7 @@ while [[ $# -gt 0 ]]; do
         --quick|-q)
             QUICK_MODE=true
             RUN_BUILD=false
-            PYTEST_MARKERS="not slow and not smoke"
+            PYTEST_MARKERS="not slow and not smoke and not external"
             shift
             ;;
         --verbose|-v)
@@ -194,6 +201,20 @@ while [[ $# -gt 0 ]]; do
             RUN_AVATAR=false
             shift
             ;;
+        --e2e)
+            RUN_E2E=true
+            shift
+            ;;
+        --external)
+            # Include external tests (real CDN/API calls)
+            PYTEST_MARKERS="not smoke"
+            shift
+            ;;
+        --full)
+            # Run ALL tests including external, slow, smoke
+            PYTEST_MARKERS=""
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
             echo "Use --help for usage information"
@@ -239,6 +260,7 @@ TOTAL_STEPS=0
 [ "$RUN_FRONTEND" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 2)) # env + tests
 [ "$RUN_TYPES" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 [ "$RUN_BUILD" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
+[ "$RUN_E2E" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 
 # ============================================================================
 # Helper Functions
@@ -487,6 +509,40 @@ if [ "$RUN_BUILD" == true ]; then
 fi
 
 cd "$PROJECT_ROOT"
+
+# ============================================================================
+# E2E Tests (Playwright)
+# ============================================================================
+
+if [ "$RUN_E2E" == true ]; then
+
+    next_step "Running E2E Tests (Playwright)"
+
+    if [ ! -d "apps/web" ]; then
+        check_failed "Frontend directory not found: apps/web"
+    else
+        cd apps/web
+        # Run Tier 1 only (exclude @live tests)
+        E2E_CMD="npx playwright test --grep-invert @live"
+        if [ "$VERBOSE" == true ]; then
+            if $E2E_CMD; then
+                check_passed "E2E tests passed"
+            else
+                check_failed "E2E tests FAILED"
+            fi
+        else
+            if $E2E_CMD > /dev/null 2>&1; then
+                check_passed "E2E tests passed"
+            else
+                check_failed "E2E tests FAILED"
+                echo -e "${YELLOW}Running again to show errors:${NC}"
+                $E2E_CMD
+            fi
+        fi
+        cd "$PROJECT_ROOT"
+    fi
+    echo ""
+fi
 
 # ============================================================================
 # Summary

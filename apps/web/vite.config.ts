@@ -15,6 +15,7 @@ export default defineConfig({
       '/api/avatar/ws': {
         target: 'ws://localhost:8000',
         ws: true,
+        rewrite: (path) => '/api/avatar/engine' + path,
       },
       '/api': {
         target: 'http://localhost:8000',

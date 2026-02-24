@@ -944,5 +944,49 @@ Přechod z `link:` na registry verze + version compatibility checks.
 - Config změny → `docs/avatar/configuration.md` + `config/avatar.yaml.example`
 - Nové frontend avatar komponenty → `docs/avatar/architecture.md`
 
-*Last Updated: 2026-02-24 (KROKY 1-9 dokončeny)*
-*Status: Iterace 1-9 ✅. 21 MCP tools, 511 testů, 8 docs. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks. Kompletní user-facing dokumentace.*
+---
+
+## Iterace 10: Playwright E2E Tests ✅ DOKONČENO
+
+### Co bylo přidáno
+
+Playwright E2E testy simulující reálného lidského testera v prohlížeči.
+
+### Dva tiery testů
+
+| Tier | Popis | Příkaz |
+|------|-------|--------|
+| **Tier 1 (offline)** | UI/Visual testy — DOM, přechody, navigace. Bez AI providera. | `pnpm e2e --grep-invert @live` |
+| **Tier 2 (@live)** | Live AI testy — reálné zprávy, streaming, provider switching. | `pnpm e2e --grep @live` |
+
+### Nové soubory (6)
+
+| Soubor | Řádků | Obsah |
+|--------|-------|-------|
+| `apps/web/playwright.config.ts` | ~30 | Config s webServer auto-start, baseURL, screenshot on failure |
+| `apps/web/e2e/helpers/avatar.helpers.ts` | ~130 | Sdílené helpery: selektory, navigace, FAB/compact/fullscreen otevření |
+| `apps/web/e2e/avatar-ui.spec.ts` | ~100 | Tier 1: FAB visibility, compact↔fullscreen, close, navigation persistence |
+| `apps/web/e2e/avatar-suggestions.spec.ts` | ~90 | Tier 1: Per-page suggestion chips, click behavior |
+| `apps/web/e2e/avatar-settings.spec.ts` | ~110 | Tier 1+2: Settings panel, status cards, skills, avatar picker |
+| `apps/web/e2e/avatar-chat.spec.ts` | ~120 | Tier 2: Send/receive messages, streaming, stop, clear, provider switch |
+
+### Úpravy existujících souborů
+
+- ✅ `apps/web/package.json` — přidány `e2e`, `e2e:headed`, `e2e:ui`, `e2e:live` scripty + `@playwright/test` devDep
+- ✅ `.gitignore` — přidány `test-results/`, `playwright-report/`, `blob-report/`, `playwright/.cache/`
+- ✅ `scripts/verify.sh` — přidán `--e2e` flag pro spuštění Playwright testů
+- ✅ `CLAUDE.md` — přidána E2E test sekce
+- ✅ `plans/PLAN-Avatar-Engine-Integration.md` — tato sekce
+
+### Selektory
+
+Založeny na `aria-label` atributech z `@avatar-engine/react` i18n:
+- FAB: `button[aria-label="Open chat panel"]`
+- Compact expand: `button[aria-label="Expand to fullscreen"]`
+- Compact close: `button[aria-label="Close chat panel"]`
+- Fullscreen → compact: `button[aria-label="Switch to compact mode"]`
+- Messages: `.compact-messages`
+- Suggestions: `.flex.flex-wrap.gap-2 button`
+
+*Last Updated: 2026-02-24 (KROKY 1-10 dokončeny)*
+*Status: Iterace 1-10 ✅. 21 MCP tools, 511+ testů, 8 docs, ~25 Playwright E2E testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks. Kompletní user-facing dokumentace. E2E testy pokrývají UI transitions, suggestions, settings, a live chat.*

@@ -240,12 +240,21 @@ def try_mount_avatar_engine(app) -> bool:
 
         system_prompt = build_system_prompt(config)
 
+        # Only pass config_path if the file actually exists — avatar-engine
+        # raises FileNotFoundError for missing paths instead of using defaults.
+        config_file = config.config_path
         avatar_app = create_avatar_app(
             provider=config.provider,
-            config_path=str(config.config_path) if config.config_path else None,
+            config_path=str(config_file) if config_file and config_file.exists() else None,
             system_prompt=system_prompt,
         )
         app.mount("/api/avatar/engine", avatar_app)
+
+        # Store manager reference on parent app so its lifespan can
+        # initialize the engine (mounted sub-app lifespans are not
+        # called automatically by Starlette).
+        app.state.avatar_manager = getattr(avatar_app.state, "manager", None)
+
         logger.info("Avatar Engine mounted at /api/avatar/engine")
         return True
 
