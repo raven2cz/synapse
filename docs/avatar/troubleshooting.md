@@ -16,6 +16,7 @@ curl -s http://localhost:8000/api/avatar/status | python -m json.tool
 |-------|---------|-----|
 | `ready` | Everything works | No action needed |
 | `disabled` | Config has `enabled: false` | Set `enabled: true` in `~/.synapse/avatar.yaml` |
+| `incompatible` | Engine installed but version too old | Upgrade: `uv add "avatar-engine[web]>=1.0.0"` |
 | `no_engine` | `avatar-engine` package not installed | `uv add "avatar-engine[web]"` |
 | `no_provider` | Engine OK but no CLI providers found | Install `gemini`, `claude`, or `codex` CLI |
 | `setup_required` | Neither engine nor providers installed | Install both (see [Getting Started](getting-started.md)) |

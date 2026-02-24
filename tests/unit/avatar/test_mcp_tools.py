@@ -1474,6 +1474,30 @@ class TestScanWorkflowFile:
         )
         assert "must be within allowed directory" in result
 
+    def test_path_traversal_prefix_bypass_rejected(self, tmp_path):
+        """Security: paths sharing a prefix with base dir should be rejected.
+
+        Regression test for startswith() bypass — e.g. /home/box-secrets/
+        would pass startswith("/home/box") but fail is_relative_to().
+        """
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+
+        # Create a sibling dir that shares a prefix with tmp_path
+        sibling = tmp_path.parent / (tmp_path.name + "-secrets")
+        sibling.mkdir(exist_ok=True)
+        evil_file = sibling / "workflow.json"
+        evil_file.write_text("{}")
+
+        try:
+            result = _scan_workflow_file_impl(
+                path=str(evil_file),
+                _allowed_base=tmp_path,
+            )
+            assert "must be within allowed directory" in result
+        finally:
+            evil_file.unlink(missing_ok=True)
+            sibling.rmdir()
+
     def test_non_json_extension_rejected(self, tmp_path):
         from src.avatar.mcp.store_server import _scan_workflow_file_impl
 

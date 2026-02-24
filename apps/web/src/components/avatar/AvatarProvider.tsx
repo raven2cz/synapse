@@ -80,6 +80,8 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
           toast.info('AI assistant unavailable — no AI provider CLI found (gemini/claude/codex)')
         } else if (data.state === 'setup_required') {
           toast.info('AI assistant requires setup — install avatar-engine and a provider CLI')
+        } else if (data.state === 'incompatible') {
+          toast.warning(`AI engine v${data.engine_version} is incompatible — upgrade to v${data.engine_min_version}+ required`)
         } else if (data.engine_version && data.engine_version !== 'unknown' && semverLessThan(data.engine_version, AE_MIN_VERSION)) {
           toast.warning(`AI engine v${data.engine_version} is outdated — upgrade to v${AE_MIN_VERSION}+ recommended`)
         }

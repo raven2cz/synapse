@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.avatar.routes import (
+    _get_cached_config,
     avatar_config_endpoint,
     avatar_providers,
     avatar_status,
@@ -42,7 +43,8 @@ class TestAvatarStatusEndpoint:
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
-             patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.1.0"):
+             patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.1.0"), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=True):
             result = avatar_status()
 
         assert result["state"] == "ready"
@@ -59,10 +61,29 @@ class TestAvatarStatusEndpoint:
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
-             patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.1.0"):
+             patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.1.0"), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=True):
             result = avatar_status()
 
         assert result["state"] == "no_provider"
+        assert result["available"] is False
+        assert result["active_provider"] is None
+
+    @patch("src.avatar.routes.detect_available_providers")
+    @patch("src.avatar.routes.load_avatar_config")
+    def test_state_incompatible(self, mock_config, mock_providers):
+        """Engine installed but version too old → incompatible state."""
+        mock_config.return_value = _make_config(enabled=True)
+        mock_providers.return_value = [
+            {"name": "gemini", "installed": True, "display_name": "Gemini CLI", "command": "gemini"}
+        ]
+
+        with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
+             patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.0.1"), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=False):
+            result = avatar_status()
+
+        assert result["state"] == "incompatible"
         assert result["available"] is False
         assert result["active_provider"] is None
 
@@ -198,9 +219,19 @@ class TestTryMountAvatarEngine:
         assert result is False
         app.mount.assert_not_called()
 
+    def test_returns_false_when_engine_incompatible(self):
+        """Mount should be skipped when engine version is incompatible."""
+        app = MagicMock()
+        with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=False):
+            result = try_mount_avatar_engine(app)
+        assert result is False
+        app.mount.assert_not_called()
+
     def test_returns_false_when_config_disabled(self):
         app = MagicMock()
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=True), \
              patch("src.avatar.routes.load_avatar_config") as mock_config:
             mock_config.return_value = _make_config(enabled=False)
             result = try_mount_avatar_engine(app)
@@ -210,6 +241,7 @@ class TestTryMountAvatarEngine:
     def test_returns_false_on_import_error(self):
         app = MagicMock()
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=True), \
              patch("src.avatar.routes.load_avatar_config") as mock_config, \
              patch.dict("sys.modules", {"avatar_engine.web": None}):
             mock_config.return_value = _make_config(enabled=True)
@@ -224,6 +256,7 @@ class TestTryMountAvatarEngine:
         mock_web.create_api_app.return_value = mock_avatar_app
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
+             patch("src.avatar.routes.check_avatar_engine_compat", return_value=True), \
              patch("src.avatar.routes.load_avatar_config") as mock_config, \
              patch.dict("sys.modules", {"avatar_engine": MagicMock(), "avatar_engine.web": mock_web}), \
              patch("builtins.__import__", side_effect=_make_import_patcher(mock_web)):
@@ -232,6 +265,34 @@ class TestTryMountAvatarEngine:
 
         assert result is True
         app.mount.assert_called_once_with("/api/avatar/engine", mock_avatar_app)
+
+
+class TestCachedConfigExceptionHandling:
+    """_get_cached_config returns safe defaults on failure."""
+
+    @patch("src.avatar.routes.detect_available_providers")
+    @patch("src.avatar.routes.load_avatar_config")
+    def test_returns_defaults_on_config_load_failure(self, mock_config, mock_providers):
+        """Malformed YAML or broken config should not 500 all endpoints."""
+        mock_config.side_effect = Exception("YAML parse error")
+
+        config, providers = _get_cached_config()
+
+        # Should return safe defaults, not raise
+        assert config.enabled is True  # AvatarConfig default
+        assert providers == []
+
+    @patch("src.avatar.routes.load_avatar_config")
+    @patch("src.avatar.routes.detect_available_providers")
+    def test_returns_defaults_on_provider_detection_failure(self, mock_providers, mock_config):
+        """Provider detection crash should not 500 all endpoints."""
+        mock_config.return_value = _make_config()
+        mock_providers.side_effect = OSError("shutil broken")
+
+        config, providers = _get_cached_config()
+
+        assert config.enabled is True
+        assert providers == []
 
 
 # ── Helpers ──────────────────────────────────────────────────────────

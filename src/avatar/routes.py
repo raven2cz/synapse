@@ -35,7 +35,10 @@ _CACHE_TTL = 30.0  # seconds
 
 
 def _get_cached_config() -> Tuple[AvatarConfig, List[Dict[str, Any]]]:
-    """Load config with a short TTL cache. Thread-safe."""
+    """Load config with a short TTL cache. Thread-safe.
+
+    Never raises — returns safe defaults on failure (prevents 500 on all endpoints).
+    """
     global _cache_snapshot
     snapshot = _cache_snapshot
     now = time.monotonic()
@@ -46,8 +49,13 @@ def _get_cached_config() -> Tuple[AvatarConfig, List[Dict[str, Any]]]:
         snapshot = _cache_snapshot
         if snapshot is not None and (now - snapshot[2]) <= _CACHE_TTL:
             return snapshot[0], snapshot[1]
-        config = load_avatar_config()
-        providers = detect_available_providers()
+        try:
+            config = load_avatar_config()
+            providers = detect_available_providers()
+        except Exception as e:
+            logger.error("Failed to load avatar config: %s — using defaults", e)
+            config = AvatarConfig()
+            providers = []
         _cache_snapshot = (config, providers, now)
         return config, providers
 
@@ -70,12 +78,15 @@ def avatar_status() -> Dict[str, Any]:
     """
     config, providers = _get_cached_config()
     any_provider_installed = any(p["installed"] for p in providers)
+    engine_compatible = check_avatar_engine_compat() if AVATAR_ENGINE_AVAILABLE else False
 
     # Determine state (matches plan: STATE 1/2/3)
     if not config.enabled:
         state = "disabled"  # STATE 3: master switch OFF
-    elif AVATAR_ENGINE_AVAILABLE and any_provider_installed:
+    elif AVATAR_ENGINE_AVAILABLE and engine_compatible and any_provider_installed:
         state = "ready"  # STATE 1: fully operational
+    elif AVATAR_ENGINE_AVAILABLE and not engine_compatible:
+        state = "incompatible"  # Engine installed but version too old
     elif AVATAR_ENGINE_AVAILABLE:
         state = "no_provider"  # STATE 2 variant: engine OK but no CLI
     elif any_provider_installed:
@@ -215,7 +226,9 @@ def try_mount_avatar_engine(app) -> bool:
         logger.info("Avatar Engine not installed — skipping mount")
         return False
 
-    check_avatar_engine_compat()
+    if not check_avatar_engine_compat():
+        logger.warning("Avatar Engine version incompatible — skipping mount")
+        return False
 
     try:
         from avatar_engine.web import create_api_app as create_avatar_app

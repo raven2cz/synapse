@@ -900,8 +900,10 @@ def _scan_workflow_file_impl(
             return f"Error: Only .json workflow files are supported, got: {file_path.suffix}"
 
         # Security: restrict to allowed base directory to prevent path traversal
+        # Uses is_relative_to() instead of startswith() to prevent prefix bypass
+        # (e.g. /home/box-secrets/ would pass startswith("/home/box"))
         base_dir = (_allowed_base or Path.home()).resolve()
-        if not str(file_path).startswith(str(base_dir)):
+        if not file_path.is_relative_to(base_dir):
             return f"Error: Path must be within allowed directory ({base_dir})"
 
         if not file_path.exists():
