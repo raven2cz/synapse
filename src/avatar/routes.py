@@ -12,14 +12,15 @@ When avatar-engine IS installed, additional routes are mounted by the engine its
 
 import json
 import logging
+import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter
 
 from . import AVATAR_ENGINE_AVAILABLE, AVATAR_ENGINE_MIN_VERSION, AVATAR_ENGINE_VERSION, check_avatar_engine_compat
-from .config import detect_available_providers, load_avatar_config
+from .config import AvatarConfig, detect_available_providers, load_avatar_config
 from .skills import build_system_prompt, list_skills
 
 logger = logging.getLogger(__name__)
@@ -27,25 +28,35 @@ logger = logging.getLogger(__name__)
 avatar_router = APIRouter(tags=["avatar"])
 
 # Lightweight config/provider cache (avoids re-reading YAML + shutil.which on every request)
-_cache: Dict[str, Any] = {"config": None, "providers": None, "ts": 0.0}
+# Thread-safe: _cache_snapshot is replaced atomically (single reference assignment)
+_cache_snapshot: Optional[Tuple[Any, Any, float]] = None  # (config, providers, timestamp)
+_cache_lock = threading.Lock()
 _CACHE_TTL = 30.0  # seconds
 
 
-def _get_cached_config():
-    """Load config with a short TTL cache."""
+def _get_cached_config() -> Tuple[AvatarConfig, List[Dict[str, Any]]]:
+    """Load config with a short TTL cache. Thread-safe."""
+    global _cache_snapshot
+    snapshot = _cache_snapshot
     now = time.monotonic()
-    if _cache["config"] is None or (now - _cache["ts"]) > _CACHE_TTL:
-        _cache["config"] = load_avatar_config()
-        _cache["providers"] = detect_available_providers()
-        _cache["ts"] = now
-    return _cache["config"], _cache["providers"]
+    if snapshot is not None and (now - snapshot[2]) <= _CACHE_TTL:
+        return snapshot[0], snapshot[1]
+    with _cache_lock:
+        # Double-check after lock
+        snapshot = _cache_snapshot
+        if snapshot is not None and (now - snapshot[2]) <= _CACHE_TTL:
+            return snapshot[0], snapshot[1]
+        config = load_avatar_config()
+        providers = detect_available_providers()
+        _cache_snapshot = (config, providers, now)
+        return config, providers
 
 
 def invalidate_avatar_cache() -> None:
     """Force cache refresh (e.g. after config change)."""
-    _cache["config"] = None
-    _cache["providers"] = None
-    _cache["ts"] = 0.0
+    global _cache_snapshot
+    with _cache_lock:
+        _cache_snapshot = None
 
 
 @avatar_router.get("/status")

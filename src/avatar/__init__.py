@@ -49,6 +49,9 @@ def check_avatar_engine_compat() -> bool:
             )
             return False
     except Exception:
-        # packaging not available or version string unparseable — skip check
-        pass
+        logger.warning(
+            "Cannot verify avatar-engine version '%s' — treating as incompatible",
+            AVATAR_ENGINE_VERSION,
+        )
+        return False
     return True

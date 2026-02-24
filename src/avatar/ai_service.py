@@ -303,14 +303,15 @@ class AvatarAIService:
         return self._engine
 
     def shutdown(self) -> None:
-        """Stop engine if running."""
-        if self._engine:
-            try:
-                self._engine.stop_sync()
-            except Exception as e:
-                logger.warning(f"[avatar-ai] Error stopping engine: {e}")
-            self._engine = None
-            logger.info("[avatar-ai] Engine stopped")
+        """Stop engine if running. Thread-safe."""
+        with self._engine_lock:
+            if self._engine:
+                try:
+                    self._engine.stop_sync()
+                except Exception as e:
+                    logger.warning(f"[avatar-ai] Error stopping engine: {e}")
+                self._engine = None
+                logger.info("[avatar-ai] Engine stopped")
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics."""

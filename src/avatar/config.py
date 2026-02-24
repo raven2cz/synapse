@@ -161,10 +161,17 @@ def load_avatar_config(
         )
         config.safety = "safe"
 
-    # Parse provider configs
+    # Parse provider configs (top-level keys in YAML)
     for provider_name in ("gemini", "claude", "codex"):
         if provider_name in raw_config:
             prov_data = raw_config[provider_name]
+            if not isinstance(prov_data, dict):
+                logger.warning(
+                    "Provider config '%s' is not a mapping (got %s), skipping",
+                    provider_name,
+                    type(prov_data).__name__,
+                )
+                continue
             config.providers[provider_name] = AvatarProviderConfig(
                 model=prov_data.get("model", ""),
                 enabled=prov_data.get("enabled", True),

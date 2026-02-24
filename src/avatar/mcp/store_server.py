@@ -85,12 +85,16 @@ def _format_size(size_bytes: int) -> str:
 # =============================================================================
 
 
+_MAX_LIMIT = 100
+
+
 def _list_packs_impl(store: Any = None, name_filter: str = "", limit: int = 20) -> str:
     """List all packs in the Synapse store."""
     try:
         if store is None:
             store = _get_store()
 
+        limit = max(1, min(limit, _MAX_LIMIT))
         pack_names = store.list_packs()
 
         # Apply filter
@@ -570,6 +574,8 @@ def _search_civitai_impl(
         if not query:
             return "Error: query is required."
 
+        limit = max(1, min(limit, _MAX_LIMIT))
+
         if civitai is None:
             if store is None:
                 store = _get_store()
@@ -862,8 +868,14 @@ def _scan_workflow_impl(
 
 def _scan_workflow_file_impl(
     path: str = "",
+    _allowed_base: Optional[Path] = None,
 ) -> str:
-    """Scan a ComfyUI workflow file for dependencies."""
+    """Scan a ComfyUI workflow file for dependencies.
+
+    Args:
+        path: Path to .json workflow file.
+        _allowed_base: Override base directory for path restriction (testing only).
+    """
     try:
         if not path:
             return "Error: path is required."
@@ -873,6 +885,11 @@ def _scan_workflow_file_impl(
         # Security: only allow .json files
         if file_path.suffix.lower() != ".json":
             return f"Error: Only .json workflow files are supported, got: {file_path.suffix}"
+
+        # Security: restrict to allowed base directory to prevent path traversal
+        base_dir = (_allowed_base or Path.home()).resolve()
+        if not str(file_path).startswith(str(base_dir)):
+            return f"Error: Path must be within allowed directory ({base_dir})"
 
         if not file_path.exists():
             return f"Error: File not found: {path}"

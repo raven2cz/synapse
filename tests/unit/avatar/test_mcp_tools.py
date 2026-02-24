@@ -1097,15 +1097,15 @@ class TestRoutesCaching:
     """Test config caching in routes."""
 
     def test_cache_invalidation(self):
-        from src.avatar.routes import invalidate_avatar_cache, _cache
+        from src.avatar.routes import invalidate_avatar_cache, _cache_snapshot
+        import src.avatar.routes as routes_mod
 
-        _cache["config"] = "old"
-        _cache["ts"] = 999999.0
+        # Set a non-None cache snapshot
+        routes_mod._cache_snapshot = ("old_config", "old_providers", 999999.0)
 
         invalidate_avatar_cache()
 
-        assert _cache["config"] is None
-        assert _cache["ts"] == 0.0
+        assert routes_mod._cache_snapshot is None
 
 
 # =============================================================================
@@ -1451,15 +1451,28 @@ class TestScanWorkflowFile:
             ]
         }))
 
-        result = _scan_workflow_file_impl(path=str(workflow_file))
+        result = _scan_workflow_file_impl(path=str(workflow_file), _allowed_base=tmp_path)
         assert "test.json" in result
         assert "model.safetensors" in result
 
-    def test_nonexistent_file(self):
+    def test_nonexistent_file(self, tmp_path):
         from src.avatar.mcp.store_server import _scan_workflow_file_impl
 
-        result = _scan_workflow_file_impl(path="/tmp/no_such_file_12345.json")
+        result = _scan_workflow_file_impl(
+            path=str(tmp_path / "no_such_file_12345.json"),
+            _allowed_base=tmp_path,
+        )
         assert "File not found" in result
+
+    def test_path_traversal_rejected(self, tmp_path):
+        """Security: paths outside allowed base directory should be rejected."""
+        from src.avatar.mcp.store_server import _scan_workflow_file_impl
+
+        result = _scan_workflow_file_impl(
+            path="/etc/passwd.json",
+            _allowed_base=tmp_path,
+        )
+        assert "must be within allowed directory" in result
 
     def test_non_json_extension_rejected(self, tmp_path):
         from src.avatar.mcp.store_server import _scan_workflow_file_impl
@@ -1477,7 +1490,7 @@ class TestScanWorkflowFile:
         bad_file = tmp_path / "bad.json"
         bad_file.write_text("{not valid json")
 
-        result = _scan_workflow_file_impl(path=str(bad_file))
+        result = _scan_workflow_file_impl(path=str(bad_file), _allowed_base=tmp_path)
         assert "Error" in result
 
 

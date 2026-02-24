@@ -80,15 +80,15 @@ class TestCheckAvatarEngineCompat:
         assert "unknown" in caplog.text
 
     def test_graceful_when_packaging_not_available(self):
-        """If packaging module is missing, the check should still return True (skip)."""
+        """If packaging module is missing, the check should return False (conservative)."""
         from src.avatar import check_avatar_engine_compat
 
         with patch("src.avatar.AVATAR_ENGINE_AVAILABLE", True), \
              patch("src.avatar.AVATAR_ENGINE_VERSION", "1.0.0"), \
              patch.dict("sys.modules", {"packaging": None, "packaging.version": None}):
-            # Should not raise, returns True (assumes compatible when can't check)
+            # Should not raise, returns False (treats as incompatible when can't verify)
             result = check_avatar_engine_compat()
-            assert result is True
+            assert result is False
 
 
 class TestMinVersionConstant:

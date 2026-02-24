@@ -436,8 +436,8 @@ class TestWorkflowPipeline:
         workflow_file = tmp_path / "workflow.json"
         workflow_file.write_text(json.dumps(workflow_data))
 
-        # Scan file
-        file_result = _scan_workflow_file_impl(path=str(workflow_file))
+        # Scan file (pass _allowed_base for path traversal check in tests)
+        file_result = _scan_workflow_file_impl(path=str(workflow_file), _allowed_base=tmp_path)
         assert "model.safetensors" in file_result
         assert "VHS_VideoCombine" in file_result
 
