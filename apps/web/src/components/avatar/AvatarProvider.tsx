@@ -12,10 +12,26 @@
  */
 
 import { createContext, useContext, useMemo, useRef, useCallback, type ReactNode } from 'react'
-import { useAvatarChat, useAvailableProviders } from '@avatar-engine/react'
-import type { UseAvatarChatReturn } from '@avatar-engine/react'
+import { useAvatarChat, useAvailableProviders, AVATARS } from '@avatar-engine/react'
+import type { UseAvatarChatReturn, AvatarConfig } from '@avatar-engine/react'
 import { usePageContextStore } from '../../stores/pageContextStore'
 import { buildContextPayload, formatContextForMessage } from '../../lib/avatar/context'
+
+/** Custom Synapse avatar with individual pose files (no sprite sheet). */
+const SYNAPSE_AVATAR: AvatarConfig = {
+  id: 'synapse',
+  name: 'Synapse',
+  poses: {
+    idle: 'idle.webp',
+    thinking: 'thinking.webp',
+    speaking: 'speaking.webp',
+  },
+  speakingFrames: 0,
+  speakingFps: 0,
+}
+
+/** All avatars: custom Synapse first, then built-in library avatars. */
+export const ALL_AVATARS: AvatarConfig[] = [SYNAPSE_AVATAR, ...AVATARS]
 
 interface AvatarContextValue {
   chat: UseAvatarChatReturn

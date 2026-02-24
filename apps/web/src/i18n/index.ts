@@ -17,7 +17,7 @@
 
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import { initAvatarI18n } from '@avatar-engine/core'
+import { initAvatarI18n } from '@avatar-engine/react'
 
 import en from './locales/en.json'
 import cs from './locales/cs.json'

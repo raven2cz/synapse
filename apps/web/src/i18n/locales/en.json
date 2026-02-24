@@ -1684,7 +1684,7 @@
   "settingsAvatar": {
     "title": "AI Assistant (Avatar Engine)",
     "subtitle": "AI assistant powered by avatar-engine",
-    "configReadOnly": "Settings are managed via avatar.yaml config file:",
+    "configReadOnly": "Provider and model can be switched live. Other settings are managed via avatar.yaml:",
     "installed": "Installed",
     "notInstalled": "Not installed",
     "none": "None",

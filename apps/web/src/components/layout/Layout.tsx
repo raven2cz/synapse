@@ -16,11 +16,11 @@ import {
   StatusBar,
   ChatPanel,
 } from '@avatar-engine/react'
-import type { EngineState } from '@avatar-engine/core'
+import type { EngineState } from '@avatar-engine/react'
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { ToastContainer } from '../ui/Toast'
-import { AvatarProvider, useAvatar } from '../avatar/AvatarProvider'
+import { AvatarProvider, useAvatar, ALL_AVATARS } from '../avatar/AvatarProvider'
 import { SuggestionChips } from '../avatar/SuggestionChips'
 import { usePageContextStore } from '../../stores/pageContextStore'
 
@@ -71,6 +71,7 @@ function LayoutInner({ children }: LayoutProps) {
         availableProviders={providers}
         switchProvider={chat.switchProvider}
         onCompactModeRef={compactRef}
+        avatars={ALL_AVATARS}
         avatarBasePath="/avatars"
         renderBackground={() => (
           <div className="min-h-screen bg-obsidian flex flex-col">

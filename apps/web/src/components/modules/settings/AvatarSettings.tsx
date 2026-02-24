@@ -16,16 +16,12 @@ import {
   FileText,
   ChevronDown,
   ChevronRight,
-  CheckCircle2,
-  XCircle,
   AlertCircle,
   Info,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { AvatarBust, AvatarPicker, SafetyModeSelector } from '@avatar-engine/react'
-import { AVATARS, getAvatarById, DEFAULT_AVATAR_ID, LS_SELECTED_AVATAR } from '@avatar-engine/core'
-import type { SafetyMode } from '@avatar-engine/core'
-import { useAvatar } from '../../avatar/AvatarProvider'
+import { AvatarBust, AvatarPicker, ProviderModelSelector, DEFAULT_AVATAR_ID, LS_SELECTED_AVATAR } from '@avatar-engine/react'
+import { useAvatar, ALL_AVATARS } from '../../avatar/AvatarProvider'
 import {
   getAvatarConfig,
   getAvatarProviders,
@@ -88,52 +84,6 @@ function StatCard({ label, value, color = 'synapse', icon }: StatCardProps) {
 }
 
 // =============================================================================
-// Provider Mini Card
-// =============================================================================
-
-function ProviderMiniCard({
-  displayName,
-  installed,
-  isActive,
-  model,
-}: {
-  displayName: string
-  installed: boolean
-  isActive: boolean
-  model?: string
-}) {
-  const { t } = useTranslation()
-
-  return (
-    <div
-      className={clsx(
-        'p-3 rounded-xl border transition-all duration-200',
-        isActive
-          ? 'bg-synapse/5 border-synapse/30'
-          : 'bg-slate-dark/30 border-slate-light/20'
-      )}
-    >
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm font-semibold text-text-primary">{displayName}</span>
-        <span className={clsx('text-xs flex items-center gap-1', installed ? 'text-success' : 'text-text-muted')}>
-          {installed ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-          {installed ? t('settingsAvatar.installed') : t('settingsAvatar.notInstalled')}
-        </span>
-      </div>
-      {isActive && (
-        <span className="text-xs text-synapse font-medium">
-          {t('settingsAvatar.activeProvider')}
-          {model && <span className="text-text-muted ml-1">({model})</span>}
-        </span>
-      )}
-      {!isActive && installed && (
-        <span className="text-xs text-text-muted">{t('settingsAvatar.availableProvider')}</span>
-      )}
-    </div>
-  )
-}
-
-// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -145,7 +95,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
   const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
     try { return localStorage.getItem(LS_SELECTED_AVATAR) || DEFAULT_AVATAR_ID } catch { return DEFAULT_AVATAR_ID }
   })
-  const selectedAvatar = getAvatarById(selectedAvatarId)
+  const selectedAvatar = ALL_AVATARS.find(a => a.id === selectedAvatarId)
 
   const { data: status } = useQuery<import('../../../lib/avatar/api').AvatarStatus>({
     queryKey: avatarKeys.status(),
@@ -340,30 +290,10 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
           />
         </div>
 
-        {/* Provider Cards */}
+        {/* Provider & Model Selector (live-switching) */}
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-text-secondary flex items-center gap-2">
             <span>{t('settingsAvatar.providersTitle')}</span>
-            <div className="flex-1 h-px bg-slate-light/30" />
-          </h3>
-
-          <div className="grid grid-cols-3 gap-3">
-            {(providers || []).map((prov) => (
-              <ProviderMiniCard
-                key={prov.name}
-                displayName={prov.display_name}
-                installed={prov.installed}
-                isActive={prov.name === activeProvider}
-                model={config?.provider_configs?.[prov.name]?.model}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Safety Mode */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-text-secondary flex items-center gap-2">
-            <span>{t('settingsAvatar.safetyTitle')}</span>
             <div className="flex-1 h-px bg-slate-light/30" />
           </h3>
 
@@ -373,16 +303,14 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
               'bg-slate-dark/30 border border-slate-light/20'
             )}
           >
-            <div className="pointer-events-none">
-              <SafetyModeSelector
-                value={(config?.safety || 'safe') as SafetyMode}
-                onChange={() => {}}
-                provider={config?.provider}
-              />
-            </div>
-            <p className="text-xs text-text-muted mt-2">
-              {t('settingsAvatar.safetyConfigHint')}
-            </p>
+            <ProviderModelSelector
+              currentProvider={chat.provider || activeProvider || ''}
+              currentModel={chat.model || null}
+              switching={chat.switching}
+              activeOptions={chat.activeOptions}
+              availableProviders={providers ? new Set(providers.filter(p => p.installed).map(p => p.name)) : undefined}
+              onSwitch={chat.switchProvider}
+            />
           </div>
         </div>
 
@@ -492,7 +420,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
                   {selectedAvatar?.name || selectedAvatarId}
                 </div>
                 <div className="text-xs text-text-muted mt-0.5">
-                  {t('settingsAvatar.avatarCount', { builtin: AVATARS.length, custom: avatars?.custom?.length || 0 })}
+                  {t('settingsAvatar.avatarCount', { builtin: ALL_AVATARS.length, custom: avatars?.custom?.length || 0 })}
                 </div>
                 <button
                   onClick={() => setPickerOpen(true)}
@@ -517,6 +445,7 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
                   setPickerOpen(false)
                 }}
                 onClose={() => setPickerOpen(false)}
+                avatars={ALL_AVATARS}
                 avatarBasePath="/avatars"
               />
             )}

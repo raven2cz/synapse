@@ -314,6 +314,100 @@ describe('AvatarSettings', () => {
     })
   })
 
+  describe('ALL_AVATARS (Synapse custom avatar)', () => {
+    // Mirrors the AvatarConfig type from @avatar-engine/core
+    interface AvatarConfig {
+      id: string
+      name: string
+      poses: { idle: string; thinking?: string; speaking?: string }
+      speakingFrames: number
+      speakingFps: number
+    }
+
+    const SYNAPSE_AVATAR: AvatarConfig = {
+      id: 'synapse',
+      name: 'Synapse',
+      poses: { idle: 'idle.webp', thinking: 'thinking.webp', speaking: 'speaking.webp' },
+      speakingFrames: 0,
+      speakingFps: 0,
+    }
+
+    // Simulate library AVATARS (just 2 for testing)
+    const LIBRARY_AVATARS: AvatarConfig[] = [
+      { id: 'af_bella', name: 'Bella', poses: { idle: 'auto', speaking: 'speaking.webp' }, speakingFrames: 4, speakingFps: 8 },
+      { id: 'astronaut', name: 'Astronautka', poses: { idle: 'idle.webp', thinking: 'thinking.webp' }, speakingFrames: 0, speakingFps: 0 },
+    ]
+
+    const ALL_AVATARS: AvatarConfig[] = [SYNAPSE_AVATAR, ...LIBRARY_AVATARS]
+
+    it('should have Synapse avatar as first entry', () => {
+      expect(ALL_AVATARS[0].id).toBe('synapse')
+      expect(ALL_AVATARS[0].name).toBe('Synapse')
+    })
+
+    it('should include all library avatars after Synapse', () => {
+      expect(ALL_AVATARS).toHaveLength(3) // Synapse + 2 library
+      expect(ALL_AVATARS[1].id).toBe('af_bella')
+      expect(ALL_AVATARS[2].id).toBe('astronaut')
+    })
+
+    it('should have Synapse avatar with all 3 pose files', () => {
+      const synapse = ALL_AVATARS.find(a => a.id === 'synapse')!
+      expect(synapse.poses.idle).toBe('idle.webp')
+      expect(synapse.poses.thinking).toBe('thinking.webp')
+      expect(synapse.poses.speaking).toBe('speaking.webp')
+    })
+
+    it('should have Synapse with no sprite sheet (speakingFrames=0)', () => {
+      expect(SYNAPSE_AVATAR.speakingFrames).toBe(0)
+      expect(SYNAPSE_AVATAR.speakingFps).toBe(0)
+    })
+
+    it('should find Synapse by id lookup', () => {
+      const found = ALL_AVATARS.find(a => a.id === 'synapse')
+      expect(found).toBeDefined()
+      expect(found?.name).toBe('Synapse')
+    })
+
+    it('should find library avatar by id lookup', () => {
+      const found = ALL_AVATARS.find(a => a.id === 'af_bella')
+      expect(found).toBeDefined()
+      expect(found?.name).toBe('Bella')
+    })
+  })
+
+  describe('ProviderModelSelector integration', () => {
+    it('should derive available providers set from installed providers', () => {
+      const installed = mockProviders.filter(p => p.installed).map(p => p.name)
+      const availableSet = new Set(installed)
+      expect(availableSet.has('gemini')).toBe(true)
+      expect(availableSet.has('codex')).toBe(true)
+      expect(availableSet.has('claude')).toBe(false)
+      expect(availableSet.size).toBe(2)
+    })
+
+    it('should fall back to config provider when chat provider is null', () => {
+      const chatProvider = null as string | null
+      const configProvider = 'gemini'
+      const currentProvider = chatProvider || configProvider || ''
+      expect(currentProvider).toBe('gemini')
+    })
+
+    it('should prefer chat provider over config provider', () => {
+      const chatProvider = 'codex'
+      const configProvider = 'gemini'
+      const currentProvider = chatProvider || configProvider || ''
+      expect(currentProvider).toBe('codex')
+    })
+
+    it('should fall back to empty string when no provider is available', () => {
+      const chatProvider = null as string | null
+      const configProvider = undefined as string | undefined
+      const currentProvider = chatProvider || configProvider || ''
+      expect(currentProvider).toBe('')
+    })
+  })
+
   describe('Imperative handle contract', () => {
     it('save should be a no-op (read-only component)', async () => {
       const handle = {

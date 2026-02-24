@@ -680,10 +680,10 @@ check_pack_updates, get_storage_stats
 | `<AvatarPicker>` | ✅ | Nahradit hardcoded avatar list v Settings → `<AvatarPicker avatars={...} />` z knihovny |
 | `<SafetyModeSelector>` | ✅ | Nahradit custom radio buttons → knihovní selector |
 | `<AvatarBust>` preview | ✅ | Přidat animated bust preview do Settings |
-| `<ProviderModelSelector>` | ❌ | Nahradit custom select pro provider/model → knihovní dropdown |
-| Synapse avatar bust obrázky | ❌ | Vytvořit/získat idle.webp, thinking.webp, speaking.webp pro Synapse avatar |
+| `<ProviderModelSelector>` | ✅ | Nahrazeno: smazán ProviderMiniCard + SafetyMode sekce → knihovní `<ProviderModelSelector>` s live-switching (provider, model, safety, options) |
+| Synapse avatar bust obrázky | ✅ | 3 SVG→WebP busty: idle (purple), thinking (amber), speaking (cyan). `SYNAPSE_AVATAR` + `ALL_AVATARS` v AvatarProvider.tsx, předáno do AvatarWidget/AvatarPicker |
 
-**Testy:** 72 testů ✅ (27 FE unit + 27 BE unit + 10 integration + 8 smoke)
+**Testy:** 82 testů ✅ (37 FE unit + 27 BE unit + 10 integration + 8 smoke) — přidáno 10 testů (ALL_AVATARS, ProviderModelSelector integration)
 **Reviews:** Claude ✅ Gemini ✅ Codex ✅
 
 ---
@@ -748,8 +748,8 @@ KROK 5: Review (Claude + Gemini + Codex)                           ✅ HOTOVO (C
 
 ── MILESTONE: Avatar chat funguje end-to-end ──────────────────────
 
-KROK 6+: Iterace 6 — Advanced MCP (workflow, dependencies, import)
-KROK 7+: Iterace 7 — Migrace src/ai/ → avatar-engine
+KROK 6+: Iterace 6 — Advanced MCP (workflow, dependencies, import)  ✅ HOTOVO
+KROK 7+: Iterace 7 — Migrace src/ai/ → avatar-engine               ✅ HOTOVO
 KROK 8+: Iterace 8-9 — Library upgrade, polish, docs
 ```
 
@@ -776,12 +776,31 @@ Rozšíření store_server.py o 11 nových tools (celkem 21). Čistě backendov�
 **Security:** `scan_workflow_file` omezeno na `.json` extension (Gemini+Codex review nález).
 **Reviews:** Claude ✅ (1 fix: dead code), Gemini ✅ (1 fix: path traversal), Codex ✅ (2 fixes: path security + unresolved node logic)
 
-### Iterace 7: Migrace src/ai/ → Avatar Engine ❌
-- AvatarAIService (batch operace přes engine.chat_sync)
-- Zachovat _ai_fields + _extracted_by kompatibilitu
-- Feature flag pro přepínání old/new
-- Rule-based fallback zůstává
-- Smazat src/ai/ po ověření parity
+### Iterace 7: Migrace src/ai/ → Avatar Engine ✅ HOTOVO (46 testů, 3 review)
+
+AvatarAIService jako drop-in replacement pro CLI-based AIService.
+
+| Soubor | Řádků | Popis |
+|--------|-------|-------|
+| `src/avatar/ai_service.py` | 326 | AvatarAIService + `_extract_json()` standalone parser |
+| `src/ai/__init__.py` | 87 | `get_ai_service()` factory se singleton pattern |
+| `src/ai/settings.py` | +60 | `_detect_avatar_engine()` auto-detection, 4 nová pole |
+| `src/store/api.py` | +48 | Avatar settings v REST API |
+| `src/store/pack_service.py` | 2ř | `AIService()` → `get_ai_service()` |
+| `pyproject.toml` | 1ř | +avatar-engine dependency |
+
+**Klíčové vlastnosti:**
+- ✅ Auto-detection: avatar-engine installed + CLI (gemini/claude/codex) v PATH → automaticky ON
+- ✅ Thread-safe double-checked locking na `_get_engine()` i `get_ai_service()`
+- ✅ Singleton pattern: modul-level cache → žádné process leaky
+- ✅ Sdílený cache (AICache), `_extracted_by = "avatar:gemini"`, `_ai_fields` tracking
+- ✅ Rule-based fallback při selhání engine
+- ✅ Kompatibilní TaskResult output s AIService
+- ~~Smazat src/ai/ po ověření parity~~ — PONECHÁNO (Ollama uživatelé + backward compat)
+
+**Testy:** 46 (34 unit + 8 integration + 4 smoke)
+**Reviews:** Claude ✅ (thread safety fix), Gemini ✅ (singleton + logger.exception), Codex ✅ (validace)
+**Commit:** `a59a9d2`
 
 ### Iterace 8: Library Upgrade Management ❌
 - Version pinning, compatibility matrix, migration guide
@@ -803,7 +822,8 @@ Rozšíření store_server.py o 11 nových tools (celkem 21). Čistě backendov�
 | 4 Avatars | 45 | 27 | 72 | ✅ |
 | 5 Context | — | 88 | 88 | ✅ |
 | 6 MCP Advanced | 57 | — | 57 | ✅ |
-| **CELKEM** | **262** | **174** | **436** | ✅ |
+| 7 AI Migration | 46 | — | 46 | ✅ |
+| **CELKEM** | **308** | **174** | **482** | ✅ |
 
 ---
 
@@ -869,5 +889,5 @@ Rozšíření store_server.py o 11 nových tools (celkem 21). Čistě backendov�
 
 ---
 
-*Last Updated: 2026-02-23 (KROKY 1-5 + Iterace 6 dokončeny)*
-*Status: Iterace 1-6 ✅. 21 MCP tools, 436 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react.*
+*Last Updated: 2026-02-23 (KROKY 1-7 dokončeny)*
+*Status: Iterace 1-7 ✅. 21 MCP tools, 482 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová.*

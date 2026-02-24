@@ -1694,7 +1694,7 @@
   "settingsAvatar": {
     "title": "AI Asistent (Avatar Engine)",
     "subtitle": "AI asistent poháněný avatar-engine",
-    "configReadOnly": "Nastavení se spravují přes konfigurační soubor avatar.yaml:",
+    "configReadOnly": "Poskytovatel a model lze přepnout živě. Ostatní nastavení se spravují přes avatar.yaml:",
     "installed": "Nainstalováno",
     "notInstalled": "Nenainstalováno",
     "none": "Žádný",
