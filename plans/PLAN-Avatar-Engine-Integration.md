@@ -326,7 +326,7 @@ import './index.css'
 
 **i18n — inicializace:**
 ```typescript
-import { initAvatarI18n } from '@avatar-engine/core'
+import { initAvatarI18n } from '@avatar-engine/react'
 initAvatarI18n()  // Standalone — avatar má vlastní i18n instance s en+cs
 ```
 
@@ -354,24 +354,24 @@ initAvatarI18n()  // Standalone — avatar má vlastní i18n instance s en+cs
 ### Custom avatary pro Synapse
 
 ```typescript
-import { AVATARS } from '@avatar-engine/core'
-import type { AvatarConfig } from '@avatar-engine/core'
+// AvatarProvider.tsx — importovat VŠE z @avatar-engine/react (NIKDY z /core!)
+import { AVATARS } from '@avatar-engine/react'
+import type { AvatarConfig } from '@avatar-engine/react'
 
-// Vlastní Synapse avatar (pokud budeme mít bust obrázky)
-const synapseAvatar: AvatarConfig = {
+const SYNAPSE_AVATAR: AvatarConfig = {
   id: 'synapse',
   name: 'Synapse',
-  fullName: 'Synapse AI Assistant',
-  busts: {
+  poses: {
     idle: 'idle.webp',
     thinking: 'thinking.webp',
     speaking: 'speaking.webp',
   },
+  speakingFrames: 0,
+  speakingFps: 0,
 }
 
-// Použít knihovní avatary + vlastní
-const avatars = [synapseAvatar, ...AVATARS]
-// AvatarWidget: avatars={avatars} avatarBasePath="/avatars"
+export const ALL_AVATARS: AvatarConfig[] = [SYNAPSE_AVATAR, ...AVATARS]
+// AvatarWidget: avatars={ALL_AVATARS} avatarBasePath="/avatars"
 // Obrázky v: apps/web/public/avatars/synapse/idle.webp, thinking.webp, speaking.webp
 // Knihovní obrázky v: apps/web/public/avatars/af_bella/speaking.webp, atd.
 ```
