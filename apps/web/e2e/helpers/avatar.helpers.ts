@@ -151,6 +151,25 @@ export async function navigateTo(page: Page, path: string) {
   await waitForAppReady(page)
 }
 
+/**
+ * Check if the chat shows a provider error (quota exceeded, rate limit, etc.)
+ * and skip the test if so. Call after sending a message and waiting briefly.
+ */
+export async function skipOnProviderError(page: Page) {
+  const body = await page.locator('body').innerText()
+  const lower = body.toLowerCase()
+  if (
+    lower.includes('exhausted your capacity') ||
+    lower.includes('quota') ||
+    lower.includes('rate limit') ||
+    lower.includes('429') ||
+    lower.includes('resource_exhausted')
+  ) {
+    const { test } = await import('@playwright/test')
+    test.skip(true, 'AI provider quota/rate limit exceeded')
+  }
+}
+
 // ─── API helpers ─────────────────────────────────────────────────────
 
 /** GET request to backend API, returns parsed JSON. */

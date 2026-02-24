@@ -18,6 +18,7 @@ import {
   navigateTo,
   openCompactMode,
   sendCompactMessage,
+  skipOnProviderError,
   SEL_COMPACT_MESSAGES,
   SEL_COMPACT_MSG_BUBBLE,
 } from './helpers/avatar.helpers'
@@ -51,6 +52,9 @@ async function askAndWaitForResponse(
   question: string,
 ): Promise<string> {
   await sendCompactMessage(page, question)
+  // Give AI a moment to respond or show an error
+  await page.waitForTimeout(3_000)
+  await skipOnProviderError(page)
   let responseText = ''
   await expect(async () => {
     const msgs = page.locator(SEL_COMPACT_MSG_BUBBLE)
@@ -63,7 +67,6 @@ async function askAndWaitForResponse(
 }
 
 test.describe('MCP Tool Invocation @live', () => {
-  test.describe.configure({ mode: 'serial' })
   test('@live AI can list packs via MCP', async ({ page }) => {
     await setupMcpTest(page)
     const response = await askAndWaitForResponse(

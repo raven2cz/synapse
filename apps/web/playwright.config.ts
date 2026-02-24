@@ -40,6 +40,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
       grep: /@live/,
       fullyParallel: false,
+      retries: 2,
     },
   ],
 })

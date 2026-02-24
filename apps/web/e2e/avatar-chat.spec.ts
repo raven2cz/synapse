@@ -19,6 +19,7 @@ import {
   openFullscreenMode,
   sendCompactMessage,
   sendFullscreenMessage,
+  skipOnProviderError,
   navigateTo,
 } from './helpers/avatar.helpers'
 
@@ -36,8 +37,6 @@ async function waitForWsConnection(page: import('@playwright/test').Page) {
 }
 
 test.describe('Avatar Chat @live', () => {
-  test.describe.configure({ mode: 'serial' })
-
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, '/')
   })
@@ -45,6 +44,8 @@ test.describe('Avatar Chat @live', () => {
   test('send message and receive response @live', async ({ page }) => {
     await waitForWsConnection(page)
     await sendCompactMessage(page, 'Hello, say hi back in one word')
+    await page.waitForTimeout(3_000)
+    await skipOnProviderError(page)
     const msgs = page.locator(SEL_COMPACT_MSG_BUBBLE)
     // Wait for assistant response: 2+ message bubbles AND non-empty text in the last one
     let responseText = ''
