@@ -47,7 +47,7 @@ api = [
 avatar = [
     "mcp>=1.0",
     "pyyaml>=6.0",
-    "avatar-engine",
+    "avatar-engine>=1.0.0,<2.0",
 ]
 dev = [
     "pytest>=7.0",

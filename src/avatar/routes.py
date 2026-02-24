@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter
 
-from . import AVATAR_ENGINE_AVAILABLE, AVATAR_ENGINE_VERSION
+from . import AVATAR_ENGINE_AVAILABLE, AVATAR_ENGINE_MIN_VERSION, AVATAR_ENGINE_VERSION, check_avatar_engine_compat
 from .config import detect_available_providers, load_avatar_config
 from .skills import build_system_prompt, list_skills
 
@@ -77,6 +77,7 @@ def avatar_status() -> Dict[str, Any]:
         "enabled": config.enabled,
         "engine_installed": AVATAR_ENGINE_AVAILABLE,
         "engine_version": AVATAR_ENGINE_VERSION,
+        "engine_min_version": AVATAR_ENGINE_MIN_VERSION,
         "active_provider": config.provider if state == "ready" else None,
         "safety": config.safety,
         "providers": providers,
@@ -201,6 +202,8 @@ def try_mount_avatar_engine(app) -> bool:
     if not AVATAR_ENGINE_AVAILABLE:
         logger.info("Avatar Engine not installed — skipping mount")
         return False
+
+    check_avatar_engine_compat()
 
     try:
         from avatar_engine.web import create_api_app as create_avatar_app

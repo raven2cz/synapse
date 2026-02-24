@@ -36,6 +36,7 @@ RUN_BACKEND=true
 RUN_FRONTEND=true
 RUN_TYPES=true
 RUN_BUILD=true
+RUN_AVATAR=true
 QUICK_MODE=false
 VERBOSE=false
 
@@ -71,6 +72,8 @@ show_help() {
     echo "  --smoke           Run offline smoke tests (CDN/proxy pipeline)"
     echo "  --smoke-live      Run all smoke tests including live CDN"
     echo "  --no-slow         Exclude tests marked @pytest.mark.slow"
+    echo "  --avatar          Run only avatar-engine version checks"
+    echo "  --no-avatar       Skip avatar-engine version checks"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo "  ./scripts/verify.sh                    # Full verification"
@@ -179,6 +182,18 @@ while [[ $# -gt 0 ]]; do
             fi
             shift
             ;;
+        --avatar)
+            RUN_AVATAR=true
+            RUN_BACKEND=false
+            RUN_FRONTEND=false
+            RUN_TYPES=false
+            RUN_BUILD=false
+            shift
+            ;;
+        --no-avatar)
+            RUN_AVATAR=false
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
             echo "Use --help for usage information"
@@ -219,6 +234,7 @@ STEP=0
 TOTAL_STEPS=0
 
 # Calculate total steps
+[ "$RUN_AVATAR" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))   # avatar version check
 [ "$RUN_BACKEND" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 2))  # env + tests
 [ "$RUN_FRONTEND" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 2)) # env + tests
 [ "$RUN_TYPES" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
@@ -250,6 +266,52 @@ next_step() {
     STEP=$((STEP + 1))
     echo -e "${BOLD}[$STEP/$TOTAL_STEPS] $1${NC}"
 }
+
+# ============================================================================
+# Avatar Engine Version Check
+# ============================================================================
+
+if [ "$RUN_AVATAR" == true ]; then
+
+    next_step "Avatar Engine Version Check"
+
+    # Python avatar-engine
+    if command -v uv &> /dev/null; then
+        AE_PY_VERSION=$(uv run python -c "
+try:
+    import avatar_engine
+    print(getattr(avatar_engine, '__version__', 'unknown'))
+except ImportError:
+    print('not_installed')
+" 2>/dev/null || echo "error")
+    else
+        AE_PY_VERSION="error"
+    fi
+
+    if [ "$AE_PY_VERSION" == "not_installed" ]; then
+        check_warning "Python avatar-engine: not installed"
+    elif [ "$AE_PY_VERSION" == "error" ] || [ "$AE_PY_VERSION" == "unknown" ]; then
+        check_warning "Python avatar-engine: version unknown"
+    else
+        check_passed "Python avatar-engine: v${AE_PY_VERSION}"
+    fi
+
+    # npm packages — check they're from registry (not link:)
+    if [ -f "apps/web/pnpm-lock.yaml" ]; then
+        if grep -q "'@avatar-engine.*link:" apps/web/pnpm-lock.yaml 2>/dev/null; then
+            check_failed "npm @avatar-engine packages use link: — should be from registry"
+        else
+            # Extract versions from lockfile (pnpm hoisted store may not expose require())
+            NPM_AE_CORE=$(grep -oP '@avatar-engine/core@\K[0-9]+\.[0-9]+\.[0-9]+' apps/web/pnpm-lock.yaml 2>/dev/null | head -1 || echo "unknown")
+            NPM_AE_REACT=$(grep -oP '@avatar-engine/react@\K[0-9]+\.[0-9]+\.[0-9]+' apps/web/pnpm-lock.yaml 2>/dev/null | head -1 || echo "unknown")
+            check_passed "@avatar-engine/core: v${NPM_AE_CORE}, @avatar-engine/react: v${NPM_AE_REACT}"
+        fi
+    else
+        check_warning "No pnpm-lock.yaml found — skipping npm avatar check"
+    fi
+
+    echo ""
+fi
 
 # ============================================================================
 # Backend Checks

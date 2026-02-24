@@ -1,3 +1,2 @@
-overrides:
-  '@avatar-engine/core': link:../../../avatar-engine/packages/core
-  '@avatar-engine/react': link:../../../avatar-engine/packages/react
+# pnpm workspace configuration
+# Avatar-engine packages are now installed from npm registry (^1.0.0)

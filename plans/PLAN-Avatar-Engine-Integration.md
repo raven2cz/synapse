@@ -1,7 +1,7 @@
 # PLAN: Avatar Engine Integration into Synapse
 
 **Version:** v3.0.0 (DEFINITIVNÍ přepis — jediný zdroj pravdy)
-**Status:** ✅ KROKY 1-5 DOKONČENY — Avatar chat funguje end-to-end
+**Status:** ✅ KROKY 1-8 DOKONČENY — Avatar chat funguje end-to-end, registry verze s compat checks
 **Created:** 2026-02-22
 **Rewritten:** 2026-02-23
 **Author:** raven2cz + Claude Opus 4.6
@@ -802,8 +802,26 @@ AvatarAIService jako drop-in replacement pro CLI-based AIService.
 **Reviews:** Claude ✅ (thread safety fix), Gemini ✅ (singleton + logger.exception), Codex ✅ (validace)
 **Commit:** `a59a9d2`
 
-### Iterace 8: Library Upgrade Management ❌
-- Version pinning, compatibility matrix, migration guide
+### Iterace 8: Library Upgrade Management ✅ HOTOVO (29 testů)
+
+Přechod z `link:` na registry verze + version compatibility checks.
+
+| Soubor | Změna | Stav |
+|--------|-------|------|
+| `apps/web/package.json` | `link:` → `^1.0.0` pro @avatar-engine/core + react | ✅ |
+| `apps/web/pnpm-workspace.yaml` | Odstraněny `link:` overrides | ✅ |
+| `apps/web/pnpm-lock.yaml` | Regenerováno z npm registry | ✅ |
+| `pyproject.toml` | `avatar-engine` → `avatar-engine>=1.0.0,<2.0` | ✅ |
+| `src/avatar/__init__.py` | +`AVATAR_ENGINE_MIN_VERSION`, +`check_avatar_engine_compat()` | ✅ |
+| `src/avatar/routes.py` | +`engine_min_version` v /status, compat check při mount | ✅ |
+| `apps/web/src/components/avatar/AvatarProvider.tsx` | +`semverLessThan()`, +useEffect version check | ✅ |
+| `scripts/avatar-upgrade.sh` | Nový — upgrade Python+npm, verify, version summary | ✅ |
+| `scripts/verify.sh` | +`--avatar`/`--no-avatar`, avatar version check step | ✅ |
+| `tests/unit/avatar/test_compat.py` | 13 unit testů pro compat check | ✅ |
+| `apps/web/src/__tests__/avatar-version-check.test.ts` | 16 FE testů pro semver + version check | ✅ |
+
+**Testy:** 29 (13 BE unit + 16 FE unit)
+**Verifikace:** `./scripts/verify.sh --quick` ✅ (1468 BE + 877 FE + TypeScript OK)
 
 ### Iterace 9: Production Polish & Documentation ❌
 - User guide, dev guide, theming guide, MCP reference
@@ -823,7 +841,8 @@ AvatarAIService jako drop-in replacement pro CLI-based AIService.
 | 5 Context | — | 88 | 88 | ✅ |
 | 6 MCP Advanced | 57 | — | 57 | ✅ |
 | 7 AI Migration | 46 | — | 46 | ✅ |
-| **CELKEM** | **308** | **174** | **482** | ✅ |
+| 8 Upgrade Mgmt | 13 | 16 | 29 | ✅ |
+| **CELKEM** | **321** | **190** | **511** | ✅ |
 
 ---
 
@@ -889,5 +908,5 @@ AvatarAIService jako drop-in replacement pro CLI-based AIService.
 
 ---
 
-*Last Updated: 2026-02-23 (KROKY 1-7 dokončeny)*
-*Status: Iterace 1-7 ✅. 21 MCP tools, 482 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová.*
+*Last Updated: 2026-02-24 (KROKY 1-8 dokončeny)*
+*Status: Iterace 1-8 ✅. 21 MCP tools, 511 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks.*

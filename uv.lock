@@ -1464,7 +1464,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "avatar-engine", marker = "extra == 'avatar'" },
+    { name = "avatar-engine", marker = "extra == 'avatar'", specifier = ">=1.0.0,<2.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0" },
     { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.100" },
     { name = "filelock", specifier = ">=3.0" },

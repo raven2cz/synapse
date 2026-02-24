@@ -11,11 +11,25 @@
  *   </AvatarProvider>
  */
 
-import { createContext, useContext, useMemo, useRef, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react'
 import { useAvatarChat, useAvailableProviders, AVATARS } from '@avatar-engine/react'
 import type { UseAvatarChatReturn, AvatarConfig } from '@avatar-engine/react'
 import { usePageContextStore } from '../../stores/pageContextStore'
 import { buildContextPayload, formatContextForMessage } from '../../lib/avatar/context'
+
+/** Minimum backend avatar-engine version expected by this frontend. */
+const AE_MIN_VERSION = '1.0.0'
+
+/** Compare two semver strings (major.minor.patch). Returns true if a < b. */
+function semverLessThan(a: string, b: string): boolean {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return true
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return false
+  }
+  return false
+}
 
 /** Custom Synapse avatar with individual pose files (no sprite sheet). */
 const SYNAPSE_AVATAR: AvatarConfig = {
@@ -52,6 +66,21 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
   const chat = useAvatarChat(wsUrl, { apiBase: '/api/avatar' })
   const providers = useAvailableProviders()
   const compactRef = useRef<(() => void) | null>(null)
+
+  // Check backend avatar-engine version on first render
+  useEffect(() => {
+    fetch('/api/avatar/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.engine_version || data.engine_version === 'unknown') return
+        if (semverLessThan(data.engine_version, AE_MIN_VERSION)) {
+          console.warn(
+            `[Synapse] Backend avatar-engine ${data.engine_version} is below minimum ${AE_MIN_VERSION} — upgrade recommended`
+          )
+        }
+      })
+      .catch(() => { /* avatar status not available — non-critical */ })
+  }, [])
 
   // Wrap sendMessage to prepend page context
   const sendWithContext = useCallback((text: string) => {
