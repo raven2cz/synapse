@@ -63,6 +63,7 @@ async function askAndWaitForResponse(
 }
 
 test.describe('MCP Tool Invocation @live', () => {
+  test.describe.configure({ mode: 'serial' })
   test('@live AI can list packs via MCP', async ({ page }) => {
     await setupMcpTest(page)
     const response = await askAndWaitForResponse(

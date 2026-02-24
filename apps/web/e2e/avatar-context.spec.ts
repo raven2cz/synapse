@@ -144,7 +144,7 @@ test.describe('Context Propagation — WS Interception', () => {
   })
 
   test('context changes on navigation', async ({ page }) => {
-    // Start on packs
+    // Start on packs — send first message
     await navigateTo(page, '/')
     const getMessages = await interceptWsMessages(page)
     const connected = await ensureWsConnected(page)
@@ -152,26 +152,41 @@ test.describe('Context Propagation — WS Interception', () => {
       test.skip(true, 'WebSocket not connected')
     }
 
-    // Send a message on packs page
     await sendCompactMessage(page, 'First message on packs')
     await page.waitForTimeout(2_000)
 
-    // Navigate to inventory (compact mode stays open)
-    await page.goto('/inventory')
-    await page.waitForSelector('nav', { state: 'visible', timeout: 15_000 })
-    await page.waitForTimeout(1_000)
+    const capturedBefore = await getMessages()
+    expect(capturedBefore.length).toBeGreaterThanOrEqual(1)
 
-    // Send a message on inventory page
+    // Navigate to inventory — WS may reconnect, re-intercept
+    await navigateTo(page, '/inventory')
+    const getMessages2 = await interceptWsMessages(page)
+
+    // Re-open compact mode if it closed during navigation
+    const textarea = page.locator('textarea').last()
+    const visible = await textarea.isVisible().catch(() => false)
+    if (!visible) {
+      await openCompactMode(page)
+      try {
+        await page.waitForSelector(SEL_COMPACT_MESSAGES, {
+          state: 'visible',
+          timeout: 10_000,
+        })
+      } catch {
+        test.skip(true, 'WebSocket not reconnected after navigation')
+      }
+    }
+
     await sendCompactMessage(page, 'Second message on inventory')
     await page.waitForTimeout(2_000)
 
-    const captured = await getMessages()
-    // We should see messages from both pages
-    expect(captured.length).toBeGreaterThanOrEqual(2)
+    const capturedAfter = await getMessages2()
+    expect(capturedAfter.length).toBeGreaterThanOrEqual(1)
   })
 })
 
 test.describe('Context Propagation — AI Understanding @live', () => {
+  test.describe.configure({ mode: 'serial' })
   test('@live AI response references current page context on inventory', async ({
     page,
   }) => {

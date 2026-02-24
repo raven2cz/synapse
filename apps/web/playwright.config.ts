@@ -4,7 +4,6 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 120_000,
   retries: 1,
-  fullyParallel: true,
   reporter: [['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:5173',
@@ -27,5 +26,18 @@ export default defineConfig({
       timeout: 30_000,
     },
   ],
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'tier1',
+      use: { ...devices['Desktop Chrome'] },
+      grepInvert: /@live/,
+      fullyParallel: true,
+    },
+    {
+      name: 'tier2-live',
+      use: { ...devices['Desktop Chrome'] },
+      grep: /@live/,
+      fullyParallel: false,
+    },
+  ],
 })

@@ -51,7 +51,7 @@ test.describe('Avatar API Endpoints', () => {
     for (const provider of data) {
       expect(provider).toHaveProperty('name')
       expect(typeof provider.installed).toBe('boolean')
-      expect(provider).toHaveProperty('cli_name')
+      expect(provider).toHaveProperty('command')
     }
   })
 
@@ -60,8 +60,9 @@ test.describe('Avatar API Endpoints', () => {
     expect(Array.isArray(data.builtin)).toBe(true)
     for (const skill of data.builtin) {
       expect(skill).toHaveProperty('name')
-      expect(skill).toHaveProperty('description')
-      expect(typeof skill.enabled).toBe('boolean')
+      expect(skill).toHaveProperty('path')
+      expect(typeof skill.size).toBe('number')
+      expect(skill).toHaveProperty('category')
     }
   })
 

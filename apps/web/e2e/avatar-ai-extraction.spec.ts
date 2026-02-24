@@ -79,6 +79,7 @@ test.describe('AI Parameter Extraction', () => {
 })
 
 test.describe('AI Parameter Extraction @live', () => {
+  test.describe.configure({ mode: 'serial' })
   test('@live AI extracts parameters from detailed description', async ({
     page,
   }) => {

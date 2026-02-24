@@ -57,6 +57,7 @@ test.describe('Avatar Provider Detection', () => {
 })
 
 test.describe('Avatar Provider Switching @live', () => {
+  test.describe.configure({ mode: 'serial' })
   test('@live switch provider via settings UI and verify status', async ({
     page,
   }) => {

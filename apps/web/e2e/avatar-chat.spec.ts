@@ -36,6 +36,8 @@ async function waitForWsConnection(page: import('@playwright/test').Page) {
 }
 
 test.describe('Avatar Chat @live', () => {
+  test.describe.configure({ mode: 'serial' })
+
   test.beforeEach(async ({ page }) => {
     await navigateTo(page, '/')
   })
