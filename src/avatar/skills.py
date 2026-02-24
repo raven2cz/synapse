@@ -120,6 +120,7 @@ def build_system_prompt(config: AvatarConfig) -> str:
             skill_map[name] = (path, category)
 
     # Append skills in alphabetical order
+    loaded_count = 0
     if skill_map:
         parts.append("\n---\n\n# Domain Knowledge\n")
 
@@ -128,5 +129,12 @@ def build_system_prompt(config: AvatarConfig) -> str:
             content = load_skill(path)
             if content.strip():
                 parts.append(f"## Skill: {name}\n\n{content.strip()}\n")
+                loaded_count += 1
 
+    builtin_count = sum(1 for _, cat in skill_map.values() if cat == "builtin")
+    custom_count = sum(1 for _, cat in skill_map.values() if cat == "custom")
+    logger.info(
+        "System prompt built: %d skills loaded (%d builtin, %d custom)",
+        loaded_count, builtin_count, custom_count,
+    )
     return "\n".join(parts)

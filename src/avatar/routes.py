@@ -57,6 +57,7 @@ def invalidate_avatar_cache() -> None:
     global _cache_snapshot
     with _cache_lock:
         _cache_snapshot = None
+    logger.debug("Avatar config cache invalidated")
 
 
 @avatar_router.get("/status")

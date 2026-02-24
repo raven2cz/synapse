@@ -142,9 +142,10 @@ class AvatarAIService:
         if use_cache and self.settings.cache_enabled:
             cached = self.cache.get(cache_content)
             if cached:
-                logger.info(
-                    f"[avatar-ai] Cache hit for key: {cached.key} "
-                    f"(age: {cached.age_days():.1f}d)"
+                logger.debug(
+                    "[avatar-ai] Cache hit for key: %s (age: %.1fd)",
+                    cached.key,
+                    cached.age_days(),
                 )
                 parsed = self._task.parse_result(cached.result)
 
@@ -242,6 +243,7 @@ class AvatarAIService:
             )
 
         result = provider.execute(description)
+        logger.debug("[avatar-ai] Rule-based result: success=%s", result.success)
 
         if result.success and result.output:
             parsed = self._task.parse_result(result.output)

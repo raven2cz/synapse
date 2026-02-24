@@ -23,8 +23,11 @@ store_mcp = None
 if MCP_AVAILABLE:
     try:
         from .store_server import mcp as store_mcp
+        logger.debug("MCP store server loaded (21 tools)")
     except Exception as e:
         logger.warning("Failed to import MCP store server: %s", e)
         store_mcp = None
+else:
+    logger.debug("MCP SDK not installed — store tools unavailable")
 
 __all__ = ["MCP_AVAILABLE", "store_mcp"]

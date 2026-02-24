@@ -117,7 +117,7 @@ def load_avatar_config(
                 raw_config = loaded
             elif loaded is not None:
                 logger.warning(f"Avatar config at {config_path} is not a mapping, using defaults")
-            logger.info(f"Loaded avatar config from {config_path}")
+            logger.debug("Loaded avatar config from %s", config_path)
         except Exception as e:
             logger.warning(f"Failed to load avatar config from {config_path}: {e}")
     else:
@@ -212,4 +212,6 @@ def detect_available_providers() -> List[Dict[str, Any]]:
     for provider in providers:
         provider["installed"] = shutil.which(provider["command"]) is not None
 
+    installed = [p["name"] for p in providers if p["installed"]]
+    logger.debug("Detected providers: %s", installed or "none")
     return providers

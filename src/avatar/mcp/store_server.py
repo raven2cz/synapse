@@ -43,6 +43,12 @@ _store_instance = None
 _store_lock = threading.Lock()
 
 
+def _log_tool_call(tool_name: str, **kwargs: Any) -> None:
+    """Log MCP tool invocation at DEBUG level."""
+    args = ", ".join(f"{k}={v!r}" for k, v in kwargs.items() if v)
+    logger.debug("[mcp] %s(%s)", tool_name, args)
+
+
 def _get_store() -> Any:
     """Get or create Store singleton (same pattern as src/store/api.py)."""
     global _store_instance
@@ -58,6 +64,11 @@ def _get_store() -> Any:
                     civitai_api_key = cfg.api.civitai_token
 
                 _store_instance = Store(root=cfg.store.root, civitai_api_key=civitai_api_key)
+                logger.info(
+                    "[mcp] Store initialized: root=%s, civitai_token=%s",
+                    cfg.store.root,
+                    "set" if civitai_api_key else "not set",
+                )
     return _store_instance
 
 
@@ -129,7 +140,8 @@ def _list_packs_impl(store: Any = None, name_filter: str = "", limit: int = 20) 
                 lines.append(
                     f"   {dep_count} dependenc{'y' if dep_count == 1 else 'ies'}, Source: {source}"
                 )
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to load pack '%s': %s", name, e)
                 lines.append(f"{i}. {name} (error loading details)")
 
         return "\n".join(lines)
@@ -792,6 +804,7 @@ def _import_civitai_model_impl(
             kwargs["pack_name"] = pack_name
 
         pack = store.import_civitai(**kwargs)
+        logger.info("[mcp] Imported pack '%s' from %s (%d deps)", pack.name, url, len(pack.dependencies))
 
         lines = [
             f"Successfully imported pack: {pack.name}",
@@ -1199,51 +1212,61 @@ if MCP_AVAILABLE:
     @mcp.tool()
     def list_packs(name_filter: str = "", limit: int = 20) -> str:
         """List all packs in the Synapse store. Optionally filter by name and limit results."""
+        _log_tool_call("list_packs", name_filter=name_filter, limit=limit)
         return _list_packs_impl(name_filter=name_filter, limit=limit)
 
     @mcp.tool()
     def get_pack_details(pack_name: str) -> str:
         """Get detailed information about a specific pack including dependencies and parameters."""
+        _log_tool_call("get_pack_details", pack_name=pack_name)
         return _get_pack_details_impl(pack_name=pack_name)
 
     @mcp.tool()
     def search_packs(query: str) -> str:
         """Search packs by name or dependency ID."""
+        _log_tool_call("search_packs", query=query)
         return _search_packs_impl(query=query)
 
     @mcp.tool()
     def get_pack_parameters(pack_name: str) -> str:
         """Get generation parameters (sampler, steps, CFG, size) for a pack."""
+        _log_tool_call("get_pack_parameters", pack_name=pack_name)
         return _get_pack_parameters_impl(pack_name=pack_name)
 
     @mcp.tool()
     def get_inventory_summary() -> str:
         """Get a summary of the blob inventory: counts, sizes, orphans, missing."""
+        _log_tool_call("get_inventory_summary")
         return _get_inventory_summary_impl()
 
     @mcp.tool()
     def find_orphan_blobs() -> str:
         """Find blobs not referenced by any pack (candidates for cleanup)."""
+        _log_tool_call("find_orphan_blobs")
         return _find_orphan_blobs_impl()
 
     @mcp.tool()
     def find_missing_blobs() -> str:
         """Find blobs referenced by packs but missing from local storage."""
+        _log_tool_call("find_missing_blobs")
         return _find_missing_blobs_impl()
 
     @mcp.tool()
     def get_backup_status() -> str:
         """Get backup storage status: connection, blob count, free space."""
+        _log_tool_call("get_backup_status")
         return _get_backup_status_impl()
 
     @mcp.tool()
     def check_pack_updates(pack_name: str = "") -> str:
         """Check for available updates. Leave pack_name empty to check all packs. Note: checking all packs makes one API call per pack to Civitai, which may be slow for large libraries."""
+        _log_tool_call("check_pack_updates", pack_name=pack_name)
         return _check_pack_updates_impl(pack_name=pack_name)
 
     @mcp.tool()
     def get_storage_stats() -> str:
         """Get detailed storage statistics: total size, per-kind breakdown, largest packs."""
+        _log_tool_call("get_storage_stats")
         return _get_storage_stats_impl()
 
     # ----- Civitai tools (Group A) -----
@@ -1251,21 +1274,25 @@ if MCP_AVAILABLE:
     @mcp.tool()
     def search_civitai(query: str, types: str = "", sort: str = "Most Downloaded", limit: int = 10) -> str:
         """Search for models on Civitai. Filter by types (comma-separated: LORA, Checkpoint, etc.) and sort order."""
+        _log_tool_call("search_civitai", query=query, types=types, sort=sort)
         return _search_civitai_impl(query=query, types=types, sort=sort, limit=limit)
 
     @mcp.tool()
     def analyze_civitai_model(url: str) -> str:
         """Analyze a Civitai model URL: all versions, files, sizes, base model, trigger words, tags."""
+        _log_tool_call("analyze_civitai_model", url=url)
         return _analyze_civitai_model_impl(url=url)
 
     @mcp.tool()
     def compare_model_versions(url: str) -> str:
         """Compare all versions of a Civitai model side-by-side: base model, size, files, trigger words."""
+        _log_tool_call("compare_model_versions", url=url)
         return _compare_model_versions_impl(url=url)
 
     @mcp.tool()
     def import_civitai_model(url: str, pack_name: str = "", download_previews: bool = True) -> str:
         """Import a model from Civitai into the Synapse store. WARNING: This modifies the store — creates pack directory and downloads model files (potentially several GB)."""
+        _log_tool_call("import_civitai_model", url=url, pack_name=pack_name)
         return _import_civitai_model_impl(url=url, pack_name=pack_name, download_previews=download_previews)
 
     # ----- Workflow tools (Group B) -----
@@ -1273,21 +1300,25 @@ if MCP_AVAILABLE:
     @mcp.tool()
     def scan_workflow(workflow_json: str) -> str:
         """Analyze a ComfyUI workflow JSON string for model dependencies and custom node requirements."""
+        _log_tool_call("scan_workflow", workflow_json=f"({len(workflow_json)} chars)")
         return _scan_workflow_impl(workflow_json=workflow_json)
 
     @mcp.tool()
     def scan_workflow_file(path: str) -> str:
         """Analyze a ComfyUI workflow file (.json) for model dependencies and custom nodes."""
+        _log_tool_call("scan_workflow_file", path=path)
         return _scan_workflow_file_impl(path=path)
 
     @mcp.tool()
     def check_workflow_availability(workflow_json: str) -> str:
         """Check which workflow model dependencies are locally available in the Synapse store."""
+        _log_tool_call("check_workflow_availability", workflow_json=f"({len(workflow_json)} chars)")
         return _check_workflow_availability_impl(workflow_json=workflow_json)
 
     @mcp.tool()
     def list_custom_nodes(workflow_json: str) -> str:
         """List custom node packages required by a workflow with git repository URLs."""
+        _log_tool_call("list_custom_nodes", workflow_json=f"({len(workflow_json)} chars)")
         return _list_custom_nodes_impl(workflow_json=workflow_json)
 
     # ----- Dependency resolution tools (Group C) -----
@@ -1295,16 +1326,19 @@ if MCP_AVAILABLE:
     @mcp.tool()
     def resolve_workflow_dependencies(workflow_json: str) -> str:
         """Resolve all workflow dependencies: maps assets to download sources (Civitai/HuggingFace/local) and custom nodes to git repos."""
+        _log_tool_call("resolve_workflow_dependencies", workflow_json=f"({len(workflow_json)} chars)")
         return _resolve_workflow_deps_impl(workflow_json=workflow_json)
 
     @mcp.tool()
     def find_model_by_hash(hash_value: str) -> str:
         """Find a model on Civitai by SHA256 or AutoV2 hash. Useful for identifying unknown model files."""
+        _log_tool_call("find_model_by_hash", hash_value=hash_value)
         return _find_model_by_hash_impl(hash_value=hash_value)
 
     @mcp.tool()
     def suggest_asset_sources(asset_names: str) -> str:
         """Suggest download sources for model files. Provide comma-separated asset names (e.g. 'model.safetensors, vae.safetensors')."""
+        _log_tool_call("suggest_asset_sources", asset_names=asset_names)
         return _suggest_asset_sources_impl(asset_names=asset_names)
 else:
     mcp = None

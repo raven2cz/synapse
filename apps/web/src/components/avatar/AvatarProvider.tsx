@@ -16,6 +16,7 @@ import { useAvatarChat, useAvailableProviders, AVATARS } from '@avatar-engine/re
 import type { UseAvatarChatReturn, AvatarConfig } from '@avatar-engine/react'
 import { usePageContextStore } from '../../stores/pageContextStore'
 import { buildContextPayload, formatContextForMessage } from '../../lib/avatar/context'
+import { toast } from '../../stores/toastStore'
 
 /** Minimum backend avatar-engine version expected by this frontend. */
 const AE_MIN_VERSION = '1.0.0'
@@ -67,16 +68,20 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
   const providers = useAvailableProviders()
   const compactRef = useRef<(() => void) | null>(null)
 
-  // Check backend avatar-engine version on first render
+  // Check backend avatar-engine status on first render
   useEffect(() => {
     fetch('/api/avatar/status')
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data?.engine_version || data.engine_version === 'unknown') return
-        if (semverLessThan(data.engine_version, AE_MIN_VERSION)) {
-          console.warn(
-            `[Synapse] Backend avatar-engine ${data.engine_version} is below minimum ${AE_MIN_VERSION} — upgrade recommended`
-          )
+        if (!data) return
+        if (data.state === 'no_engine') {
+          toast.info('AI assistant unavailable — avatar-engine not installed')
+        } else if (data.state === 'no_provider') {
+          toast.info('AI assistant unavailable — no AI provider CLI found (gemini/claude/codex)')
+        } else if (data.state === 'setup_required') {
+          toast.info('AI assistant requires setup — install avatar-engine and a provider CLI')
+        } else if (data.engine_version && data.engine_version !== 'unknown' && semverLessThan(data.engine_version, AE_MIN_VERSION)) {
+          toast.warning(`AI engine v${data.engine_version} is outdated — upgrade to v${AE_MIN_VERSION}+ recommended`)
         }
       })
       .catch(() => { /* avatar status not available — non-critical */ })
