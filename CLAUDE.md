@@ -112,6 +112,12 @@ pnpm build            # Production build
 | `src/store/cli.py` | **🆕** Typer CLI: inventory, backup, profiles, packs |
 | `src/utils/media_detection.py` | Detekce typu média (image/video), URL transformace |
 | `src/clients/civitai_client.py` | Civitai API client |
+| `src/avatar/__init__.py` | Avatar-engine feature flag, version check |
+| `src/avatar/config.py` | AvatarConfig dataclass, YAML loading, path resolution |
+| `src/avatar/routes.py` | FastAPI router (6 endpoints), avatar-engine mount |
+| `src/avatar/skills.py` | Skill loading, system prompt building |
+| `src/avatar/ai_service.py` | AvatarAIService — drop-in AI parameter extraction |
+| `src/avatar/mcp/store_server.py` | 21 MCP tools (Store, Civitai, Workflow, Dependencies) |
 
 ### Frontend
 | Soubor | Účel |
@@ -525,6 +531,29 @@ cd ~/git/github/avatar-engine && uv run avatar -w /home/box/git/github/synapse \
 
 ---
 
+## 🤖 Avatar Engine Documentation
+
+Avatar-related docs live in `docs/avatar/`. See `docs/avatar/README.md` for navigation.
+
+| Doc | Purpose |
+|-----|---------|
+| `docs/avatar/getting-started.md` | Setup & first chat |
+| `docs/avatar/configuration.md` | avatar.yaml reference |
+| `docs/avatar/mcp-tools-reference.md` | All 21 MCP tools |
+| `docs/avatar/skills-and-avatars.md` | Custom skills & avatars |
+| `docs/avatar/theming.md` | CSS theming |
+| `docs/avatar/architecture.md` | Developer reference |
+| `docs/avatar/troubleshooting.md` | Common issues |
+
+### Pravidla pro Avatar dokumentaci
+- Změna v `src/avatar/` → aktualizovat relevantní docs v `docs/avatar/`
+- Nové MCP tools → přidat do `docs/avatar/mcp-tools-reference.md`
+- Nové skills → přidat do `docs/avatar/skills-and-avatars.md`
+- Config změny → aktualizovat `docs/avatar/configuration.md` + `config/avatar.yaml.example`
+- Nové frontend avatar komponenty → aktualizovat `docs/avatar/architecture.md`
+
+---
+
 ## 🐛 Known Issues & Lessons Learned
 
 ### Civitai CDN & Video playback (2026-02-22)
@@ -569,5 +598,5 @@ pozadí (`bg-slate-deep/50`), takže přetečený obsah (obrázky z Civitai HTML
 
 ---
 
-*Poslední aktualizace: 2026-01-24*
-*Aktivní fáze: Model Inventory - Iterace 3 (CLI příkazy)*
+*Poslední aktualizace: 2026-02-24*
+*Aktivní fáze: Avatar Engine - Iterace 9 (Dokumentace)*

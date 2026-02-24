@@ -34,6 +34,24 @@ Synapse organizes your models, LoRAs, and workflows into **packs** - portable bu
 | **Backup Storage** | Offload to external drive, restore when needed |
 | **Preview Gallery** | Browse pack previews with generation metadata |
 | **Update Detection** | Know when Civitai has newer versions |
+| **AI Assistant** | Natural language model management via [avatar-engine](docs/avatar/README.md) |
+
+## AI Assistant
+
+Synapse includes an AI assistant powered by [avatar-engine](https://github.com/anthropics/avatar-engine) that understands your model library:
+
+```bash
+# Install avatar-engine
+uv add "avatar-engine[web]"
+cd apps/web && pnpm add @avatar-engine/react @avatar-engine/core
+
+# Ensure at least one provider CLI is installed (gemini, claude, or codex)
+which gemini || which claude || which codex
+```
+
+Ask questions like "What LoRAs do I have for SDXL?", "Find orphan blobs", or "Import this model from Civitai". The AI has access to 21 MCP tools for store management, Civitai search, workflow analysis, and dependency resolution.
+
+See [docs/avatar/](docs/avatar/README.md) for full documentation.
 
 ## Quick Start
 
@@ -213,6 +231,7 @@ uv run pytest tests/store/ -v
 
 ## Documentation
 
+- [AI Assistant](docs/avatar/README.md) - Avatar-engine integration guide
 - [Store Architecture](src/store/README.md) - Technical deep-dive
 - [CLAUDE.md](CLAUDE.md) - Project conventions and patterns
 

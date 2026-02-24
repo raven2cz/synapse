@@ -1,7 +1,7 @@
 # PLAN: Avatar Engine Integration into Synapse
 
 **Version:** v3.0.0 (DEFINITIVNÍ přepis — jediný zdroj pravdy)
-**Status:** ✅ KROKY 1-8 DOKONČENY — Avatar chat funguje end-to-end, registry verze s compat checks
+**Status:** ✅ KROKY 1-9 DOKONČENY — Avatar chat end-to-end, registry verze, kompletní dokumentace
 **Created:** 2026-02-22
 **Rewritten:** 2026-02-23
 **Author:** raven2cz + Claude Opus 4.6
@@ -908,5 +908,41 @@ Přechod z `link:` na registry verze + version compatibility checks.
 
 ---
 
-*Last Updated: 2026-02-24 (KROKY 1-8 dokončeny)*
-*Status: Iterace 1-8 ✅. 21 MCP tools, 511 testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks.*
+---
+
+## Iterace 9: Avatar-Engine Documentation ✅ DOKONČENO
+
+**Datum:** 2026-02-24
+**Commit:** `docs: add avatar-engine documentation (Iterace 9)`
+
+### Co bylo vytvořeno
+
+8 dokumentačních souborů v `docs/avatar/` (~1200 řádků):
+
+| Soubor | Řádků | Obsah |
+|--------|-------|-------|
+| `docs/avatar/README.md` | ~50 | Landing page, navigace, prerequisites |
+| `docs/avatar/getting-started.md` | ~140 | Instalace, first chat, keyboard shortcuts, provider switching |
+| `docs/avatar/configuration.md` | ~180 | Kompletní `avatar.yaml` reference, safety modes, paths |
+| `docs/avatar/mcp-tools-reference.md` | ~280 | Všech 21 MCP tools s parametry a příklady promptů |
+| `docs/avatar/skills-and-avatars.md` | ~130 | 9 builtin skills, custom skills, avatar customizace |
+| `docs/avatar/theming.md` | ~90 | CSS custom properties, theme override, Tailwind integrace |
+| `docs/avatar/architecture.md` | ~230 | System diagram, backend/frontend internals, design decisions, testing |
+| `docs/avatar/troubleshooting.md` | ~120 | Status states, common issues, debug commands |
+
+### Úpravy existujících souborů
+
+- ✅ `README.md` — přidána "AI Assistant" sekce + odkaz v Features tabulce + Documentation
+- ✅ `CLAUDE.md` — přidána "Avatar Engine Documentation" sekce s pravidly + rozšířena Backend tabulka o `src/avatar/` soubory
+- ✅ `plans/PLAN-Avatar-Engine-Integration.md` — tato sekce
+
+### Pravidla pro údržbu (v CLAUDE.md)
+
+- Změna v `src/avatar/` → aktualizovat relevantní docs
+- Nové MCP tools → `docs/avatar/mcp-tools-reference.md`
+- Nové skills → `docs/avatar/skills-and-avatars.md`
+- Config změny → `docs/avatar/configuration.md` + `config/avatar.yaml.example`
+- Nové frontend avatar komponenty → `docs/avatar/architecture.md`
+
+*Last Updated: 2026-02-24 (KROKY 1-9 dokončeny)*
+*Status: Iterace 1-9 ✅. 21 MCP tools, 511 testů, 8 docs. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks. Kompletní user-facing dokumentace.*

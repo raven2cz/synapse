@@ -3,7 +3,7 @@
 # This file configures the AI assistant powered by avatar-engine.
 # Copy to ~/.synapse/avatar.yaml and customize as needed.
 #
-# Documentation: docs/AVATAR-CONFIG.md
+# Documentation: docs/avatar/configuration.md
 
 # Default AI provider (gemini | claude | codex)
 provider: "gemini"
