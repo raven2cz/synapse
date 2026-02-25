@@ -3,13 +3,13 @@
  *
  * Tests the AvatarProvider context logic:
  * - WebSocket URL construction
- * - sendWithContext wrapper (context prefix injection)
+ * - sendWithContext wrapper (structured context metadata)
  * - Context shape validation
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePageContextStore } from '../stores/pageContextStore'
-import { buildContextPayload, formatContextForMessage } from '../lib/avatar/context'
+import { buildContextPayload, formatContextForMessage, type AvatarPageContextPayload } from '../lib/avatar/context'
 
 // ============================================================================
 // WebSocket URL Construction
@@ -42,7 +42,7 @@ describe('AvatarProvider — WS URL construction', () => {
 })
 
 // ============================================================================
-// sendWithContext — Context Prefix Injection
+// sendWithContext — Structured Context Metadata
 // ============================================================================
 
 describe('AvatarProvider — sendWithContext logic', () => {
@@ -51,71 +51,197 @@ describe('AvatarProvider — sendWithContext logic', () => {
   })
 
   /**
-   * Simulates sendWithContext: reads page context, builds prefix, prepends to message.
-   * This mirrors AvatarProvider.tsx:41-47
+   * Simulates sendWithContext: reads page context, builds structured payload.
+   * This mirrors AvatarProvider.tsx — context is sent as metadata, not as text prefix.
    */
-  function buildFullMessage(text: string): string {
+  function buildSendArgs(text: string): { text: string; context: AvatarPageContextPayload | undefined } {
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    return prefix ? `${prefix}\n\n${text}` : text
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    return { text, context: payload ?? undefined }
   }
 
   it('should send plain text when no context available', () => {
-    const result = buildFullMessage('Hello')
-    expect(result).toBe('Hello')
+    const { text, context } = buildSendArgs('Hello')
+    expect(text).toBe('Hello')
+    expect(context).toBeUndefined()
   })
 
-  it('should prepend context when current page has context', () => {
+  it('should attach context metadata when current page has context', () => {
     usePageContextStore.getState().setContext('/inventory')
-    const result = buildFullMessage('Help me clean up')
-    expect(result).toBe('[Context: Viewing model inventory]\n\nHelp me clean up')
+    const { text, context } = buildSendArgs('Help me clean up')
+    expect(text).toBe('Help me clean up')
+    expect(context).toEqual({
+      page: 'inventory',
+      description: 'Viewing model inventory',
+      pathname: '/inventory',
+    })
   })
 
-  it('should prefer previous page context over current', () => {
+  it('should fall back to previous context when on avatar page', () => {
     usePageContextStore.getState().setContext('/packs/Juggernaut-XL')
     usePageContextStore.getState().setContext('/avatar')
 
-    const result = buildFullMessage('Explain this model')
-    expect(result).toBe(
-      '[Context: Viewing pack detail, pack: Juggernaut-XL]\n\nExplain this model',
-    )
+    const { text, context } = buildSendArgs('Explain this model')
+    expect(text).toBe('Explain this model')
+    expect(context).toMatchObject({
+      page: 'pack-detail',
+      entity: 'Juggernaut-XL',
+      entityType: 'pack',
+    })
+  })
+
+  it('should use current page context, not stale previous', () => {
+    // User was on pack-detail, then navigated to packs list
+    usePageContextStore.getState().setContext('/packs/Juggernaut-XL')
+    usePageContextStore.getState().setContext('/')
+
+    const { context } = buildSendArgs('List my packs')
+    // Should reflect current page (packs list), NOT previous (pack-detail)
+    expect(context).toMatchObject({ page: 'packs', description: 'Viewing pack list' })
+    expect(context?.entity).toBeUndefined()
+  })
+
+  it('should reflect new pack when navigating between pack details', () => {
+    usePageContextStore.getState().setContext('/packs/Model-A')
+    usePageContextStore.getState().setContext('/packs/Model-B')
+
+    const { context } = buildSendArgs('Tell me about this')
+    expect(context).toMatchObject({
+      page: 'pack-detail',
+      entity: 'Model-B',
+      entityType: 'pack',
+    })
   })
 
   it('should use current when previous is null', () => {
     usePageContextStore.getState().setContext('/browse')
-    const result = buildFullMessage('Find me a model')
-    expect(result).toBe('[Context: Browsing Civitai models]\n\nFind me a model')
+    const { text, context } = buildSendArgs('Find me a model')
+    expect(text).toBe('Find me a model')
+    expect(context).toMatchObject({
+      page: 'browse',
+      description: 'Browsing Civitai models',
+    })
   })
 
   it('should skip context for unknown pages', () => {
     usePageContextStore.getState().setContext('/unknown')
-    const result = buildFullMessage('Question')
-    expect(result).toBe('Question')
+    const { context } = buildSendArgs('Question')
+    expect(context).toBeUndefined()
   })
 
   it('should skip context for avatar page (no useful context)', () => {
     usePageContextStore.getState().setContext('/avatar')
-    const result = buildFullMessage('Question')
-    expect(result).toBe('Question')
+    const { context } = buildSendArgs('Question')
+    expect(context).toBeUndefined()
   })
 
   it('should handle encoded pack names', () => {
     usePageContextStore.getState().setContext('/packs/My%20LoRA')
-    const result = buildFullMessage('Info?')
-    expect(result).toBe('[Context: Viewing pack detail, pack: My LoRA]\n\nInfo?')
+    const { text, context } = buildSendArgs('Info?')
+    expect(text).toBe('Info?')
+    expect(context).toMatchObject({ entity: 'My LoRA', entityType: 'pack' })
   })
 
-  it('should handle empty text with context', () => {
+  it('should not modify message text when context is present', () => {
     usePageContextStore.getState().setContext('/inventory')
-    const result = buildFullMessage('')
-    expect(result).toBe('[Context: Viewing model inventory]\n\n')
+    const { text } = buildSendArgs('')
+    expect(text).toBe('')
   })
 
-  it('should handle multiline text', () => {
+  it('should keep multiline text intact', () => {
     usePageContextStore.getState().setContext('/settings')
-    const result = buildFullMessage('Line 1\nLine 2')
-    expect(result).toBe('[Context: Viewing settings]\n\nLine 1\nLine 2')
+    const { text, context } = buildSendArgs('Line 1\nLine 2')
+    expect(text).toBe('Line 1\nLine 2')
+    expect(context).toMatchObject({ page: 'settings' })
+  })
+})
+
+// ============================================================================
+// Regression: Navigation Sequences → Context Correctness
+// ============================================================================
+
+describe('AvatarProvider — navigation regression scenarios', () => {
+  beforeEach(() => {
+    usePageContextStore.setState({ current: null, previous: null })
+  })
+
+  function getContext(): AvatarPageContextPayload | undefined {
+    const { current, previous } = usePageContextStore.getState()
+    return (buildContextPayload(current) ?? buildContextPayload(previous)) ?? undefined
+  }
+
+  it('pack-detail → packs list → should send packs context (not stale pack)', () => {
+    usePageContextStore.getState().setContext('/packs/Illustrious-XL')
+    usePageContextStore.getState().setContext('/')
+
+    const ctx = getContext()
+    expect(ctx?.page).toBe('packs')
+    expect(ctx?.entity).toBeUndefined()
+  })
+
+  it('pack-detail → inventory → should send inventory context (not stale pack)', () => {
+    usePageContextStore.getState().setContext('/packs/SDXL')
+    usePageContextStore.getState().setContext('/inventory')
+
+    const ctx = getContext()
+    expect(ctx?.page).toBe('inventory')
+    expect(ctx?.entity).toBeUndefined()
+  })
+
+  it('pack A → pack B → should send pack B context', () => {
+    usePageContextStore.getState().setContext('/packs/Model-A')
+    usePageContextStore.getState().setContext('/packs/Model-B')
+
+    const ctx = getContext()
+    expect(ctx?.entity).toBe('Model-B')
+  })
+
+  it('pack-detail → avatar → should fall back to pack context', () => {
+    usePageContextStore.getState().setContext('/packs/Flux-Dev')
+    usePageContextStore.getState().setContext('/avatar')
+
+    const ctx = getContext()
+    expect(ctx?.page).toBe('pack-detail')
+    expect(ctx?.entity).toBe('Flux-Dev')
+  })
+
+  it('pack-detail → packs → avatar → should fall back to packs (not stale pack)', () => {
+    usePageContextStore.getState().setContext('/packs/Flux-Dev')
+    usePageContextStore.getState().setContext('/')
+    usePageContextStore.getState().setContext('/avatar')
+
+    const ctx = getContext()
+    // On /avatar, current is null (avatar filtered). Previous is packs (not pack-detail).
+    expect(ctx?.page).toBe('packs')
+    expect(ctx?.entity).toBeUndefined()
+  })
+
+  it('inventory → browse → inventory → should send inventory context', () => {
+    usePageContextStore.getState().setContext('/inventory')
+    usePageContextStore.getState().setContext('/browse')
+    usePageContextStore.getState().setContext('/inventory')
+
+    const ctx = getContext()
+    expect(ctx?.page).toBe('inventory')
+  })
+
+  it('unknown page → should fall back to previous meaningful context', () => {
+    usePageContextStore.getState().setContext('/inventory')
+    usePageContextStore.getState().setContext('/some/random/page')
+
+    // current is unknown → buildContextPayload returns null → falls back to previous
+    const ctx = getContext()
+    expect(ctx?.page).toBe('inventory')
+  })
+
+  it('multiple unknown pages → should preserve last meaningful context', () => {
+    usePageContextStore.getState().setContext('/browse')
+    usePageContextStore.getState().setContext('/x')
+    usePageContextStore.getState().setContext('/y')
+    usePageContextStore.getState().setContext('/z')
+
+    const ctx = getContext()
+    expect(ctx?.page).toBe('browse')
   })
 })
 

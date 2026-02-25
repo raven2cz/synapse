@@ -5,13 +5,13 @@
  * - Provider → Widget prop mapping
  * - sendWithContext → AvatarWidget.sendMessage delegation
  * - PermissionDialog placement (outside widget)
- * - Context tracking → message prefix injection
+ * - Context tracking → structured metadata injection
  * - SuggestionChips visibility logic
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePageContextStore } from '../stores/pageContextStore'
-import { buildContextPayload, formatContextForMessage } from '../lib/avatar/context'
+import { buildContextPayload, type AvatarPageContextPayload } from '../lib/avatar/context'
 import { resolveSuggestions, PAGE_SUGGESTIONS, FALLBACK_SUGGESTIONS } from '../lib/avatar/suggestions'
 
 // ============================================================================
@@ -123,36 +123,41 @@ describe('Avatar Widget — sendWithContext delegation', () => {
     usePageContextStore.setState({ current: null, previous: null })
   })
 
-  it('should delegate to chat.sendMessage with context prefix', () => {
-    const sentMessages: string[] = []
-    const mockSendMessage = (text: string) => sentMessages.push(text)
+  it('should delegate to chat.sendMessage with structured context', () => {
+    const calls: Array<{ text: string; context: AvatarPageContextPayload | undefined }> = []
+    const mockSendMessage = (text: string, _attachments?: unknown, context?: AvatarPageContextPayload) => {
+      calls.push({ text, context })
+    }
 
     usePageContextStore.getState().setContext('/inventory')
 
     // Simulate sendWithContext
     const text = 'Show orphans'
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    const fullMessage = prefix ? `${prefix}\n\n${text}` : text
-    mockSendMessage(fullMessage)
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    mockSendMessage(text, undefined, payload ?? undefined)
 
-    expect(sentMessages).toHaveLength(1)
-    expect(sentMessages[0]).toBe('[Context: Viewing model inventory]\n\nShow orphans')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].text).toBe('Show orphans')
+    expect(calls[0].context).toMatchObject({
+      page: 'inventory',
+      description: 'Viewing model inventory',
+    })
   })
 
-  it('should delegate plain text when no context', () => {
-    const sentMessages: string[] = []
-    const mockSendMessage = (text: string) => sentMessages.push(text)
+  it('should delegate plain text with undefined context when no page context', () => {
+    const calls: Array<{ text: string; context: AvatarPageContextPayload | undefined }> = []
+    const mockSendMessage = (text: string, _attachments?: unknown, context?: AvatarPageContextPayload) => {
+      calls.push({ text, context })
+    }
 
     const text = 'Hello'
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    const fullMessage = prefix ? `${prefix}\n\n${text}` : text
-    mockSendMessage(fullMessage)
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    mockSendMessage(text, undefined, payload ?? undefined)
 
-    expect(sentMessages[0]).toBe('Hello')
+    expect(calls[0].text).toBe('Hello')
+    expect(calls[0].context).toBeUndefined()
   })
 
   it('should use previous context when navigated to avatar', () => {
@@ -160,11 +165,13 @@ describe('Avatar Widget — sendWithContext delegation', () => {
     usePageContextStore.getState().setContext('/avatar')
 
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    const fullMessage = prefix ? `${prefix}\n\nInfo?` : 'Info?'
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
 
-    expect(fullMessage).toContain('pack: Flux-Dev')
+    expect(payload).toMatchObject({
+      page: 'pack-detail',
+      entity: 'Flux-Dev',
+      entityType: 'pack',
+    })
   })
 })
 

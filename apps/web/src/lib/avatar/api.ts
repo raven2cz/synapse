@@ -104,3 +104,17 @@ export async function getAvatarAvatars(): Promise<AvatarAvatars> {
   if (!res.ok) throw new Error('Failed to fetch avatar avatars')
   return res.json()
 }
+
+export async function patchAvatarConfig(updates: Partial<{
+  enabled: boolean
+  provider: string
+  providers: Record<string, { enabled?: boolean; model?: string }>
+}>): Promise<AvatarConfig> {
+  const res = await fetch(`${API_BASE}/config`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) throw new Error('Failed to update avatar config')
+  return res.json()
+}

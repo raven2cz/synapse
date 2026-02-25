@@ -1693,10 +1693,18 @@
     "stats": {
       "engine": "Engine",
       "provider": "Provider",
+      "serviceDefault": "Service Default",
       "safety": "Safety Mode",
       "skills": "Skills"
     },
+    "masterToggle": "Enable AI Assistant",
+    "masterToggleDesc": "When disabled, the AI chat FAB is hidden and all AI features are inactive.",
     "providersTitle": "AI Providers",
+    "providerEnabled": "Enabled for chat",
+    "providerDefault": "Default for services",
+    "providerNotInstalled": "Not installed",
+    "providerDefaultHint": "Backend services (MCP tools, AI extraction) use the default provider and model. Chat window can switch freely between all enabled providers.",
+    "modelPlaceholder": "Default model (optional)",
     "safetyTitle": "Safety Mode",
     "currentSafety": "Current Safety Mode",
     "safety": {
@@ -1718,8 +1726,17 @@
     "changeAvatar": "Change Avatar",
     "avatarsHint": "Custom avatars can be added in the avatars/ directory. See avatar-engine documentation.",
     "safetyConfigHint": "Safety mode is configured in avatar.yaml. Restart Synapse after changes.",
+    "cacheTitle": "Cache Maintenance",
+    "cacheEntries": "Entries",
+    "cacheSize": "Size",
+    "cacheTTL": "TTL",
+    "cacheDays": "{{count}} days",
+    "cacheCleanup": "Cleanup Expired",
+    "cacheClearAll": "Clear All",
+    "cacheCleared": "Cache cleared ({{count}} entries removed)",
+    "cacheCleaned": "Expired entries cleaned ({{count}} removed)",
     "configFile": "Configuration File",
-    "configFileHint": "Edit this file to change provider, safety mode, and other settings. Restart Synapse after changes.",
+    "configFileHint": "Edit this file to change safety mode and other advanced settings. Restart Synapse after changes.",
     "loadFailed": "Failed to load avatar configuration. Check that the backend is running."
   },
   "avatar": {

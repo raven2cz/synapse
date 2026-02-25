@@ -1703,10 +1703,18 @@
     "stats": {
       "engine": "Engine",
       "provider": "Poskytovatel",
+      "serviceDefault": "Výchozí služba",
       "safety": "Bezpečnostní režim",
       "skills": "Dovednosti"
     },
+    "masterToggle": "Povolit AI asistenta",
+    "masterToggleDesc": "Při vypnutí je chatovací tlačítko skryté a všechny AI funkce jsou neaktivní.",
     "providersTitle": "AI Poskytovatelé",
+    "providerEnabled": "Povoleno pro chat",
+    "providerDefault": "Výchozí pro služby",
+    "providerNotInstalled": "Nenainstalováno",
+    "providerDefaultHint": "Backend služby (MCP nástroje, AI extrakce) používají výchozího poskytovatele a model. V chatovacím okně lze volně přepínat mezi všemi povolenými poskytovateli.",
+    "modelPlaceholder": "Výchozí model (volitelné)",
     "safetyTitle": "Bezpečnostní režim",
     "currentSafety": "Aktuální bezpečnostní režim",
     "safety": {
@@ -1728,8 +1736,17 @@
     "changeAvatar": "Změnit avatar",
     "avatarsHint": "Vlastní avatary lze přidat do adresáře avatars/. Viz dokumentace avatar-engine.",
     "safetyConfigHint": "Bezpečnostní režim se nastavuje v avatar.yaml. Po změnách restartujte Synapse.",
+    "cacheTitle": "Údržba cache",
+    "cacheEntries": "Záznamy",
+    "cacheSize": "Velikost",
+    "cacheTTL": "TTL",
+    "cacheDays": "{{count}} dní",
+    "cacheCleanup": "Vyčistit expirované",
+    "cacheClearAll": "Vymazat vše",
+    "cacheCleared": "Cache vymazána ({{count}} záznamů odstraněno)",
+    "cacheCleaned": "Expirované záznamy vyčištěny ({{count}} odstraněno)",
     "configFile": "Konfigurační soubor",
-    "configFileHint": "Upravte tento soubor pro změnu poskytovatele, bezpečnostního režimu a dalších nastavení. Po změnách restartujte Synapse.",
+    "configFileHint": "Upravte tento soubor pro změnu bezpečnostního režimu a dalších pokročilých nastavení. Po změnách restartujte Synapse.",
     "loadFailed": "Nepodařilo se načíst konfiguraci avatara. Zkontrolujte, zda běží backend."
   },
   "avatar": {

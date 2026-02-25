@@ -22,9 +22,6 @@ import { initAvatarI18n } from '@avatar-engine/react'
 import en from './locales/en.json'
 import cs from './locales/cs.json'
 
-// Initialize avatar-engine's own i18n (standalone, has en+cs built-in)
-initAvatarI18n()
-
 // Get saved language from localStorage or use browser default
 const getSavedLanguage = (): string => {
   const saved = localStorage.getItem('synapse-language')
@@ -36,6 +33,7 @@ const getSavedLanguage = (): string => {
   return browserLang === 'cs' ? 'cs' : 'en'
 }
 
+// 1. Synapse init (main resources)
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -51,6 +49,10 @@ i18n.use(initReactI18next).init({
     useSuspense: false,
   },
 })
+
+// 2. Avatar i18n — inject avatar translations into the existing instance
+//    (safe even if Synapse re-initializes later)
+initAvatarI18n([initReactI18next])
 
 /**
  * Change the current language and save to localStorage

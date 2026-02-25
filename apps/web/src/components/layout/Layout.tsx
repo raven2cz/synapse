@@ -10,19 +10,31 @@
 
 import { useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   AvatarWidget,
   PermissionDialog,
   StatusBar,
   ChatPanel,
+  createProviders,
 } from '@avatar-engine/react'
 import type { EngineState } from '@avatar-engine/react'
+
+/**
+ * E2E test model override — when VITE_E2E_MODEL is set (via Playwright webServer),
+ * override the provider dropdown to show the cheap test model.
+ * The backend model is switched separately via run-e2e.sh.
+ */
+const E2E_PROVIDERS = import.meta.env.VITE_E2E_MODEL
+  ? createProviders({ gemini: { defaultModel: import.meta.env.VITE_E2E_MODEL } })
+  : undefined
 import { Header } from './Header'
 import { Sidebar } from './Sidebar'
 import { ToastContainer } from '../ui/Toast'
 import { AvatarProvider, useAvatar, ALL_AVATARS } from '../avatar/AvatarProvider'
 import { SuggestionChips } from '../avatar/SuggestionChips'
 import { usePageContextStore } from '../../stores/pageContextStore'
+import { getAvatarStatus, avatarKeys } from '../../lib/avatar/api'
 
 interface LayoutProps {
   children: ReactNode
@@ -37,6 +49,29 @@ function LayoutInner({ children }: LayoutProps) {
     usePageContextStore.getState().setContext(pathname)
   }, [pathname])
 
+  // Check if AI is enabled (master toggle)
+  const { data: avatarStatus } = useQuery({
+    queryKey: avatarKeys.status(),
+    queryFn: getAvatarStatus,
+    staleTime: 60_000,
+  })
+
+  const aiEnabled = avatarStatus?.enabled !== false
+
+  // When AI is disabled, render layout without AvatarWidget
+  if (!aiEnabled) {
+    return (
+      <div className="min-h-screen bg-obsidian flex flex-col">
+        <Header />
+        <div className="flex flex-1">
+          <Sidebar />
+          <main className="flex-1 p-6">{children}</main>
+        </div>
+        <ToastContainer />
+      </div>
+    )
+  }
+
   return (
     <>
       {/* ACP Permission Dialog — OUTSIDE AvatarWidget (sibling) */}
@@ -47,6 +82,8 @@ function LayoutInner({ children }: LayoutProps) {
 
       {/* AvatarWidget — handles FAB/Compact/Fullscreen INTERNALLY */}
       <AvatarWidget
+        initialMode="fab"
+        customProviders={E2E_PROVIDERS}
         messages={chat.messages}
         sendMessage={sendWithContext}
         stopResponse={chat.stopResponse}

@@ -3,7 +3,7 @@
  *
  * Calls useAvatarChat() ONCE at app root → single persistent WebSocket connection.
  * All chat state (messages, connection, provider, permissions) flows down via context.
- * Provides sendWithContext() that prepends page context to messages.
+ * Provides sendWithContext() that sends page context as structured metadata.
  *
  * Usage:
  *   <AvatarProvider>
@@ -15,7 +15,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useCallback, typ
 import { useAvatarChat, useAvailableProviders, AVATARS } from '@avatar-engine/react'
 import type { UseAvatarChatReturn, AvatarConfig } from '@avatar-engine/react'
 import { usePageContextStore } from '../../stores/pageContextStore'
-import { buildContextPayload, formatContextForMessage } from '../../lib/avatar/context'
+import { buildContextPayload } from '../../lib/avatar/context'
 import { toast } from '../../stores/toastStore'
 
 /** Minimum backend avatar-engine version expected by this frontend. */
@@ -50,7 +50,7 @@ export const ALL_AVATARS: AvatarConfig[] = [SYNAPSE_AVATAR, ...AVATARS]
 
 interface AvatarContextValue {
   chat: UseAvatarChatReturn
-  /** sendMessage with page context prefix injected automatically */
+  /** sendMessage with page context sent as structured metadata */
   sendWithContext: (text: string) => void
   providers: Set<string> | null
   compactRef: React.MutableRefObject<(() => void) | null>
@@ -89,14 +89,13 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
       .catch(() => { /* avatar status not available — non-critical */ })
   }, [])
 
-  // Wrap sendMessage to prepend page context
+  // Wrap sendMessage to attach page context as structured metadata
   const sendWithContext = useCallback((text: string) => {
     const { current, previous } = usePageContextStore.getState()
-    // Use previous page context (where user came from) — more useful for avatar
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    const fullMessage = prefix ? `${prefix}\n\n${text}` : text
-    chat.sendMessage(fullMessage)
+    // Use current page context; fall back to previous only when current
+    // has no useful context (e.g. user is on the /avatar page itself)
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    chat.sendMessage(text, undefined, payload ? { ...payload } : undefined)
   }, [chat.sendMessage])
 
   return (

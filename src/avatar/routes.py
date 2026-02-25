@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 
 from . import AVATAR_ENGINE_AVAILABLE, AVATAR_ENGINE_MIN_VERSION, AVATAR_ENGINE_VERSION, check_avatar_engine_compat
 from .config import AvatarConfig, detect_available_providers, load_avatar_config
@@ -140,6 +140,71 @@ def avatar_config_endpoint() -> Dict[str, Any]:
             for name, prov in config.providers.items()
         },
     }
+
+
+@avatar_router.patch("/config")
+def update_avatar_config(updates: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Update avatar configuration (enabled, default provider, provider settings).
+
+    Accepts a partial update dict.  Allowed top-level keys:
+      - enabled (bool): master AI toggle
+      - provider (str): default provider for backend services
+      - providers (dict): per-provider updates, e.g.
+            {"gemini": {"enabled": true, "model": "gemini-3-pro-preview"}}
+    Writes changes back to avatar.yaml and invalidates the config cache.
+    """
+    import yaml  # noqa: local import — yaml only needed for writes
+
+    config = load_avatar_config()
+    yaml_path = config.config_path
+    if yaml_path is None:
+        from .config import DEFAULT_SYNAPSE_ROOT, DEFAULT_CONFIG_FILENAME
+        yaml_path = DEFAULT_SYNAPSE_ROOT / DEFAULT_CONFIG_FILENAME
+
+    # Load raw YAML (or start from empty dict)
+    raw: Dict[str, Any] = {}
+    if yaml_path.exists():
+        try:
+            with open(yaml_path) as f:
+                loaded = yaml.safe_load(f)
+            if isinstance(loaded, dict):
+                raw = loaded
+        except Exception:
+            pass
+
+    valid_providers = ("gemini", "claude", "codex")
+
+    # Apply allowed updates
+    if "enabled" in updates:
+        raw["enabled"] = bool(updates["enabled"])
+
+    if "provider" in updates:
+        prov = str(updates["provider"])
+        if prov in valid_providers:
+            raw["provider"] = prov
+
+    if "providers" in updates and isinstance(updates["providers"], dict):
+        for prov_name, prov_updates in updates["providers"].items():
+            if prov_name not in valid_providers or not isinstance(prov_updates, dict):
+                continue
+            # Ensure top-level provider section exists
+            if prov_name not in raw or not isinstance(raw.get(prov_name), dict):
+                raw[prov_name] = {}
+            if "enabled" in prov_updates:
+                raw[prov_name]["enabled"] = bool(prov_updates["enabled"])
+            if "model" in prov_updates:
+                raw[prov_name]["model"] = str(prov_updates["model"])
+
+    # Write back
+    yaml_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(yaml_path, "w") as f:
+        yaml.dump(raw, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    # Invalidate cache so next GET returns fresh data
+    invalidate_avatar_cache()
+
+    # Return updated config via the normal GET logic
+    return avatar_config_endpoint()
 
 
 @avatar_router.get("/skills")

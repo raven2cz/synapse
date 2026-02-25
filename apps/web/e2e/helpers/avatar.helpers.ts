@@ -1,22 +1,22 @@
 /**
  * Shared Playwright helpers for avatar-engine E2E tests.
  *
- * IMPORTANT: @avatar-engine/react uses RAW i18n keys as aria-labels
- * (not translated strings). Selectors must match the raw key format.
+ * @avatar-engine/react uses i18n-translated aria-labels.
+ * Selectors match the English translations from the avatar-engine locale.
  */
 
 import type { Page } from '@playwright/test'
 
 // ─── Selectors ──────────────────────────────────────────────────────
 
-/** FAB button that opens the chat panel (raw i18n key) */
-export const SEL_FAB = 'button[aria-label="fab.openChatPanel"]'
+/** FAB button that opens the chat panel */
+export const SEL_FAB = 'button[aria-label="Open chat panel"]'
 
 /** Expand to fullscreen button in compact header */
-export const SEL_COMPACT_EXPAND = 'button[aria-label="compact.header.expandFullscreen"]'
+export const SEL_COMPACT_EXPAND = 'button[aria-label="Expand to fullscreen"]'
 
 /** Close button in compact header */
-export const SEL_COMPACT_CLOSE = 'button[aria-label="compact.header.closePanel"]'
+export const SEL_COMPACT_CLOSE = 'button[aria-label="Close chat panel"]'
 
 /**
  * Compact mode message list container.
@@ -32,13 +32,13 @@ export const SEL_COMPACT_MESSAGES = '.compact-messages'
 export const SEL_COMPACT_MSG_BUBBLE = '.compact-messages > .flex'
 
 /** Send button in compact mode */
-export const SEL_COMPACT_SEND = 'button[title="compact.input.send"]'
+export const SEL_COMPACT_SEND = 'button[title="Send (Enter)"]'
 
 /** Switch to compact mode button in fullscreen status bar */
-export const SEL_FULLSCREEN_COMPACT = 'button[aria-label="fullscreen.statusBar.switchCompact"]'
+export const SEL_FULLSCREEN_COMPACT = 'button[aria-label="Switch to compact mode"]'
 
 /** Chat panel in fullscreen */
-export const SEL_CHAT_PANEL = '[aria-label="chat.panel"]'
+export const SEL_CHAT_PANEL = '[aria-label="Chat panel"]'
 
 /** Suggestion chip buttons rendered by SuggestionChips.tsx (Synapse component) */
 export const SEL_SUGGESTION_CHIP = '.flex.flex-wrap.gap-2.mb-3 button'

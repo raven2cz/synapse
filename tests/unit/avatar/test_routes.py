@@ -20,6 +20,7 @@ from src.avatar.routes import (
     avatar_status,
     invalidate_avatar_cache,
     try_mount_avatar_engine,
+    update_avatar_config,
 )
 
 
@@ -39,7 +40,7 @@ class TestAvatarStatusEndpoint:
     def test_state_ready(self, mock_config, mock_providers):
         mock_config.return_value = _make_config(enabled=True)
         mock_providers.return_value = [
-            {"name": "gemini", "installed": True, "display_name": "Gemini CLI", "command": "gemini"}
+            {"name": "gemini", "id": "gemini", "installed": True, "available": True, "display_name": "Gemini CLI", "command": "gemini"}
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
@@ -57,7 +58,7 @@ class TestAvatarStatusEndpoint:
     def test_state_no_provider(self, mock_config, mock_providers):
         mock_config.return_value = _make_config(enabled=True)
         mock_providers.return_value = [
-            {"name": "gemini", "installed": False, "display_name": "Gemini CLI", "command": "gemini"}
+            {"name": "gemini", "id": "gemini", "installed": False, "available": False, "display_name": "Gemini CLI", "command": "gemini"}
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
@@ -75,7 +76,7 @@ class TestAvatarStatusEndpoint:
         """Engine installed but version too old → incompatible state."""
         mock_config.return_value = _make_config(enabled=True)
         mock_providers.return_value = [
-            {"name": "gemini", "installed": True, "display_name": "Gemini CLI", "command": "gemini"}
+            {"name": "gemini", "id": "gemini", "installed": True, "available": True, "display_name": "Gemini CLI", "command": "gemini"}
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
@@ -92,7 +93,7 @@ class TestAvatarStatusEndpoint:
     def test_state_no_engine(self, mock_config, mock_providers):
         mock_config.return_value = _make_config(enabled=True)
         mock_providers.return_value = [
-            {"name": "claude", "installed": True, "display_name": "Claude Code", "command": "claude"}
+            {"name": "claude", "id": "claude", "installed": True, "available": True, "display_name": "Claude Code", "command": "claude"}
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", False), \
@@ -108,8 +109,8 @@ class TestAvatarStatusEndpoint:
     def test_state_setup_required(self, mock_config, mock_providers):
         mock_config.return_value = _make_config(enabled=True)
         mock_providers.return_value = [
-            {"name": "gemini", "installed": False, "display_name": "Gemini CLI", "command": "gemini"},
-            {"name": "claude", "installed": False, "display_name": "Claude Code", "command": "claude"},
+            {"name": "gemini", "id": "gemini", "installed": False, "available": False, "display_name": "Gemini CLI", "command": "gemini"},
+            {"name": "claude", "id": "claude", "installed": False, "available": False, "display_name": "Claude Code", "command": "claude"},
         ]
 
         with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", False), \
@@ -147,7 +148,7 @@ class TestAvatarStatusEndpoint:
     @patch("src.avatar.routes.load_avatar_config")
     def test_providers_list_in_response(self, mock_config, mock_providers):
         expected_providers = [
-            {"name": "gemini", "installed": True, "display_name": "Gemini CLI", "command": "gemini"},
+            {"name": "gemini", "id": "gemini", "installed": True, "available": True, "display_name": "Gemini CLI", "command": "gemini"},
         ]
         mock_config.return_value = _make_config()
         mock_providers.return_value = expected_providers
@@ -164,7 +165,7 @@ class TestAvatarProvidersEndpoint:
     @patch("src.avatar.routes.detect_available_providers")
     def test_returns_provider_list(self, mock_detect):
         mock_detect.return_value = [
-            {"name": "gemini", "installed": True, "display_name": "Gemini CLI", "command": "gemini"},
+            {"name": "gemini", "id": "gemini", "installed": True, "available": True, "display_name": "Gemini CLI", "command": "gemini"},
         ]
         result = avatar_providers()
         assert len(result) == 1
@@ -265,6 +266,95 @@ class TestTryMountAvatarEngine:
 
         assert result is True
         app.mount.assert_called_once_with("/api/avatar/engine", mock_avatar_app)
+
+
+class TestPatchConfigEndpoint:
+    """PATCH /config writes to YAML and returns updated config."""
+
+    def test_patch_changes_provider(self, tmp_path):
+        """PATCH with {provider: 'claude'} updates YAML and returns new config."""
+        import yaml
+        yaml_path = tmp_path / "avatar.yaml"
+        yaml_path.write_text("provider: gemini\n")
+
+        with patch("src.avatar.routes.load_avatar_config") as mock_config:
+            config = _make_config(provider="gemini")
+            config.config_path = yaml_path
+            mock_config.return_value = config
+
+            result = update_avatar_config({"provider": "claude"})
+
+        raw = yaml.safe_load(yaml_path.read_text())
+        assert raw["provider"] == "claude"
+
+    def test_patch_changes_provider_model(self, tmp_path):
+        """PATCH with providers dict updates per-provider model in YAML."""
+        import yaml
+        yaml_path = tmp_path / "avatar.yaml"
+        yaml_path.write_text("provider: gemini\ngemini:\n  model: old-model\n")
+
+        with patch("src.avatar.routes.load_avatar_config") as mock_config:
+            config = _make_config()
+            config.config_path = yaml_path
+            mock_config.return_value = config
+
+            update_avatar_config({
+                "providers": {"gemini": {"model": "gemini-2.5-flash"}}
+            })
+
+        raw = yaml.safe_load(yaml_path.read_text())
+        assert raw["gemini"]["model"] == "gemini-2.5-flash"
+
+    def test_patch_toggle_enabled(self, tmp_path):
+        """PATCH with {enabled: false} persists to YAML."""
+        import yaml
+        yaml_path = tmp_path / "avatar.yaml"
+        yaml_path.write_text("enabled: true\n")
+
+        with patch("src.avatar.routes.load_avatar_config") as mock_config:
+            config = _make_config()
+            config.config_path = yaml_path
+            mock_config.return_value = config
+
+            update_avatar_config({"enabled": False})
+
+        raw = yaml.safe_load(yaml_path.read_text())
+        assert raw["enabled"] is False
+
+    def test_patch_rejects_invalid_provider(self, tmp_path):
+        """PATCH with invalid provider name is silently ignored."""
+        import yaml
+        yaml_path = tmp_path / "avatar.yaml"
+        yaml_path.write_text("provider: gemini\n")
+
+        with patch("src.avatar.routes.load_avatar_config") as mock_config:
+            config = _make_config()
+            config.config_path = yaml_path
+            mock_config.return_value = config
+
+            update_avatar_config({"provider": "invalid_provider"})
+
+        raw = yaml.safe_load(yaml_path.read_text())
+        assert raw["provider"] == "gemini"  # Unchanged
+
+    def test_patch_creates_provider_section(self, tmp_path):
+        """PATCH creates provider section in YAML if it doesn't exist."""
+        import yaml
+        yaml_path = tmp_path / "avatar.yaml"
+        yaml_path.write_text("provider: gemini\n")
+
+        with patch("src.avatar.routes.load_avatar_config") as mock_config:
+            config = _make_config()
+            config.config_path = yaml_path
+            mock_config.return_value = config
+
+            update_avatar_config({
+                "providers": {"claude": {"model": "claude-sonnet-4-5", "enabled": True}}
+            })
+
+        raw = yaml.safe_load(yaml_path.read_text())
+        assert raw["claude"]["model"] == "claude-sonnet-4-5"
+        assert raw["claude"]["enabled"] is True
 
 
 class TestCachedConfigExceptionHandling:

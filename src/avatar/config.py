@@ -162,20 +162,26 @@ def load_avatar_config(
         config.safety = "safe"
 
     # Parse provider configs (top-level keys in YAML)
+    # Always populate ALL known providers — use YAML values when present,
+    # defaults otherwise.  This ensures the frontend always receives
+    # a complete provider_configs dict for every provider.
     for provider_name in ("gemini", "claude", "codex"):
         if provider_name in raw_config:
             prov_data = raw_config[provider_name]
             if not isinstance(prov_data, dict):
                 logger.warning(
-                    "Provider config '%s' is not a mapping (got %s), skipping",
+                    "Provider config '%s' is not a mapping (got %s), using defaults",
                     provider_name,
                     type(prov_data).__name__,
                 )
+                config.providers[provider_name] = AvatarProviderConfig()
                 continue
             config.providers[provider_name] = AvatarProviderConfig(
                 model=prov_data.get("model", ""),
                 enabled=prov_data.get("enabled", True),
             )
+        else:
+            config.providers[provider_name] = AvatarProviderConfig()
 
     return config
 
@@ -191,26 +197,34 @@ def detect_available_providers() -> List[Dict[str, Any]]:
     providers = [
         {
             "name": "gemini",
+            "id": "gemini",
             "display_name": "Gemini CLI",
             "command": "gemini",
             "installed": False,
+            "available": False,
         },
         {
             "name": "claude",
+            "id": "claude",
             "display_name": "Claude Code",
             "command": "claude",
             "installed": False,
+            "available": False,
         },
         {
             "name": "codex",
+            "id": "codex",
             "display_name": "Codex CLI",
             "command": "codex",
             "installed": False,
+            "available": False,
         },
     ]
 
     for provider in providers:
-        provider["installed"] = shutil.which(provider["command"]) is not None
+        is_installed = shutil.which(provider["command"]) is not None
+        provider["installed"] = is_installed
+        provider["available"] = is_installed
 
     installed = [p["name"] for p in providers if p["installed"]]
     logger.debug("Detected providers: %s", installed or "none")

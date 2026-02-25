@@ -9,14 +9,15 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "e2e": "playwright test",
-    "e2e:headed": "playwright test --headed",
+    "e2e": "bash e2e/run-e2e.sh",
+    "e2e:headed": "bash e2e/run-e2e.sh --headed",
     "e2e:ui": "playwright test --ui",
-    "e2e:live": "playwright test --grep @live"
+    "e2e:live": "bash e2e/run-e2e.sh --grep @live",
+    "e2e:raw": "playwright test"
   },
   "dependencies": {
-    "@avatar-engine/core": "^1.0.0",
-    "@avatar-engine/react": "^1.0.0",
+    "@avatar-engine/core": "^1.1.0",
+    "@avatar-engine/react": "^1.1.0",
     "@codemirror/autocomplete": "^6.20.0",
     "@codemirror/commands": "^6.10.1",
     "@codemirror/lang-html": "^6.4.11",

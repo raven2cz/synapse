@@ -8,7 +8,6 @@ import { useSettingsStore } from '../../stores/settingsStore'
 import { toast } from '../../stores/toastStore'
 import type { BackupStatus, BackupConfigRequest } from './inventory/types'
 import { formatBytes } from '../../lib/utils/format'
-import { AIServicesSettings, type AIServicesSettingsHandle } from './settings/AIServicesSettings'
 import { AvatarSettings, type AvatarSettingsHandle } from './settings/AvatarSettings'
 import { LanguageSettings } from './settings/LanguageSettings'
 
@@ -43,7 +42,6 @@ export function SettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { nsfwBlurEnabled, setNsfwBlur, autoCheckUpdates, setAutoCheckUpdates } = useSettingsStore()
-  const aiSettingsRef = useRef<AIServicesSettingsHandle>(null)
   const avatarSettingsRef = useRef<AvatarSettingsHandle>(null)
   const [comfyuiPath, setComfyuiPath] = useState('~/ComfyUI')
   const [civitaiToken, setCivitaiToken] = useState('')
@@ -185,16 +183,11 @@ export function SettingsPage() {
         warn_before_delete_last_copy: warnBeforeDeleteLastCopy,
       }
 
-      // Build promises array - only include AI settings if there are changes
+      // Build promises array
       const savePromises: Promise<unknown>[] = [
         updateSettingsMutation.mutateAsync(updates),
         updateBackupConfigMutation.mutateAsync(backupConfig),
       ]
-
-      // Include AI settings save if there are unsaved changes
-      if (aiSettingsRef.current?.hasChanges()) {
-        savePromises.push(aiSettingsRef.current.save())
-      }
 
       // Include Avatar settings save if there are unsaved changes
       if (avatarSettingsRef.current?.hasChanges()) {
@@ -647,10 +640,7 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        {/* 6. AI Services Settings */}
-        <AIServicesSettings ref={aiSettingsRef} />
-
-        {/* 7. Avatar Engine (AI Assistant) Settings */}
+        {/* 6. AI Assistant (Avatar Engine) Settings */}
         <AvatarSettings ref={avatarSettingsRef} />
 
         {/* 8. Diagnostics */}

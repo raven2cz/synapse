@@ -104,6 +104,22 @@ describe('Navigation Flow Smoke Tests', () => {
     expect(getState().previous?.pageId).toBe('settings')
   })
 
+  it('should handle pack-detail → different pack-detail with correct entity', () => {
+    navigate('/packs/Flux-Dev')
+    expect(getState().current?.params.packName).toBe('Flux-Dev')
+
+    navigate('/packs/Juggernaut-XL')
+    expect(getState().current?.params.packName).toBe('Juggernaut-XL')
+    expect(getState().previous?.params.packName).toBe('Flux-Dev')
+
+    // Context payload must reflect the CURRENT pack, not the previous one
+    const payload = buildContextPayload(getState().current)
+    expect(payload!.entity).toBe('Juggernaut-XL')
+    expect(formatContextForMessage(payload)).toBe(
+      '[Context: Viewing pack detail, pack: Juggernaut-XL]',
+    )
+  })
+
   it('should handle duplicate navigation (same page)', () => {
     navigate('/inventory')
     const first = getState().current

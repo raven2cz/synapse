@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@avatar-engine/core':
-        specifier: ^1.0.0
-        version: 1.0.0(typescript@5.9.3)
+        specifier: ^1.1.0
+        version: 1.1.0(typescript@5.9.3)
       '@avatar-engine/react':
-        specifier: ^1.0.0
-        version: 1.0.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+        specifier: ^1.1.0
+        version: 1.1.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@codemirror/autocomplete':
         specifier: ^6.20.0
         version: 6.20.0
@@ -152,11 +152,11 @@ packages:
   '@asamuzakjp/dom-selector@2.0.2':
     resolution: {integrity: sha512-x1KXOatwofR6ZAYzXRBL5wrdV0vwNxlTCK9NCuLqAzQYARqGcvFwiJA6A1ERuh+dgeA4Dxm3JBYictIes+SqUQ==}
 
-  '@avatar-engine/core@1.0.0':
-    resolution: {integrity: sha512-rXOONxnl5Gcj38cZ2ARCuwzAM+eeeCgoAnHZmQhEey+k6PoSz3HVoHB8AsweEiv8FpOgTGOYyBkihL9s3A6BXw==}
+  '@avatar-engine/core@1.1.0':
+    resolution: {integrity: sha512-VqvfUwg0+vq7M4E1ot8jH9ZmToeA1wXBx31KBGQaLetjFRA5ncbscAra+4vWux2hWHIEngJGRnZKWTO/9UhvNQ==}
 
-  '@avatar-engine/react@1.0.0':
-    resolution: {integrity: sha512-86WPkNbSNeqzVm8+nAovfVNJYD9Ei5g5os3JceYRFMOgG6A8YeUgrcA0ymn5Wnkk3sxNwJf/XEQdWA4YnJoS9w==}
+  '@avatar-engine/react@1.1.0':
+    resolution: {integrity: sha512-5RFZB3bHHJ1PhFGiZpx3yIfwlrIJTdfTl/3hKNZ/FWByAn/tM/pKnuQEfYqt2RlNUjG7wOndhYQ9pJe1pVwN5w==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -2470,15 +2470,15 @@ snapshots:
       css-tree: 2.3.1
       is-potential-custom-element-name: 1.0.1
 
-  '@avatar-engine/core@1.0.0(typescript@5.9.3)':
+  '@avatar-engine/core@1.1.0(typescript@5.9.3)':
     dependencies:
       i18next: 25.8.13(typescript@5.9.3)
     transitivePeerDependencies:
       - typescript
 
-  '@avatar-engine/react@1.0.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
+  '@avatar-engine/react@1.1.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
     dependencies:
-      '@avatar-engine/core': 1.0.0(typescript@5.9.3)
+      '@avatar-engine/core': 1.1.0(typescript@5.9.3)
       lucide-react: 0.300.0(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)

@@ -11,7 +11,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePageContextStore } from '../stores/pageContextStore'
-import { buildContextPayload, formatContextForMessage } from '../lib/avatar/context'
+import { buildContextPayload, type AvatarPageContextPayload } from '../lib/avatar/context'
 import { resolveSuggestions, FALLBACK_SUGGESTIONS } from '../lib/avatar/suggestions'
 
 // ============================================================================
@@ -22,7 +22,7 @@ import { resolveSuggestions, FALLBACK_SUGGESTIONS } from '../lib/avatar/suggesti
 function createMockChatState() {
   let connected = false
   let wasConnected = false
-  let messages: Array<{ role: string; content: string }> = []
+  let messages: Array<{ role: string; content: string; context?: AvatarPageContextPayload }> = []
   let isStreaming = false
   let provider = 'gemini'
   let model: string | null = 'gemini-2.5-pro'
@@ -52,8 +52,8 @@ function createMockChatState() {
       error = null
     },
 
-    sendMessage(text: string) {
-      messages = [...messages, { role: 'user', content: text }]
+    sendMessage(text: string, _attachments?: unknown, context?: AvatarPageContextPayload) {
+      messages = [...messages, { role: 'user', content: text, context }]
       isStreaming = true
       engineState = 'thinking'
     },
@@ -109,21 +109,22 @@ describe('Avatar Widget Smoke — Full Lifecycle', () => {
     expect(chat.state.engineState).toBe('idle')
   })
 
-  it('should inject context when sending from a specific page', () => {
+  it('should inject context as structured metadata when sending from a specific page', () => {
     chat.connect()
     usePageContextStore.getState().setContext('/packs/Illustrious-XL')
 
-    // Simulate sendWithContext
+    // Simulate sendWithContext — context sent as metadata, not as text prefix
     const text = 'What does this model do?'
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    const fullMessage = prefix ? `${prefix}\n\n${text}` : text
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    chat.sendMessage(text, undefined, payload ?? undefined)
 
-    chat.sendMessage(fullMessage)
-
-    expect(chat.state.messages[0].content).toContain('[Context: Viewing pack detail, pack: Illustrious-XL]')
-    expect(chat.state.messages[0].content).toContain('What does this model do?')
+    expect(chat.state.messages[0].content).toBe('What does this model do?')
+    expect(chat.state.messages[0].context).toMatchObject({
+      page: 'pack-detail',
+      entity: 'Illustrious-XL',
+      entityType: 'pack',
+    })
   })
 
   it('should use previous context after navigating to avatar', () => {
@@ -135,10 +136,9 @@ describe('Avatar Widget Smoke — Full Lifecycle', () => {
     usePageContextStore.getState().setContext('/avatar')
 
     const { current, previous } = usePageContextStore.getState()
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
 
-    expect(prefix).toBe('[Context: Viewing model inventory]')
+    expect(payload).toMatchObject({ page: 'inventory', description: 'Viewing model inventory' })
     expect(current?.pageId).toBe('avatar')
     expect(previous?.pageId).toBe('inventory')
   })
@@ -216,15 +216,17 @@ describe('Avatar Widget Smoke — Context + Suggestions Pipeline', () => {
     const suggestionKey = result.keys[0]
     expect(suggestionKey).toContain('inventoryPage')
 
-    // 4. Build context for message
+    // 4. Build structured context for message
     const payload = buildContextPayload(current)
-    const prefix = formatContextForMessage(payload)
-    expect(prefix).toBe('[Context: Viewing model inventory]')
+    expect(payload).toMatchObject({
+      page: 'inventory',
+      description: 'Viewing model inventory',
+    })
 
-    // 5. Full message
-    const message = `${prefix}\n\nShow disk usage`
-    expect(message).toContain('[Context: Viewing model inventory]')
-    expect(message).toContain('Show disk usage')
+    // 5. Message text is clean, context is metadata
+    const text = 'Show disk usage'
+    expect(text).not.toContain('[Context:')
+    expect(payload).not.toBeNull()
   })
 
   it('should handle rapid page navigation', () => {
@@ -251,10 +253,13 @@ describe('Avatar Widget Smoke — Context + Suggestions Pipeline', () => {
     const suggestions = resolveSuggestions(current, previous)
     expect(suggestions.params.packName).toBe('Pony-Diffusion-V6-XL')
 
-    // Context prefix should mention the pack
-    const payload = buildContextPayload(previous ?? current)
-    const prefix = formatContextForMessage(payload)
-    expect(prefix).toContain('Pony-Diffusion-V6-XL')
+    // Structured context should include the pack entity (fallback to previous on /avatar)
+    const payload = buildContextPayload(current) ?? buildContextPayload(previous)
+    expect(payload).toMatchObject({
+      page: 'pack-detail',
+      entity: 'Pony-Diffusion-V6-XL',
+      entityType: 'pack',
+    })
   })
 
   it('should fallback to generic suggestions when no context', () => {
@@ -281,23 +286,21 @@ describe('Avatar Widget Smoke — Multiple Send Cycles', () => {
 
     // First message from packs page
     usePageContextStore.getState().setContext('/')
-    const prefix1 = formatContextForMessage(
-      buildContextPayload(usePageContextStore.getState().current),
-    )
-    chat.sendMessage(`${prefix1}\n\nList my packs`)
+    const ctx1 = buildContextPayload(usePageContextStore.getState().current)
+    chat.sendMessage('List my packs', undefined, ctx1 ?? undefined)
     chat.receiveResponse('You have 5 packs installed.')
 
     // Second message from inventory
     usePageContextStore.getState().setContext('/inventory')
-    const prefix2 = formatContextForMessage(
-      buildContextPayload(usePageContextStore.getState().current),
-    )
-    chat.sendMessage(`${prefix2}\n\nShow disk usage`)
+    const ctx2 = buildContextPayload(usePageContextStore.getState().current)
+    chat.sendMessage('Show disk usage', undefined, ctx2 ?? undefined)
     chat.receiveResponse('Total: 15.3 GB')
 
     expect(chat.state.messages).toHaveLength(4)
-    expect(chat.state.messages[0].content).toContain('pack list')
-    expect(chat.state.messages[2].content).toContain('model inventory')
+    expect(chat.state.messages[0].content).toBe('List my packs')
+    expect(chat.state.messages[0].context).toMatchObject({ page: 'packs' })
+    expect(chat.state.messages[2].content).toBe('Show disk usage')
+    expect(chat.state.messages[2].context).toMatchObject({ page: 'inventory' })
   })
 
   it('should handle send without waiting for response', () => {
