@@ -46,7 +46,7 @@ class TestAvatarConfigDefaults:
 
     def test_resolved_paths(self, tmp_path):
         config = load_avatar_config(synapse_root=tmp_path)
-        assert config.config_path == tmp_path / "avatar.yaml"
+        assert config.config_path == tmp_path / "store" / "state" / "avatar.yaml"
         assert config.skills_dir == tmp_path / "avatar" / "skills"
         assert config.custom_skills_dir == tmp_path / "avatar" / "custom-skills"
         assert config.avatars_dir == tmp_path / "avatar" / "avatars"
@@ -68,7 +68,8 @@ class TestAvatarConfigFromYaml:
     """Config loads properly from YAML files."""
 
     def _write_yaml(self, tmp_path: Path, content: str) -> Path:
-        config_path = tmp_path / "avatar.yaml"
+        config_path = tmp_path / "store" / "state" / "avatar.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(textwrap.dedent(content))
         return config_path
 
@@ -160,7 +161,8 @@ class TestAvatarConfigEdgeCases:
     """Edge cases and error handling."""
 
     def test_malformed_yaml_falls_back_to_defaults(self, tmp_path):
-        config_path = tmp_path / "avatar.yaml"
+        config_path = tmp_path / "store" / "state" / "avatar.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(":::invalid yaml{{{")
         config = load_avatar_config(synapse_root=tmp_path)
         # Should not crash, returns defaults
@@ -168,13 +170,15 @@ class TestAvatarConfigEdgeCases:
         assert config.provider == "gemini"
 
     def test_empty_yaml_returns_defaults(self, tmp_path):
-        config_path = tmp_path / "avatar.yaml"
+        config_path = tmp_path / "store" / "state" / "avatar.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text("")
         config = load_avatar_config(synapse_root=tmp_path)
         assert config.enabled is True
 
     def test_yaml_with_only_comments(self, tmp_path):
-        config_path = tmp_path / "avatar.yaml"
+        config_path = tmp_path / "store" / "state" / "avatar.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text("# Just a comment\n")
         config = load_avatar_config(synapse_root=tmp_path)
         assert config.enabled is True
@@ -246,7 +250,8 @@ class TestPatchConfigRoundTrip:
     """
 
     def _write_yaml(self, tmp_path: Path, raw: dict) -> Path:
-        config_path = tmp_path / "avatar.yaml"
+        config_path = tmp_path / "store" / "state" / "avatar.yaml"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w") as f:
             yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
         return config_path
@@ -255,7 +260,7 @@ class TestPatchConfigRoundTrip:
         """PATCH {provider: 'claude'} → load_avatar_config returns claude."""
         self._write_yaml(tmp_path, {"provider": "gemini"})
         # Simulate PATCH update
-        raw = yaml.safe_load((tmp_path / "avatar.yaml").read_text())
+        raw = yaml.safe_load((tmp_path / "store" / "state" / "avatar.yaml").read_text())
         raw["provider"] = "claude"
         self._write_yaml(tmp_path, raw)
         # Reload and verify
@@ -269,7 +274,7 @@ class TestPatchConfigRoundTrip:
             "gemini": {"model": "gemini-3-pro-preview"},
         })
         # Simulate PATCH update to model
-        raw = yaml.safe_load((tmp_path / "avatar.yaml").read_text())
+        raw = yaml.safe_load((tmp_path / "store" / "state" / "avatar.yaml").read_text())
         raw["gemini"]["model"] = "gemini-2.5-flash"
         self._write_yaml(tmp_path, raw)
         # Reload and verify
@@ -281,7 +286,7 @@ class TestPatchConfigRoundTrip:
         self._write_yaml(tmp_path, {
             "claude": {"model": "claude-sonnet-4-5", "enabled": True},
         })
-        raw = yaml.safe_load((tmp_path / "avatar.yaml").read_text())
+        raw = yaml.safe_load((tmp_path / "store" / "state" / "avatar.yaml").read_text())
         raw["claude"]["enabled"] = False
         self._write_yaml(tmp_path, raw)
         config = load_avatar_config(synapse_root=tmp_path)
@@ -291,7 +296,7 @@ class TestPatchConfigRoundTrip:
     def test_toggle_enabled_persists(self, tmp_path):
         """PATCH {enabled: false} → config.enabled is False."""
         self._write_yaml(tmp_path, {"enabled": True})
-        raw = yaml.safe_load((tmp_path / "avatar.yaml").read_text())
+        raw = yaml.safe_load((tmp_path / "store" / "state" / "avatar.yaml").read_text())
         raw["enabled"] = False
         self._write_yaml(tmp_path, raw)
         config = load_avatar_config(synapse_root=tmp_path)
@@ -320,7 +325,7 @@ class TestPatchConfigRoundTrip:
         assert initial.providers["gemini"].model == "gemini-3-pro-preview"
 
         # Simulate PATCH: change default provider to claude + set its model
-        raw = yaml.safe_load((tmp_path / "avatar.yaml").read_text())
+        raw = yaml.safe_load((tmp_path / "store" / "state" / "avatar.yaml").read_text())
         raw["provider"] = "claude"
         if "claude" not in raw or not isinstance(raw.get("claude"), dict):
             raw["claude"] = {}

@@ -1,21 +1,23 @@
 # Configuration Reference
 
-Avatar-engine is configured via a YAML file at `~/.synapse/avatar.yaml`. All settings have sensible defaults — configuration is optional.
+Avatar-engine is configured via a YAML file at `~/.synapse/store/state/avatar.yaml`. All settings have sensible defaults — configuration is optional.
 
 ## Config File Location
 
 The config loader checks these locations in order:
 
 1. Explicit `config_path` parameter (programmatic use)
-2. `$SYNAPSE_ROOT/avatar.yaml` (environment variable)
-3. `~/.synapse/avatar.yaml` (default)
+2. `$SYNAPSE_ROOT/store/state/avatar.yaml` (environment variable)
+3. `~/.synapse/store/state/avatar.yaml` (default)
+
+> **Migration:** If the config file is not found at the new location but exists at the old `~/.synapse/avatar.yaml`, it is moved automatically.
 
 If no file is found, all defaults apply and the AI assistant works out of the box (assuming a provider CLI is installed).
 
 ## Minimal Configuration
 
 ```yaml
-# ~/.synapse/avatar.yaml
+# ~/.synapse/store/state/avatar.yaml
 provider: gemini
 ```
 
@@ -107,8 +109,24 @@ Type: `object` | Default: Not set (provider defaults apply)
 
 Per-provider configuration. Each provider is a **top-level key** in the YAML (not nested under a `providers:` key). Supported fields:
 
-- `model` (string): Override the default model. Leave empty to use the provider's default.
+- `model` (string): Initial default model. The model dropdown is populated dynamically (see [Dynamic Model Discovery](#dynamic-model-discovery)) — this value is used only as a startup default.
 - `enabled` (boolean): Enable or disable this specific provider. A disabled provider won't appear in the provider switcher UI.
+
+#### `claude.additional_dirs`
+
+Type: `list[string]` | Default: `[]`
+
+Additional directories that Claude Code can access beyond the `working_dir`. Paths support tilde expansion (`~` → home directory) and are validated at startup — non-existent directories are silently skipped.
+
+```yaml
+claude:
+  model: "claude-sonnet-4-5"
+  additional_dirs:
+    - "~/.synapse"
+    - "~/projects/shared-data"
+```
+
+This is necessary because Claude Code restricts file access to its working directory. Without `additional_dirs`, the AI cannot read Synapse's data store at `~/.synapse`.
 
 ### `engine`
 
@@ -159,7 +177,7 @@ The config loader automatically resolves these directories relative to the Synap
 
 | Path | Default | Purpose |
 |------|---------|---------|
-| `config_path` | `~/.synapse/avatar.yaml` | This config file |
+| `config_path` | `~/.synapse/store/state/avatar.yaml` | This config file |
 | `skills_dir` | `~/.synapse/avatar/skills` | Built-in skill files |
 | `custom_skills_dir` | `~/.synapse/avatar/custom-skills` | User custom skills |
 | `avatars_dir` | `~/.synapse/avatar/avatars` | Custom avatar definitions |
@@ -170,6 +188,21 @@ The config loader automatically resolves these directories relative to the Synap
 |----------|---------|
 | `SYNAPSE_ROOT` | Override the default `~/.synapse` root directory |
 | `CIVITAI_API_TOKEN` | Required for Civitai MCP tools (search, import) |
+
+## Dynamic Model Discovery
+
+Avatar Engine automatically fetches current model lists from provider documentation pages. The model dropdown in the chat widget always shows the latest available models without manual configuration.
+
+**How it works:**
+
+1. On first load, the static built-in model list is shown immediately (no delay).
+2. The browser checks `localStorage` for a cached model list from the last 24 hours.
+3. In the background, the frontend fetches `GET /api/avatar/models` — the backend scrapes provider documentation pages and returns up-to-date model lists.
+4. The dropdown updates automatically when the fetch completes.
+
+**Fallback behavior:** If scraping fails for a provider (e.g., documentation page changed), a warning toast is shown. The static model list is used as fallback. Partial failures are handled gracefully — other providers still update normally.
+
+**Force refresh:** `GET /api/avatar/models?refresh=true` bypasses the 24-hour server-side cache.
 
 ## See Also
 

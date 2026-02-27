@@ -197,10 +197,15 @@ fi
 
 # Create avatar config directory and default config
 mkdir -p ~/.synapse/avatar/skills
-if [ ! -f ~/.synapse/avatar.yaml ]; then
-    if [ -f "$PROJECT_ROOT/config/avatar.yaml.example" ]; then
-        cp "$PROJECT_ROOT/config/avatar.yaml.example" ~/.synapse/avatar.yaml
-        echo -e "${GREEN}  ✓ Default avatar config created at ~/.synapse/avatar.yaml${NC}"
+mkdir -p ~/.synapse/store/state
+if [ ! -f ~/.synapse/store/state/avatar.yaml ]; then
+    # Migrate from old location if exists
+    if [ -f ~/.synapse/avatar.yaml ]; then
+        mv ~/.synapse/avatar.yaml ~/.synapse/store/state/avatar.yaml
+        echo -e "${GREEN}  ✓ Migrated avatar.yaml → ~/.synapse/store/state/avatar.yaml${NC}"
+    elif [ -f "$PROJECT_ROOT/config/avatar.yaml.example" ]; then
+        cp "$PROJECT_ROOT/config/avatar.yaml.example" ~/.synapse/store/state/avatar.yaml
+        echo -e "${GREEN}  ✓ Default avatar config created at ~/.synapse/store/state/avatar.yaml${NC}"
     fi
 fi
 

@@ -52,7 +52,11 @@ This document describes the internal architecture of the avatar-engine integrati
 | `src/avatar/config.py` | ~150 | `AvatarConfig` dataclass, YAML loading, path resolution |
 | `src/avatar/routes.py` | ~200 | FastAPI router (5 endpoints), avatar-engine mount |
 | `src/avatar/skills.py` | ~100 | Skill loading, system prompt building |
-| `src/avatar/ai_service.py` | ~200 | `AvatarAIService` — drop-in AI parameter extraction |
+| `src/avatar/task_service.py` | ~280 | `AvatarTaskService` — multi-task AI service with registry, fallback chain |
+| `src/avatar/ai_service.py` | ~10 | Backward compat re-exports (`AvatarAIService` = `AvatarTaskService`) |
+| `src/avatar/tasks/base.py` | ~100 | `AITask` ABC, `TaskResult` dataclass |
+| `src/avatar/tasks/registry.py` | ~50 | `TaskRegistry` — instance-level task type registry |
+| `src/avatar/tasks/parameter_extraction.py` | ~90 | `ParameterExtractionTask` — extraction with V2 prompt + fallback |
 | `src/avatar/mcp/__init__.py` | ~20 | MCP package init, conditional import |
 | `src/avatar/mcp/__main__.py` | ~15 | Standalone MCP server entry point |
 | `src/avatar/mcp/store_server.py` | ~700 | 21 MCP tool implementations + FastMCP registration |
@@ -111,15 +115,42 @@ engine installed? ──┤
 - Max 50 KB per skill file
 - All skills sorted alphabetically
 
-### `ai_service.py` — AI Parameter Extraction
+### `task_service.py` — Multi-Task AI Service
 
-`AvatarAIService` is a drop-in replacement for the legacy `AIService`. Same public API (`extract_parameters(description)`) but uses avatar-engine instead of direct provider calls.
+`AvatarTaskService` (aliased as `AvatarAIService` for backward compat) is the unified service for all AI-powered tasks. Any task type registered in the `TaskRegistry` can be executed via `execute_task(task_type, input_data)`.
 
-Key patterns:
-- Lazy thread-safe singleton engine (double-checked locking)
-- Three-strategy JSON extraction (direct parse, code fence, brace scanner)
-- Cache layer (`AICache`) with configurable TTL
-- Fallback to rule-based extraction on failure
+**Architecture:**
+```
+                ┌─────────────────────────────────┐
+                │         AvatarTaskService        │
+                │   (one service, many task types) │
+                └──────────┬──────────────────────┘
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+ ┌────────▼──────┐ ┌──────▼───────┐ ┌──────▼───────┐
+ │  TaskRegistry  │ │   AICache    │ │ AvatarEngine │
+ │  (instance,    │ │ (shared,     │ │ (lazy, one   │
+ │   injected)    │ │  per-task    │ │  at a time)  │
+ └────────────────┘ │  key prefix) │ └──────────────┘
+                    └──────────────┘
+```
+
+**Key patterns:**
+- **TaskRegistry**: instance-level (not singleton) for test isolation
+- **Engine lifecycle**: one engine at a time, restarts on task type switch (~1.7s)
+- **Lock scope**: `_engine_lock` covers `_ensure_engine_for_task() + chat_sync()` — not just engine swap
+- **Three-strategy JSON extraction**: direct parse, code fence, brace scanner
+- **Cache layer** (`AICache`) with task-type prefix in cache key
+- **Fallback chain**: AI → semi-automatic (rule-based) → error
+
+**Task = Skill markdown + Python handler:**
+- Skill `.md` files in `config/avatar/skills/` provide domain knowledge
+- Python handler (`AITask` subclass) defines: `build_system_prompt()`, `parse_result()`, `validate_output()`, `get_fallback()`
+
+### `ai_service.py` — Backward Compatibility
+
+Pure re-export module. `AvatarAIService` is an alias for `AvatarTaskService`. All existing code patching `src.avatar.ai_service.AvatarAIService` continues to work.
 
 ### `mcp/store_server.py` — MCP Tools
 

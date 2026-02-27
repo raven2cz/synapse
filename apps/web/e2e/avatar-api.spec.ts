@@ -119,6 +119,21 @@ test.describe('Avatar API Endpoints', () => {
     expect(typeof data.ttl_days).toBe('number')
   })
 
+  test('GET /api/ai/tasks returns registered task types', async ({ page }) => {
+    const data = await apiGet(page, '/api/ai/tasks')
+    expect(Array.isArray(data.tasks)).toBe(true)
+    expect(data.tasks.length).toBeGreaterThanOrEqual(1)
+    // parameter_extraction must be registered
+    const paramTask = data.tasks.find(
+      (t: any) => t.task_type === 'parameter_extraction',
+    )
+    expect(paramTask).toBeDefined()
+    expect(Array.isArray(paramTask.skill_names)).toBe(true)
+    expect(paramTask.skill_names).toContain('generation-params')
+    expect(typeof paramTask.has_fallback).toBe('boolean')
+    expect(paramTask.has_fallback).toBe(true)
+  })
+
   test('status endpoint remains consistent after sequential calls', async ({
     page,
   }) => {

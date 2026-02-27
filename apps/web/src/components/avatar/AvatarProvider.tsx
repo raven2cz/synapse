@@ -12,8 +12,14 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react'
-import { useAvatarChat, useAvailableProviders, AVATARS } from '@avatar-engine/react'
-import type { UseAvatarChatReturn, AvatarConfig } from '@avatar-engine/react'
+import {
+  useAvatarChat,
+  useAvailableProviders,
+  useDynamicModels,
+  useModelDiscoveryErrors,
+  AVATARS,
+} from '@avatar-engine/react'
+import type { UseAvatarChatReturn, AvatarConfig, ProviderConfig } from '@avatar-engine/react'
 import { usePageContextStore } from '../../stores/pageContextStore'
 import { buildContextPayload } from '../../lib/avatar/context'
 import { toast } from '../../stores/toastStore'
@@ -53,6 +59,8 @@ interface AvatarContextValue {
   /** sendMessage with page context sent as structured metadata */
   sendWithContext: (text: string) => void
   providers: Set<string> | null
+  /** Dynamic provider configs with live model lists (scraped from provider docs) */
+  dynamicProviders: ProviderConfig[]
   compactRef: React.MutableRefObject<(() => void) | null>
 }
 
@@ -66,7 +74,16 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
 
   const chat = useAvatarChat(wsUrl, { apiBase: '/api/avatar' })
   const providers = useAvailableProviders()
+  const dynamicProviders = useDynamicModels('/api/avatar')
+  const modelErrors = useModelDiscoveryErrors()
   const compactRef = useRef<(() => void) | null>(null)
+
+  // Show warning toast when model discovery scraping fails for a provider
+  useEffect(() => {
+    for (const err of modelErrors) {
+      toast.warning(`Model discovery: ${err.message}`)
+    }
+  }, [modelErrors])
 
   // Check backend avatar-engine status on first render
   useEffect(() => {
@@ -99,7 +116,7 @@ export function AvatarProvider({ children }: { children: ReactNode }) {
   }, [chat.sendMessage])
 
   return (
-    <AvatarContext.Provider value={{ chat, sendWithContext, providers, compactRef }}>
+    <AvatarContext.Provider value={{ chat, sendWithContext, providers, dynamicProviders, compactRef }}>
       {children}
     </AvatarContext.Provider>
   )

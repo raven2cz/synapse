@@ -163,7 +163,7 @@ class TestImportFlowSmoke:
 
         with patch("src.store.download_service.requests.Session", return_value=_mock_http_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             # Fallback should NOT be called when DownloadService is present
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
@@ -207,7 +207,7 @@ class TestImportFlowSmoke:
 
         with patch("src.store.download_service.requests.Session", side_effect=lambda: capture_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"fallback data"])
@@ -246,7 +246,7 @@ class TestUpdateCheckSmoke:
         # Import two packs that share the same model (1001)
         with patch("src.store.download_service.requests.Session", return_value=_mock_http_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"data"])
@@ -274,7 +274,7 @@ class TestUpdateCheckSmoke:
 
         with patch("src.store.download_service.requests.Session", return_value=_mock_http_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"data"])
@@ -321,7 +321,7 @@ class TestDownloadServiceConcurrency:
 
         with patch("src.store.download_service.requests.Session", side_effect=counting_session), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"data"])
@@ -354,7 +354,7 @@ class TestFullLifecycleSmoke:
 
         with patch("src.store.download_service.requests.Session", return_value=_mock_http_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"data"])
@@ -393,7 +393,7 @@ class TestFullLifecycleSmoke:
 
         with patch("src.store.download_service.requests.Session", return_value=_mock_http_session()), \
              patch("src.store.pack_service.requests.get") as mock_fallback, \
-             patch("src.ai.AIService", return_value=_mock_ai_service()):
+             patch("src.avatar.ai_service.AvatarAIService", return_value=_mock_ai_service()):
             mock_fallback_response = MagicMock()
             mock_fallback_response.raise_for_status = MagicMock()
             mock_fallback_response.iter_content = MagicMock(return_value=[b"data"])

@@ -3403,9 +3403,9 @@ def extract_pack_parameters(
                     confidence=0.0,
                 )
 
-            from src.ai import get_ai_service
+            from src.avatar.ai_service import AvatarAIService
 
-            ai_service = get_ai_service()
+            ai_service = AvatarAIService()
             ai_result = ai_service.extract_parameters(pack.description)
 
             if ai_result.success and ai_result.output:
@@ -5107,23 +5107,6 @@ def search_packs(
 ai_router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-class AIProviderStatusResponse(BaseModel):
-    """Status of an AI provider."""
-    provider_id: str
-    available: bool
-    running: bool
-    version: Optional[str] = None
-    models: List[str] = []
-    error: Optional[str] = None
-
-
-class AIDetectionResponse(BaseModel):
-    """Response for provider detection."""
-    providers: Dict[str, AIProviderStatusResponse]
-    available_count: int
-    running_count: int
-
-
 class AIExtractionRequest(BaseModel):
     """Request for parameter extraction."""
     description: str
@@ -5150,82 +5133,12 @@ class AICacheStatsResponse(BaseModel):
     ttl_days: int
 
 
-class AISettingsResponse(BaseModel):
-    """Response for AI settings."""
-    enabled: bool
-    providers: Dict[str, Any]
-    task_priorities: Dict[str, Any]
-    cli_timeout_seconds: int
-    max_retries: int = 2
-    retry_delay_seconds: int = 1
-    cache_enabled: bool
-    cache_ttl_days: int
-    cache_directory: str = "~/.synapse/store/data/cache/ai"
-    always_fallback_to_rule_based: bool
-    show_provider_in_results: bool = True
-    log_requests: bool = True
-    log_level: str = "INFO"
-    log_prompts: bool = False
-    log_responses: bool = False
-    use_avatar_engine: bool = False
-    avatar_engine_provider: str = "gemini"
-    avatar_engine_model: str = ""
-    avatar_engine_timeout: int = 120
-
-
-class AISettingsUpdateRequest(BaseModel):
-    """Request for updating AI settings."""
-    enabled: Optional[bool] = None
-    providers: Optional[Dict[str, Any]] = None
-    task_priorities: Optional[Dict[str, Any]] = None
-    cli_timeout_seconds: Optional[int] = None
-    max_retries: Optional[int] = None
-    retry_delay_seconds: Optional[int] = None
-    cache_enabled: Optional[bool] = None
-    cache_ttl_days: Optional[int] = None
-    always_fallback_to_rule_based: Optional[bool] = None
-    show_provider_in_results: Optional[bool] = None
-    log_requests: Optional[bool] = None
-    log_level: Optional[str] = None
-    log_prompts: Optional[bool] = None
-    log_responses: Optional[bool] = None
-    use_avatar_engine: Optional[bool] = None
-    avatar_engine_provider: Optional[str] = None
-    avatar_engine_model: Optional[str] = None
-    avatar_engine_timeout: Optional[int] = None
-
-
-@ai_router.get("/providers", response_model=AIDetectionResponse)
-def detect_providers():
-    """Detect available AI providers."""
-    from src.ai import detect_ai_providers
-
-    providers = detect_ai_providers()
-
-    response_providers = {}
-    for pid, status in providers.items():
-        response_providers[pid] = AIProviderStatusResponse(
-            provider_id=status.provider_id,
-            available=status.available,
-            running=status.running,
-            version=status.version,
-            models=status.models,
-            error=status.error,
-        )
-
-    return AIDetectionResponse(
-        providers=response_providers,
-        available_count=sum(1 for s in providers.values() if s.available),
-        running_count=sum(1 for s in providers.values() if s.running),
-    )
-
-
 @ai_router.post("/extract", response_model=AIExtractionResponse)
 def extract_parameters(request: AIExtractionRequest):
     """Extract generation parameters from description using AI."""
-    from src.ai import get_ai_service, AIServicesSettings
+    from src.avatar.ai_service import AvatarAIService
 
-    service = get_ai_service(AIServicesSettings.load())
+    service = AvatarAIService()
     result = service.extract_parameters(
         description=request.description,
         use_cache=request.use_cache,
@@ -5245,9 +5158,9 @@ def extract_parameters(request: AIExtractionRequest):
 @ai_router.get("/cache/stats", response_model=AICacheStatsResponse)
 def get_cache_stats():
     """Get AI cache statistics."""
-    from src.ai import get_ai_service, AIServicesSettings
+    from src.avatar.ai_service import AvatarAIService
 
-    service = get_ai_service(AIServicesSettings.load())
+    service = AvatarAIService()
     stats = service.get_cache_stats()
 
     return AICacheStatsResponse(**stats)
@@ -5256,9 +5169,9 @@ def get_cache_stats():
 @ai_router.delete("/cache")
 def clear_cache():
     """Clear all AI cache entries."""
-    from src.ai import get_ai_service, AIServicesSettings
+    from src.avatar.ai_service import AvatarAIService
 
-    service = get_ai_service(AIServicesSettings.load())
+    service = AvatarAIService()
     count = service.clear_cache()
 
     return {"cleared": count}
@@ -5267,144 +5180,31 @@ def clear_cache():
 @ai_router.post("/cache/cleanup")
 def cleanup_cache():
     """Remove expired AI cache entries."""
-    from src.ai import get_ai_service, AIServicesSettings
+    from src.avatar.ai_service import AvatarAIService
 
-    service = get_ai_service(AIServicesSettings.load())
+    service = AvatarAIService()
     count = service.cleanup_cache()
 
     return {"cleaned": count}
 
 
-@ai_router.get("/settings", response_model=AISettingsResponse)
-def get_ai_settings():
-    """Get current AI settings."""
-    from src.ai import AIServicesSettings
+@ai_router.get("/tasks")
+def list_available_tasks():
+    """List all registered AI task types."""
+    from src.avatar.tasks.registry import get_default_registry
 
-    settings = AIServicesSettings.load()
-
-    return AISettingsResponse(
-        enabled=settings.enabled,
-        providers={k: v.to_dict() for k, v in settings.providers.items()},
-        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
-        cli_timeout_seconds=settings.cli_timeout_seconds,
-        max_retries=settings.max_retries,
-        retry_delay_seconds=settings.retry_delay_seconds,
-        cache_enabled=settings.cache_enabled,
-        cache_ttl_days=settings.cache_ttl_days,
-        cache_directory=settings.cache_directory,
-        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
-        show_provider_in_results=settings.show_provider_in_results,
-        log_requests=settings.log_requests,
-        log_level=settings.log_level,
-        log_prompts=settings.log_prompts,
-        log_responses=settings.log_responses,
-        use_avatar_engine=settings.use_avatar_engine,
-        avatar_engine_provider=settings.avatar_engine_provider,
-        avatar_engine_model=settings.avatar_engine_model,
-        avatar_engine_timeout=settings.avatar_engine_timeout,
-    )
-
-
-@ai_router.patch("/settings", response_model=AISettingsResponse)
-def update_ai_settings(request: AISettingsUpdateRequest):
-    """
-    Update AI settings and persist to disk.
-
-    Settings are saved to: ~/.synapse/store/data/ai_settings.json
-    """
-    from src.ai import AIServicesSettings, ProviderConfig, TaskPriorityConfig
-
-    # Load current settings from disk
-    settings = AIServicesSettings.load()
-
-    # Update only provided fields
-    if request.enabled is not None:
-        settings.enabled = request.enabled
-
-    if request.providers is not None:
-        for provider_id, provider_data in request.providers.items():
-            # Ensure provider_id is set in the data
-            provider_data["provider_id"] = provider_id
-            settings.providers[provider_id] = ProviderConfig.from_dict(provider_data)
-
-    if request.task_priorities is not None:
-        for task_type, priority_data in request.task_priorities.items():
-            # Ensure task_type is set in the data
-            priority_data["task_type"] = task_type
-            settings.task_priorities[task_type] = TaskPriorityConfig.from_dict(priority_data)
-
-    if request.cli_timeout_seconds is not None:
-        settings.cli_timeout_seconds = request.cli_timeout_seconds
-
-    if request.max_retries is not None:
-        settings.max_retries = request.max_retries
-
-    if request.retry_delay_seconds is not None:
-        settings.retry_delay_seconds = request.retry_delay_seconds
-
-    if request.cache_enabled is not None:
-        settings.cache_enabled = request.cache_enabled
-
-    if request.cache_ttl_days is not None:
-        settings.cache_ttl_days = request.cache_ttl_days
-
-    if request.always_fallback_to_rule_based is not None:
-        settings.always_fallback_to_rule_based = request.always_fallback_to_rule_based
-
-    if request.show_provider_in_results is not None:
-        settings.show_provider_in_results = request.show_provider_in_results
-
-    if request.log_requests is not None:
-        settings.log_requests = request.log_requests
-
-    if request.log_level is not None:
-        settings.log_level = request.log_level
-
-    if request.log_prompts is not None:
-        settings.log_prompts = request.log_prompts
-
-    if request.log_responses is not None:
-        settings.log_responses = request.log_responses
-
-    if request.use_avatar_engine is not None:
-        settings.use_avatar_engine = request.use_avatar_engine
-
-    if request.avatar_engine_provider is not None:
-        settings.avatar_engine_provider = request.avatar_engine_provider
-
-    if request.avatar_engine_model is not None:
-        settings.avatar_engine_model = request.avatar_engine_model
-
-    if request.avatar_engine_timeout is not None:
-        settings.avatar_engine_timeout = request.avatar_engine_timeout
-
-    # Save to disk
-    if not settings.save():
-        raise HTTPException(status_code=500, detail="Failed to save AI settings to disk")
-
-    logger.info(f"[ai-settings] Updated and saved AI settings: enabled={settings.enabled}")
-
-    return AISettingsResponse(
-        enabled=settings.enabled,
-        providers={k: v.to_dict() for k, v in settings.providers.items()},
-        task_priorities={k: v.to_dict() for k, v in settings.task_priorities.items()},
-        cli_timeout_seconds=settings.cli_timeout_seconds,
-        max_retries=settings.max_retries,
-        retry_delay_seconds=settings.retry_delay_seconds,
-        cache_enabled=settings.cache_enabled,
-        cache_ttl_days=settings.cache_ttl_days,
-        cache_directory=settings.cache_directory,
-        always_fallback_to_rule_based=settings.always_fallback_to_rule_based,
-        show_provider_in_results=settings.show_provider_in_results,
-        log_requests=settings.log_requests,
-        log_level=settings.log_level,
-        log_prompts=settings.log_prompts,
-        log_responses=settings.log_responses,
-        use_avatar_engine=settings.use_avatar_engine,
-        avatar_engine_provider=settings.avatar_engine_provider,
-        avatar_engine_model=settings.avatar_engine_model,
-        avatar_engine_timeout=settings.avatar_engine_timeout,
-    )
+    registry = get_default_registry()
+    return {
+        "tasks": [
+            {
+                "task_type": t.task_type,
+                "skill_names": list(t.SKILL_NAMES),
+                "has_fallback": t.get_fallback() is not None,
+            }
+            for task_type in registry.list_tasks()
+            if (t := registry.get(task_type)) is not None
+        ]
+    }
 
 
 # =============================================================================

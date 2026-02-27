@@ -3,12 +3,14 @@ AI Cache
 
 Caches AI extraction results to avoid redundant API calls.
 Uses SHA-256 hash of description as cache key.
+Thread-safe: all file operations are guarded by a lock.
 """
 
 import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -81,9 +83,13 @@ class AICache:
         """
         self.cache_dir = Path(os.path.expanduser(cache_dir))
         self.ttl_days = ttl_days
+        self._lock = threading.Lock()
 
         # Ensure cache directory exists
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning("[ai-cache] Failed to create cache directory %s: %s", cache_dir, e)
 
     def get_cache_key(self, content: str) -> str:
         """
@@ -112,36 +118,35 @@ class AICache:
         key = self.get_cache_key(content)
         cache_file = self.cache_dir / f"{key}.json"
 
-        if not cache_file.exists():
-            logger.debug(f"[ai-service] Cache miss for key: {key}")
-            return None
-
-        try:
-            with open(cache_file, "r") as f:
-                data = json.load(f)
-
-            entry = CacheEntry.from_dict(data)
-
-            # Check TTL
-            if self.ttl_days > 0 and entry.age_days() > self.ttl_days:
-                logger.debug(
-                    f"[ai-service] Cache expired for key: {key} "
-                    f"(age: {entry.age_days():.1f}d > {self.ttl_days}d)"
-                )
-                # Remove expired entry
-                cache_file.unlink()
+        with self._lock:
+            if not cache_file.exists():
+                logger.debug(f"[ai-cache] Cache miss for key: {key}")
                 return None
 
-            logger.debug(
-                f"[ai-service] Cache hit for key: {key} (age: {entry.age_days():.1f}d)"
-            )
-            return entry
+            try:
+                with open(cache_file, "r") as f:
+                    data = json.load(f)
 
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f"[ai-service] Invalid cache entry {key}: {e}")
-            # Remove corrupted entry
-            cache_file.unlink()
-            return None
+                entry = CacheEntry.from_dict(data)
+
+                # Check TTL
+                if self.ttl_days > 0 and entry.age_days() > self.ttl_days:
+                    logger.debug(
+                        f"[ai-cache] Cache expired for key: {key} "
+                        f"(age: {entry.age_days():.1f}d > {self.ttl_days}d)"
+                    )
+                    cache_file.unlink(missing_ok=True)
+                    return None
+
+                logger.debug(
+                    f"[ai-cache] Cache hit for key: {key} (age: {entry.age_days():.1f}d)"
+                )
+                return entry
+
+            except (json.JSONDecodeError, KeyError, OSError) as e:
+                logger.warning(f"[ai-cache] Invalid cache entry {key}: {e}")
+                cache_file.unlink(missing_ok=True)
+                return None
 
     def set(
         self,
@@ -176,10 +181,15 @@ class AICache:
         )
 
         cache_file = self.cache_dir / f"{key}.json"
-        with open(cache_file, "w") as f:
-            json.dump(entry.to_dict(), f, indent=2)
+        with self._lock:
+            try:
+                with open(cache_file, "w") as f:
+                    json.dump(entry.to_dict(), f, indent=2)
+            except OSError as e:
+                logger.warning("[ai-cache] Failed to write cache file %s: %s", key, e)
+                return entry
 
-        logger.debug(f"[ai-service] Result cached with key: {key}")
+        logger.debug(f"[ai-cache] Result cached with key: {key}")
         return entry
 
     def invalidate(self, content: str) -> bool:
@@ -195,10 +205,11 @@ class AICache:
         key = self.get_cache_key(content)
         cache_file = self.cache_dir / f"{key}.json"
 
-        if cache_file.exists():
-            cache_file.unlink()
-            logger.debug(f"[ai-service] Cache invalidated for key: {key}")
-            return True
+        with self._lock:
+            if cache_file.exists():
+                cache_file.unlink(missing_ok=True)
+                logger.debug(f"[ai-cache] Cache invalidated for key: {key}")
+                return True
 
         return False
 
@@ -210,11 +221,15 @@ class AICache:
             Number of entries removed
         """
         count = 0
-        for cache_file in self.cache_dir.glob("*.json"):
-            cache_file.unlink()
-            count += 1
+        with self._lock:
+            for cache_file in self.cache_dir.glob("*.json"):
+                try:
+                    cache_file.unlink(missing_ok=True)
+                    count += 1
+                except OSError as e:
+                    logger.warning("[ai-cache] Failed to remove %s: %s", cache_file.name, e)
 
-        logger.info(f"[ai-service] Cache cleared: {count} entries removed")
+        logger.info(f"[ai-cache] Cache cleared: {count} entries removed")
         return count
 
     def cleanup_expired(self) -> int:
@@ -228,23 +243,27 @@ class AICache:
             return 0
 
         count = 0
-        for cache_file in self.cache_dir.glob("*.json"):
-            try:
-                with open(cache_file, "r") as f:
-                    data = json.load(f)
+        with self._lock:
+            for cache_file in self.cache_dir.glob("*.json"):
+                try:
+                    with open(cache_file, "r") as f:
+                        data = json.load(f)
 
-                entry = CacheEntry.from_dict(data)
-                if entry.age_days() > self.ttl_days:
-                    cache_file.unlink()
+                    entry = CacheEntry.from_dict(data)
+                    if entry.age_days() > self.ttl_days:
+                        cache_file.unlink(missing_ok=True)
+                        count += 1
+
+                except (json.JSONDecodeError, KeyError, OSError) as e:
+                    logger.warning("[ai-cache] Removing invalid entry %s: %s", cache_file.name, e)
+                    try:
+                        cache_file.unlink(missing_ok=True)
+                    except OSError:
+                        pass
                     count += 1
 
-            except Exception:
-                # Remove invalid entries
-                cache_file.unlink()
-                count += 1
-
         if count > 0:
-            logger.info(f"[ai-service] Cache cleanup: {count} expired entries removed")
+            logger.info(f"[ai-cache] Cache cleanup: {count} expired entries removed")
 
         return count
 

@@ -60,7 +60,7 @@ const mockConfig: AvatarConfig = {
   safety: 'safe',
   max_history: 100,
   has_config_file: true,
-  config_path: '/home/user/.synapse/avatar.yaml',
+  config_path: '/home/user/.synapse/store/state/avatar.yaml',
   skills_count: { builtin: 3, custom: 1 },
   skills: {
     builtin: [
@@ -185,7 +185,7 @@ describe('AvatarSettings', () => {
 
   describe('Config path display', () => {
     it('should show config path when available', () => {
-      expect(mockConfig.config_path).toBe('/home/user/.synapse/avatar.yaml')
+      expect(mockConfig.config_path).toBe('/home/user/.synapse/store/state/avatar.yaml')
       expect(mockConfig.has_config_file).toBe(true)
     })
 

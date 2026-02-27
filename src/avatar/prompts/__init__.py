@@ -1,5 +1,5 @@
 """
-AI Prompts Module
+Avatar Prompts Module
 
 Prompt templates for AI-powered tasks.
 """

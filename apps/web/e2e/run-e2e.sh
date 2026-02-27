@@ -18,7 +18,7 @@
 # ──────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-AVATAR_YAML="$HOME/.synapse/avatar.yaml"
+AVATAR_YAML="$HOME/.synapse/store/state/avatar.yaml"
 BACKUP="$AVATAR_YAML.e2e-backup"
 TEST_MODEL="gemini-2.0-flash"
 

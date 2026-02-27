@@ -16,7 +16,7 @@ from src.store import Store
 from src.store.pack_service import PackService
 from src.store.layout import StoreLayout
 from src.store.models import GenerationParameters
-from src.ai.providers.rule_based import RuleBasedProvider
+from src.avatar.providers.rule_based import RuleBasedProvider
 
 
 # =============================================================================
@@ -103,12 +103,12 @@ class _RuleBasedOnlyAIService:
 
     def extract_parameters(self, description: str):
         """Extract parameters using rule-based provider only."""
-        from src.ai.providers.rule_based import RuleBasedProvider
+        from src.avatar.providers.rule_based import RuleBasedProvider
 
         provider = RuleBasedProvider()
         result = provider.execute(description)
 
-        # Convert ProviderResult to TaskResult-like object
+        # Convert RuleBasedResult to TaskResult-like object
         class _Result:
             def __init__(self, pr):
                 self.success = pr.success
@@ -124,7 +124,7 @@ class TestParameterExtractionDuringImport:
     @pytest.fixture(autouse=True)
     def _mock_ai(self):
         """Use rule_based AI provider only (no Ollama/Gemini/Claude network calls)."""
-        with patch('src.ai.get_ai_service', return_value=_RuleBasedOnlyAIService()):
+        with patch('src.avatar.ai_service.AvatarAIService', return_value=_RuleBasedOnlyAIService()):
             yield
 
     def test_import_extracts_parameters_from_description(

@@ -158,8 +158,8 @@ def update_avatar_config(updates: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
     config = load_avatar_config()
     yaml_path = config.config_path
     if yaml_path is None:
-        from .config import DEFAULT_SYNAPSE_ROOT, DEFAULT_CONFIG_FILENAME
-        yaml_path = DEFAULT_SYNAPSE_ROOT / DEFAULT_CONFIG_FILENAME
+        from .config import DEFAULT_SYNAPSE_ROOT
+        yaml_path = DEFAULT_SYNAPSE_ROOT / "store" / "state" / "avatar.yaml"
 
     # Load raw YAML (or start from empty dict)
     raw: Dict[str, Any] = {}

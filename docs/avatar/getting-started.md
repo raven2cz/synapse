@@ -56,9 +56,9 @@ cp -r ~/git/github/avatar-engine/examples/web-demo/public/avatars apps/web/publi
 ### 5. Create configuration (optional)
 
 ```bash
-mkdir -p ~/.synapse
-cp config/avatar.yaml.example ~/.synapse/avatar.yaml
-# Edit ~/.synapse/avatar.yaml to set your preferred provider
+mkdir -p ~/.synapse/store/state
+cp config/avatar.yaml.example ~/.synapse/store/state/avatar.yaml
+# Edit ~/.synapse/store/state/avatar.yaml to set your preferred provider
 ```
 
 ### 6. Start Synapse
@@ -121,10 +121,10 @@ You can switch between AI providers at any time:
 
 - **Compact mode**: Use the provider dropdown in the header
 - **Fullscreen mode**: Use the provider selector in the status bar
-- **Configuration**: Set default in `~/.synapse/avatar.yaml`
+- **Configuration**: Set default in `~/.synapse/store/state/avatar.yaml`
 
 ```yaml
-# ~/.synapse/avatar.yaml
+# ~/.synapse/store/state/avatar.yaml
 provider: gemini   # Default provider: gemini, claude, or codex
 ```
 

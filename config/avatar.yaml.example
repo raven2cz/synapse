@@ -1,7 +1,7 @@
 # ⬢ Synapse — Avatar Engine Configuration
 #
 # This file configures the AI assistant powered by avatar-engine.
-# Copy to ~/.synapse/avatar.yaml and customize as needed.
+# Copy to ~/.synapse/store/state/avatar.yaml and customize as needed.
 #
 # Documentation: docs/avatar/configuration.md
 
@@ -30,6 +30,8 @@ mcp_servers:
       SYNAPSE_ROOT: "~/.synapse"
 
 # --- Provider-specific configuration ---
+# NOTE: The `model` field is an initial default only. The model dropdown
+# is populated dynamically from provider documentation pages (24h cache).
 
 gemini:
   model: "gemini-3-pro-preview"
@@ -43,6 +45,9 @@ claude:
   #   - "Read"
   #   - "Grep"
   #   - "mcp__synapse-store__*"
+  # Additional directories Claude can access (beyond working_dir)
+  additional_dirs:
+    - "~/.synapse"
 
 codex:
   model: ""
@@ -56,3 +61,15 @@ engine:
   auto_restart: true
   # Safety mode: safe (default) | ask (Gemini only) | unrestricted
   safety_instructions: "safe"
+
+  # AI parameter extraction settings
+  extraction:
+    cache_enabled: true
+    cache_ttl_days: 30
+    cache_directory: "~/.synapse/store/data/cache/ai"
+    always_fallback_to_rule_based: true
+
+  # Task registry — registered task types are auto-discovered.
+  # Currently: parameter_extraction (with generation-params skill + rule-based fallback).
+  # Future task types (tagging, translation, etc.) will register here.
+  # tasks: (auto-discovered, no configuration needed)

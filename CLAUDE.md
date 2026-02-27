@@ -118,7 +118,8 @@ pnpm build            # Production build
 | `src/avatar/config.py` | AvatarConfig dataclass, YAML loading, path resolution |
 | `src/avatar/routes.py` | FastAPI router (6 endpoints), avatar-engine mount |
 | `src/avatar/skills.py` | Skill loading, system prompt building |
-| `src/avatar/ai_service.py` | AvatarAIService — drop-in AI parameter extraction |
+| `src/avatar/task_service.py` | AvatarTaskService — multi-task AI service with registry, fallback chain |
+| `src/avatar/ai_service.py` | Backward compat re-exports (AvatarAIService = AvatarTaskService) |
 | `src/avatar/mcp/store_server.py` | 21 MCP tools (Store, Civitai, Workflow, Dependencies) |
 
 ### Frontend

@@ -41,7 +41,7 @@ interface LayoutProps {
 }
 
 function LayoutInner({ children }: LayoutProps) {
-  const { chat, sendWithContext, providers, compactRef } = useAvatar()
+  const { chat, sendWithContext, providers, dynamicProviders, compactRef } = useAvatar()
   const { pathname } = useLocation()
 
   // Track page context for suggestions (Iterace 5)
@@ -83,7 +83,7 @@ function LayoutInner({ children }: LayoutProps) {
       {/* AvatarWidget — handles FAB/Compact/Fullscreen INTERNALLY */}
       <AvatarWidget
         initialMode="fab"
-        customProviders={E2E_PROVIDERS}
+        customProviders={E2E_PROVIDERS ?? dynamicProviders}
         messages={chat.messages}
         sendMessage={sendWithContext}
         stopResponse={chat.stopResponse}

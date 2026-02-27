@@ -988,5 +988,98 @@ Založeny na `aria-label` atributech z `@avatar-engine/react` i18n:
 - Messages: `.compact-messages`
 - Suggestions: `.flex.flex-wrap.gap-2 button`
 
-*Last Updated: 2026-02-24 (KROKY 1-10 dokončeny)*
-*Status: Iterace 1-10 ✅. 21 MCP tools, 511+ testů, 8 docs, ~25 Playwright E2E testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. AI service migrace hotová. Registry verze (npm+PyPI) s version pinning a compat checks. Kompletní user-facing dokumentace. E2E testy pokrývají UI transitions, suggestions, settings, a live chat.*
+---
+
+## Iterace 11: avatar.yaml Relocation + src/ai/ Cleanup ✅ DOKONČENO
+
+**Datum:** 2026-02-27
+**Branch:** `feat/avatar-engine`
+
+### Motivace
+
+Plan 1: Cleanup — přesun avatar.yaml na správné místo, smazání legacy `src/ai/` modulu.
+`AvatarAIService` zůstává single-purpose (parameter extraction).
+
+> **Plan 2** (budoucí): Generalizace na AvatarTaskService s podporou všech task typů
+> (translation, tagging, workflow, atd.) — viz konec tohoto souboru.
+
+### Part A: avatar.yaml → store/state/ ✅
+
+| Soubor | Změna |
+|--------|-------|
+| `src/avatar/config.py` | Nová cesta `store/state/avatar.yaml`, auto-migrace, `ExtractionConfig` dataclass |
+| `src/avatar/routes.py` | Fallback yaml_path aktualizován |
+| `config/avatar.yaml.example` | Nová cesta v komentáři + `engine.extraction` sekce |
+| `scripts/install.sh` | Migrace + nový cílový adresář |
+| `apps/web/e2e/run-e2e.sh` | `AVATAR_YAML` path |
+| `docs/avatar/configuration.md` | 5 path referencí |
+| `docs/avatar/getting-started.md` | Setup instrukce |
+| `docs/avatar/troubleshooting.md` | Config reference |
+| `apps/web/src/__tests__/AvatarSettings.test.ts` | Mock path |
+
+### Part B: Smazání src/ai/, migrace sdílené infra ✅
+
+**Nové soubory v src/avatar/:**
+- `cache.py` — AICache s thread safety (threading.Lock), error handling
+- `tasks/base.py` — TaskResult, AITask ABC
+- `tasks/parameter_extraction.py` — ParameterExtractionTask
+- `prompts/parameter_extraction.py` — PARAMETER_EXTRACTION_PROMPT V2
+- `providers/rule_based.py` — Standalone RuleBasedProvider (bez legacy AIProvider ABC)
+
+**Přepojení:**
+- `ai_service.py` → AvatarConfig místo AIServicesSettings
+- `pack_service.py` → `from src.avatar.ai_service import AvatarAIService`
+- `api.py` → Smazány endpoints: providers, settings. Kept: extract, cache
+
+**Smazáno:** celý `src/ai/` (17 souborů), `ai_settings.json`, frontend hooks/types pro deleted API
+
+### Part C: Testy ✅
+
+**Smazány:** `tests/unit/ai/` (3 soubory), `tests/store/test_ai_api.py`
+**Přepsány:** test_ai_service.py, test_avatar_ai_service.py, test_avatar_ai_smoke.py
+**Aktualizovány importy:** 6 dalších test souborů (import_e2e, download_smoke, import_parameters, ai_parameter_extraction, parameters_api, test_config)
+**Nový guard:** `test_no_legacy_ai_imports` v test_architecture.py
+
+### Part D: Review opravy ✅
+
+Z Claude + Gemini review opraveno:
+- `cache.py` — threading.Lock, try-except na set/clear/cleanup, specifické výjimky místo bare except
+- `config.py` — try-except na shutil.move migrace, redundantní import
+
+### Nové testy ✅
+
+| Soubor | Testů | Pokrytí |
+|--------|-------|---------|
+| `tests/unit/avatar/test_cache.py` | 25 | CacheEntry, AICache CRUD, TTL, errors, thread safety |
+| `tests/unit/avatar/test_rule_based.py` | 14 | RuleBasedResult, provider, normalize, exceptions |
+
+**Verifikace:** 1435 passed, 0 failed, 7 skipped ✅
+
+---
+
+## Plan 2 (BUDOUCÍ): AvatarTaskService — Generalizace na multi-task AI
+
+> ⚠️ Toto je ZÁMĚR, ne implementační plán. Detaily budou v samostatném PLAN souboru.
+
+**Současný stav:**
+- `AvatarAIService` je single-purpose — POUZE parameter extraction
+- Hardcoded `PARAMETER_EXTRACTION_PROMPT` jako system prompt
+- Startuje vlastní engine instance per-service (resource leak v API)
+- Skills system (`src/avatar/skills.py`) je oddělený — slouží jen pro CHAT avatar
+
+**Vize Plan 2:**
+- Generalizovat na `AvatarTaskService` — jeden service, více task typů
+- Task typy: `extraction`, `translation`, `tagging`, `workflow_generation`, ...
+- Každý task = skill s vlastním promptem, validací a output parsingem
+- Singleton engine sdílený napříč tasky (řeší resource leak)
+- Konfigurace tasků přes YAML (skills-like systém)
+
+**Otevřené otázky:**
+- Sdílet engine s chat avatarem, nebo dedikovaný task engine?
+- Tasks jako skill markdown soubory, nebo Python classes?
+- Jak řešit Ollama fallback (nemá avatar-engine support)?
+
+---
+
+*Last Updated: 2026-02-27 (KROKY 1-11 dokončeny)*
+*Status: Iterace 1-11 ✅. 21 MCP tools, 550+ testů, 8 docs, ~25 Playwright E2E testů. Frontend PŘEDĚLÁNO s @avatar-engine/react. Legacy src/ai/ smazán, sdílená infra v src/avatar/. Registry verze (npm+PyPI) s version pinning a compat checks. Kompletní user-facing dokumentace. E2E testy pokrývají UI transitions, suggestions, settings, a live chat.*

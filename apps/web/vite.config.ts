@@ -20,6 +20,11 @@ export default defineConfig({
         ws: true,
         rewrite: (path) => '/api/avatar/engine' + path,
       },
+      '/api/avatar/models': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => '/api/avatar/engine' + path,
+      },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

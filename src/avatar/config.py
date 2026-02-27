@@ -1,12 +1,13 @@
 """
 Avatar Engine configuration loader.
 
-Loads avatar configuration from ~/.synapse/avatar.yaml with fallback defaults.
+Loads avatar configuration from ~/.synapse/store/state/avatar.yaml with fallback defaults.
 The config file controls provider selection, safety mode, skills, and MCP servers.
 """
 
 import logging
 import os
+import shutil as _shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +20,15 @@ DEFAULT_CONFIG_FILENAME = "avatar.yaml"
 DEFAULT_SKILLS_DIR = "avatar/skills"
 DEFAULT_CUSTOM_SKILLS_DIR = "avatar/custom-skills"
 DEFAULT_AVATARS_DIR = "avatar/avatars"
+
+
+@dataclass
+class ExtractionConfig:
+    """Configuration for AI parameter extraction."""
+    cache_enabled: bool = True
+    cache_ttl_days: int = 30
+    cache_directory: str = "~/.synapse/store/data/cache/ai"
+    always_fallback_to_rule_based: bool = True
 
 
 @dataclass
@@ -54,6 +64,9 @@ class AvatarConfig:
     # Provider-specific configs
     providers: Dict[str, AvatarProviderConfig] = field(default_factory=dict)
 
+    # Extraction settings (parameter extraction from descriptions)
+    extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
+
     # MCP server definitions
     mcp_servers: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -74,7 +87,7 @@ class AvatarConfig:
 def _resolve_paths(synapse_root: Path) -> Dict[str, Path]:
     """Resolve avatar-related paths from Synapse root."""
     return {
-        "config_path": synapse_root / DEFAULT_CONFIG_FILENAME,
+        "config_path": synapse_root / "store" / "state" / DEFAULT_CONFIG_FILENAME,
         "skills_dir": synapse_root / DEFAULT_SKILLS_DIR,
         "custom_skills_dir": synapse_root / DEFAULT_CUSTOM_SKILLS_DIR,
         "avatars_dir": synapse_root / DEFAULT_AVATARS_DIR,
@@ -106,6 +119,22 @@ def load_avatar_config(
     if config_path is None:
         config_path = paths["config_path"]
 
+    # Auto-migrate from old location (~/.synapse/avatar.yaml → store/state/)
+    if not config_path.exists():
+        old_path = synapse_root / DEFAULT_CONFIG_FILENAME
+        if old_path.exists():
+            try:
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                _shutil.move(str(old_path), str(config_path))
+                logger.info("Migrated %s → %s", old_path, config_path)
+            except OSError as e:
+                logger.warning(
+                    "Failed to migrate avatar config from %s → %s: %s. "
+                    "Using old location.",
+                    old_path, config_path, e,
+                )
+                config_path = old_path
+
     # Load YAML if exists
     raw_config: Dict[str, Any] = {}
     if config_path.exists():
@@ -123,16 +152,31 @@ def load_avatar_config(
     else:
         logger.debug(f"No avatar config at {config_path}, using defaults")
 
+    # Parse extraction config
+    engine_cfg = raw_config.get("engine", {})
+    extraction_raw = engine_cfg.get("extraction", {})
+    extraction = ExtractionConfig(
+        cache_enabled=extraction_raw.get("cache_enabled", True),
+        cache_ttl_days=extraction_raw.get("cache_ttl_days", 30),
+        cache_directory=extraction_raw.get(
+            "cache_directory", "~/.synapse/store/data/cache/ai"
+        ),
+        always_fallback_to_rule_based=extraction_raw.get(
+            "always_fallback_to_rule_based", True
+        ),
+    )
+
     # Build config from raw YAML + defaults
     config = AvatarConfig(
         enabled=raw_config.get("enabled", True),
         provider=raw_config.get("provider", "gemini"),
-        safety=raw_config.get("engine", {}).get("safety_instructions", "safe"),
+        safety=engine_cfg.get("safety_instructions", "safe"),
         system_prompt=raw_config.get("system_prompt", AvatarConfig.system_prompt),
-        working_dir=raw_config.get("engine", {}).get(
+        extraction=extraction,
+        working_dir=engine_cfg.get(
             "working_dir", str(synapse_root)
         ),
-        max_history=raw_config.get("engine", {}).get("max_history", 100),
+        max_history=engine_cfg.get("max_history", 100),
         mcp_servers=raw_config.get("mcp_servers", {}),
         config_path=config_path,
         skills_dir=paths["skills_dir"],
@@ -192,7 +236,7 @@ def detect_available_providers() -> List[Dict[str, Any]]:
 
     Returns list of provider info dicts with name, command, installed status.
     """
-    import shutil  # noqa: module-level import not desired (optional dependency context)
+    shutil = _shutil  # Use module-level import
 
     providers = [
         {

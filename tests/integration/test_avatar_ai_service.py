@@ -1,21 +1,22 @@
 """
-Integration tests for AvatarAIService.
+Integration tests for AvatarTaskService (via AvatarAIService backward compat).
 
 Tests the full extraction flow with mocked BridgeResponse
-(not mocking the engine itself — testing the complete pipeline).
+(not mocking the engine itself -- testing the complete pipeline).
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ai.settings import AIServicesSettings
-from src.ai.tasks.base import TaskResult
 from src.avatar.ai_service import AvatarAIService
+from src.avatar.config import AvatarConfig, AvatarProviderConfig, ExtractionConfig
+from src.avatar.task_service import AvatarTaskService
+from src.avatar.tasks.base import TaskResult
 
 
 # =============================================================================
@@ -43,25 +44,34 @@ class FakeBridgeResponse:
 # =============================================================================
 
 
-def _make_settings(tmp_path: Path, **overrides) -> AIServicesSettings:
-    """Create settings for integration tests."""
-    defaults = {
-        "enabled": True,
-        "use_avatar_engine": True,
-        "avatar_engine_provider": "gemini",
-        "avatar_engine_model": "gemini-test",
-        "avatar_engine_timeout": 30,
-        "cache_enabled": True,
-        "cache_directory": str(tmp_path / "cache"),
-        "cache_ttl_days": 30,
-        "always_fallback_to_rule_based": True,
-        "show_provider_in_results": True,
-    }
-    defaults.update(overrides)
-    settings = AIServicesSettings()
-    for k, v in defaults.items():
-        setattr(settings, k, v)
-    return settings
+def _make_config(tmp_path: Path, **overrides) -> AvatarConfig:
+    """Create config for integration tests."""
+    ext_overrides = {}
+    config_overrides = {}
+    for k, v in overrides.items():
+        if k in ("cache_enabled", "cache_ttl_days", "cache_directory",
+                  "always_fallback_to_rule_based"):
+            ext_overrides[k] = v
+        else:
+            config_overrides[k] = v
+
+    ext_overrides.setdefault("cache_directory", str(tmp_path / "cache"))
+    ext_overrides.setdefault("cache_enabled", True)
+    extraction = ExtractionConfig(**ext_overrides)
+
+    provider = config_overrides.pop("provider", "gemini")
+    providers = config_overrides.pop("providers", {
+        "gemini": AvatarProviderConfig(model="gemini-test", enabled=True),
+        "claude": AvatarProviderConfig(model="claude-test", enabled=True),
+        "codex": AvatarProviderConfig(model="", enabled=True),
+    })
+
+    return AvatarConfig(
+        provider=provider,
+        extraction=extraction,
+        providers=providers,
+        **config_overrides,
+    )
 
 
 # =============================================================================
@@ -74,8 +84,8 @@ class TestAvatarExtractFlow:
 
     def test_full_extraction_returns_task_result(self, tmp_path):
         """Full extraction pipeline produces valid TaskResult."""
-        settings = _make_settings(tmp_path)
-        service = AvatarAIService(settings)
+        config = _make_config(tmp_path, cache_enabled=False)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.return_value = FakeBridgeResponse(
@@ -88,6 +98,7 @@ class TestAvatarExtractFlow:
             success=True,
         )
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
         result = service.extract_parameters(
             "Use DPM++ 2M Karras sampler, 20-30 steps, CFG 7, clip skip 2"
@@ -105,8 +116,8 @@ class TestAvatarExtractFlow:
 
     def test_cache_persistence(self, tmp_path):
         """Results are persisted to cache files on disk."""
-        settings = _make_settings(tmp_path)
-        service = AvatarAIService(settings)
+        config = _make_config(tmp_path)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.return_value = FakeBridgeResponse(
@@ -114,6 +125,7 @@ class TestAvatarExtractFlow:
             success=True,
         )
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
         service.extract_parameters("Cache test description")
 
@@ -130,8 +142,8 @@ class TestAvatarExtractFlow:
 
     def test_reextract_uses_cache(self, tmp_path):
         """Re-extraction of same description uses cache, not engine."""
-        settings = _make_settings(tmp_path)
-        service = AvatarAIService(settings)
+        config = _make_config(tmp_path)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.return_value = FakeBridgeResponse(
@@ -139,6 +151,7 @@ class TestAvatarExtractFlow:
             success=True,
         )
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
         r1 = service.extract_parameters("Same description")
         r2 = service.extract_parameters("Same description")
@@ -158,23 +171,20 @@ class TestAvatarFallbackChain:
     """Test fallback behavior when avatar engine fails."""
 
     def test_engine_fails_rule_based_succeeds(self, tmp_path):
-        """When engine fails, rule-based extraction kicks in."""
-        settings = _make_settings(
-            tmp_path,
-            always_fallback_to_rule_based=True,
-        )
-        service = AvatarAIService(settings)
+        """When engine fails, rule-based extraction kicks in via task fallback."""
+        config = _make_config(tmp_path, cache_enabled=False)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.side_effect = RuntimeError("Engine crashed")
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
-        with patch("src.avatar.ai_service.AvatarAIService._execute_rule_based") as mock_rb:
-            mock_rb.return_value = TaskResult(
+        with patch("src.avatar.providers.rule_based.RuleBasedProvider.execute") as mock_rb:
+            from src.avatar.providers.rule_based import RuleBasedResult
+            mock_rb.return_value = RuleBasedResult(
                 success=True,
                 output={"steps": 20},
-                provider_id="rule_based",
-                model="regexp",
             )
             result = service.extract_parameters("Steps: 20")
 
@@ -183,18 +193,17 @@ class TestAvatarFallbackChain:
 
     def test_engine_and_rule_based_both_fail(self, tmp_path):
         """When both engine and rule-based fail, returns error."""
-        settings = _make_settings(
-            tmp_path,
-            always_fallback_to_rule_based=True,
-        )
-        service = AvatarAIService(settings)
+        config = _make_config(tmp_path, cache_enabled=False)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.side_effect = RuntimeError("Engine crashed")
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
-        with patch("src.avatar.ai_service.AvatarAIService._execute_rule_based") as mock_rb:
-            mock_rb.return_value = TaskResult(
+        with patch("src.avatar.providers.rule_based.RuleBasedProvider.execute") as mock_rb:
+            from src.avatar.providers.rule_based import RuleBasedResult
+            mock_rb.return_value = RuleBasedResult(
                 success=False,
                 error="Rule-based also failed",
             )
@@ -204,33 +213,17 @@ class TestAvatarFallbackChain:
 
 
 # =============================================================================
-# TestAvatarSettingsIntegration
+# TestAvatarProviderConfig
 # =============================================================================
 
 
-class TestAvatarSettingsIntegration:
-    """Test settings affect service behavior."""
-
-    def test_feature_flag_toggle(self, tmp_path):
-        """get_ai_service returns correct type based on flag."""
-        from src.ai import get_ai_service, AIService
-
-        settings_on = _make_settings(tmp_path, use_avatar_engine=True)
-        settings_off = _make_settings(tmp_path, use_avatar_engine=False)
-
-        service_on = get_ai_service(settings_on)
-        service_off = get_ai_service(settings_off)
-
-        assert isinstance(service_on, AvatarAIService)
-        assert isinstance(service_off, AIService)
+class TestAvatarProviderConfig:
+    """Test provider config affects service behavior."""
 
     def test_provider_in_result(self, tmp_path):
         """Provider name appears in result and tracking."""
-        settings = _make_settings(
-            tmp_path,
-            avatar_engine_provider="claude",
-        )
-        service = AvatarAIService(settings)
+        config = _make_config(tmp_path, provider="claude", cache_enabled=False)
+        service = AvatarAIService(config)
 
         mock_engine = MagicMock()
         mock_engine.chat_sync.return_value = FakeBridgeResponse(
@@ -238,20 +231,21 @@ class TestAvatarSettingsIntegration:
             success=True,
         )
         service._engine = mock_engine
+        service._current_task_type = "parameter_extraction"
 
         result = service.extract_parameters("Test")
         assert result.provider_id == "avatar:claude"
         assert result.output["_extracted_by"] == "avatar:claude"
 
     def test_different_providers(self, tmp_path):
-        """Different avatar_engine_provider values are reflected in results."""
+        """Different provider values are reflected in results."""
         for provider in ["gemini", "claude", "codex"]:
-            settings = _make_settings(
+            config = _make_config(
                 tmp_path,
-                avatar_engine_provider=provider,
+                provider=provider,
                 cache_enabled=False,
             )
-            service = AvatarAIService(settings)
+            service = AvatarAIService(config)
 
             mock_engine = MagicMock()
             mock_engine.chat_sync.return_value = FakeBridgeResponse(
@@ -259,6 +253,33 @@ class TestAvatarSettingsIntegration:
                 success=True,
             )
             service._engine = mock_engine
+            service._current_task_type = "parameter_extraction"
 
             result = service.extract_parameters("Test")
             assert result.provider_id == f"avatar:{provider}"
+
+
+# =============================================================================
+# TestBackwardCompatibility
+# =============================================================================
+
+
+class TestBackwardCompatibility:
+    """Test backward compat: AvatarAIService is AvatarTaskService."""
+
+    def test_import_alias(self):
+        """AvatarAIService from ai_service is AvatarTaskService."""
+        assert AvatarAIService is AvatarTaskService
+
+    def test_service_has_execute_task(self, tmp_path):
+        """Service has execute_task method (new multi-task API)."""
+        config = _make_config(tmp_path)
+        service = AvatarAIService(config)
+        assert hasattr(service, "execute_task")
+
+    def test_service_has_registry(self, tmp_path):
+        """Service has registry attribute."""
+        config = _make_config(tmp_path)
+        service = AvatarAIService(config)
+        assert hasattr(service, "registry")
+        assert "parameter_extraction" in service.registry.list_tasks()
