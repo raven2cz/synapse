@@ -225,6 +225,7 @@ export function MediaPreview({
   const [videoError, setVideoError] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [forceVideoDisplay, setForceVideoDisplay] = useState(false) // Fallback when thumbnail fails
+  const [isNearViewport, setIsNearViewport] = useState(!autoPlay) // Skip observer when not autoPlay
 
   // Computed: should we blur this content?
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
@@ -270,8 +271,27 @@ export function MediaPreview({
     return src
   }, [src, isVideo])
 
+  // Defer video loading until element is near the viewport.
+  // Prevents saturating the browser connection pool when many videos render at once.
+  useEffect(() => {
+    if (!autoPlay || !isVideo || !containerRef.current) return
+    const el = containerRef.current
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsNearViewport(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: '300px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [autoPlay, isVideo])
+
   // Should we show video element (for playback or fallback)?
-  const showVideo = isVideo && (autoPlay || (playFullOnHover && isHovering)) && !videoError
+  // autoPlay is gated by isNearViewport to prevent loading all videos simultaneously
+  const showVideo = isVideo && ((autoPlay && isNearViewport) || (playFullOnHover && isHovering)) && !videoError
   // Should the video ELEMENT be visible (even if not playing, e.g. for fallback)?
   const isVideoVisible = (showVideo || forceVideoDisplay) && !videoError
 

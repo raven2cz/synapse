@@ -24,7 +24,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { AvatarPicker, useAvatarThumb, getModelsForProvider, DEFAULT_AVATAR_ID, LS_SELECTED_AVATAR } from '@avatar-engine/react'
-import { ALL_AVATARS } from '../../avatar/AvatarProvider'
+import { ALL_AVATARS, useAvatar } from '../../avatar/AvatarProvider'
 import {
   getAvatarConfig,
   getAvatarProviders,
@@ -258,6 +258,10 @@ function ModelSelect({ value, models, placeholder, disabled, onChange }: ModelSe
 export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSettings(_props, ref) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+
+  // Dynamic models from avatar-engine (scraped from provider documentation pages)
+  const avatarCtx = useAvatar()
+  const dynamicProviders = avatarCtx?.dynamicProviders
   const [skillsExpanded, setSkillsExpanded] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [selectedAvatarId, setSelectedAvatarId] = useState(() => {
@@ -598,10 +602,10 @@ export const AvatarSettings = forwardRef<AvatarSettingsHandle>(function AvatarSe
                       </div>
                     </div>
 
-                    {/* Model selector */}
+                    {/* Model selector — dynamic models from backend, fallback to static */}
                     <ModelSelect
                       value={model}
-                      models={getModelsForProvider(provName)}
+                      models={dynamicProviders?.find(p => p.id === provName)?.models ?? getModelsForProvider(provName)}
                       placeholder={t('settingsAvatar.modelPlaceholder')}
                       disabled={!installed || !isEnabled}
                       onChange={(m) => handleModelChange(provName, m)}

@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Pack Data Query Invalidation Tests
  *

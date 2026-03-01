@@ -725,23 +725,27 @@ export function FullscreenMediaViewer({
               {items.map((item, idx) => {
                 const itemIsVideo = item.type === 'video' || isLikelyVideo(item.url)
                 const thumb = getThumbUrl(item)
+                // Local video files (.mp4) can't be rendered as <img> — use <video> to show first frame
+                const thumbIsVideoFile = /\.(mp4|webm|mov|avi|mkv)/i.test(thumb)
                 return (
                   <button key={idx} ref={el => { if (el) thumbRefs.current.set(idx, el); else thumbRefs.current.delete(idx) }}
                     onClick={() => navigateTo(idx)} disabled={isAnimating}
                     className={clsx('relative flex-shrink-0 rounded-lg overflow-hidden transition-all duration-200 w-24 h-24',
                       idx === currentIndex ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-black scale-110' : 'opacity-60 hover:opacity-100 hover:scale-105',
                       isAnimating && 'pointer-events-none')}>
-                    <img src={thumb} alt="" className={clsx('w-full h-full object-cover', item.nsfw && nsfwBlurEnabled && 'blur-md')}
-                      onError={(e) => {
-                        const img = e.target as HTMLImageElement
-                        // For videos, fallback to transformed thumbnail URL (not raw video URL)
-                        // For images, fallback to original URL
-                        const fallbackUrl = itemIsVideo && isCivitaiDirectUrl(item.url || '')
-                          ? getCivitaiThumbnailUrl(item.url, 450)
-                          : item.url
-                        if (img.src !== fallbackUrl) img.src = fallbackUrl
-                      }}
-                    />
+                    {thumbIsVideoFile ? (
+                      <video src={`${thumb}#t=0.1`} className={clsx('w-full h-full object-cover', item.nsfw && nsfwBlurEnabled && 'blur-md')} preload="metadata" muted playsInline />
+                    ) : (
+                      <img src={thumb} alt="" className={clsx('w-full h-full object-cover', item.nsfw && nsfwBlurEnabled && 'blur-md')}
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement
+                          const fallbackUrl = itemIsVideo && isCivitaiDirectUrl(item.url || '')
+                            ? getCivitaiThumbnailUrl(item.url, 450)
+                            : item.url
+                          if (img.src !== fallbackUrl) img.src = fallbackUrl
+                        }}
+                      />
+                    )}
                     {itemIsVideo && <div className="absolute inset-0 flex items-center justify-center bg-black/30"><Play className="w-5 h-5 text-white fill-white" /></div>}
                     <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white/80 text-xs font-medium">{idx + 1}</div>
                   </button>
