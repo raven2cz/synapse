@@ -712,7 +712,8 @@
     "inventory": "Inventář",
     "profiles": "Profily",
     "settings": "Nastavení",
-    "downloads": "Stahování"
+    "downloads": "Stahování",
+    "avatar": "AI Asistent"
   },
   "header": {
     "tagline": "Správce modelů založený na packách",
@@ -1688,6 +1689,141 @@
       "updateModelInfo": "Synchronizovat informace o modelu",
       "updateModelInfoDesc": "Aktualizovat trigger slova, základní model a další metadata z Civitai.",
       "apply": "Použít aktualizaci"
+    }
+  },
+  "settingsAvatar": {
+    "title": "AI Asistent (Avatar Engine)",
+    "subtitle": "AI asistent poháněný avatar-engine",
+    "configReadOnly": "Poskytovatel a model lze přepnout živě. Ostatní nastavení se spravují přes avatar.yaml:",
+    "installed": "Nainstalováno",
+    "notInstalled": "Nenainstalováno",
+    "none": "Žádný",
+    "activeProvider": "Aktivní poskytovatel",
+    "availableProvider": "Dostupný",
+    "stats": {
+      "engine": "Engine",
+      "provider": "Poskytovatel",
+      "serviceDefault": "Výchozí služba",
+      "safety": "Bezpečnostní režim",
+      "skills": "Dovednosti"
+    },
+    "masterToggle": "Povolit AI asistenta",
+    "masterToggleDesc": "Při vypnutí je chatovací tlačítko skryté a všechny AI funkce jsou neaktivní.",
+    "providersTitle": "AI Poskytovatelé",
+    "providerEnabled": "Povoleno pro chat",
+    "providerDefault": "Výchozí pro služby",
+    "providerNotInstalled": "Nenainstalováno",
+    "providerDefaultHint": "Backend služby (MCP nástroje, AI extrakce) používají výchozího poskytovatele a model. V chatovacím okně lze volně přepínat mezi všemi povolenými poskytovateli.",
+    "modelPlaceholder": "Výchozí model (volitelné)",
+    "safetyTitle": "Bezpečnostní režim",
+    "currentSafety": "Aktuální bezpečnostní režim",
+    "safety": {
+      "safe": "Bezpečný",
+      "safeDesc": "Všechny příkazy vyžadují explicitní schválení před spuštěním.",
+      "ask": "Dotázat se",
+      "askDesc": "AI se zeptá před spuštěním potenciálně nebezpečných příkazů.",
+      "unrestricted": "Neomezený",
+      "unrestrictedDesc": "Příkazy se spouští bez potvrzení. Používejte opatrně."
+    },
+    "skillsTitle": "Dovednosti",
+    "builtinSkills": "{{count}} vestavěných",
+    "customSkills": "{{count}} vlastních",
+    "builtinLabel": "Vestavěné",
+    "customLabel": "Vlastní",
+    "avatarsTitle": "Avatary",
+    "builtinAvatars": "8 vestavěných avatarů",
+    "avatarCount": "{{builtin}} vestavěných, {{custom}} vlastních",
+    "changeAvatar": "Změnit avatar",
+    "avatarsHint": "Vlastní avatary lze přidat do adresáře avatars/. Viz dokumentace avatar-engine.",
+    "safetyConfigHint": "Bezpečnostní režim se nastavuje v avatar.yaml. Po změnách restartujte Synapse.",
+    "cacheTitle": "Údržba cache",
+    "cacheEntries": "Záznamy",
+    "cacheSize": "Velikost",
+    "cacheTTL": "TTL",
+    "cacheDays": "{{count}} dní",
+    "cacheCleanup": "Vyčistit expirované",
+    "cacheClearAll": "Vymazat vše",
+    "cacheCleared": "Cache vymazána ({{count}} záznamů odstraněno)",
+    "cacheCleaned": "Expirované záznamy vyčištěny ({{count}} odstraněno)",
+    "configFile": "Konfigurační soubor",
+    "configFileHint": "Upravte tento soubor pro změnu bezpečnostního režimu a dalších pokročilých nastavení. Po změnách restartujte Synapse.",
+    "loadFailed": "Nepodařilo se načíst konfiguraci avatara. Zkontrolujte, zda běží backend."
+  },
+  "avatar": {
+    "title": "AI Asistent",
+    "loading": "Připojování k AI asistentovi...",
+    "fab": {
+      "openChat": "Otevřít AI asistenta",
+      "setupRequired": "AI Asistent — Vyžadováno nastavení"
+    },
+    "chat": {
+      "welcomeMessage": "Ahoj! Jsem tvůj Synapse AI asistent. Mohu ti pomoci spravovat packy, řešit závislosti, vysvětlit parametry generování a další. Co bys chtěl/a udělat?",
+      "placeholder": "Avatar Engine zatím není připojen. Tento chat bude plně funkční po instalaci a konfiguraci avatar-engine.",
+      "thinking": "Přemýšlím...",
+      "inputPlaceholder": "Zeptej se na modely, parametry, závislosti...",
+      "enterHint": "Enter pro odeslání · Shift+Enter pro nový řádek",
+      "skillsCount": "{{count}} dovedností"
+    },
+    "suggestions": {
+      "inventory": "Kolik místa zabírají moje modely?",
+      "parameters": "Vysvětli CFG Scale a doporučené hodnoty",
+      "dependencies": "Které packy mají chybějící závislosti?",
+      "packsPage": {
+        "overview": "Dej mi přehled nainstalovaných packů",
+        "unresolved": "Které packy mají nevyřešené závislosti?",
+        "recommend": "Doporuč workflow pro moje packy"
+      },
+      "packDetail": {
+        "explain": "Vysvětli, co dělá {{packName}}",
+        "dependencies": "Zkontroluj závislosti pro {{packName}}",
+        "workflow": "Vygeneruj workflow pro {{packName}}"
+      },
+      "inventoryPage": {
+        "diskUsage": "Kolik místa zabírají moje modely?",
+        "orphans": "Jsou nějaké osiřelé bloby k vyčištění?",
+        "cleanup": "Pomoz mi uvolnit místo na disku"
+      },
+      "browsePage": {
+        "recommend": "Doporuč model pro anime styl",
+        "compare": "Porovnej SDXL vs Flux checkpointy",
+        "trending": "Jaké modely jsou teď populární?"
+      },
+      "downloadsPage": {
+        "status": "Jaký je stav mých stahování?",
+        "queue": "Jsou nějaká neúspěšná stahování k opakování?"
+      },
+      "profilesPage": {
+        "explain": "Vysvětli, jak fungují profily",
+        "conflicts": "Jsou nějaké konflikty souborů mezi profily?"
+      },
+      "settingsPage": {
+        "optimize": "Navrhni optimální nastavení pro můj setup",
+        "providers": "Pomoz mi nakonfigurovat AI poskytovatele"
+      }
+    },
+    "setup": {
+      "title": "AI Asistent",
+      "description": "Synapse obsahuje volitelného AI asistenta poháněného avatar-engine. Může ti pomoci spravovat inventář modelů, řešit závislosti, generovat workflow a vysvětlit parametry generování.",
+      "statusTitle": "Aktuální stav",
+      "engineLabel": "Avatar Engine",
+      "providerLabel": "AI Poskytovatel (CLI)",
+      "providersTitle": "Dostupní poskytovatelé",
+      "installed": "Připraveno",
+      "notInstalled": "Nenainstalováno",
+      "stepsTitle": "Kroky nastavení",
+      "step1Title": "Nainstalovat avatar-engine",
+      "step1Desc": "pip install avatar-engine[web]",
+      "step2Title": "Nainstalovat AI CLI poskytovatele",
+      "step2Desc": "Nainstalujte Gemini CLI, Claude Code nebo Codex CLI",
+      "step3Title": "Restartovat Synapse",
+      "step3Desc": "AI asistent bude dostupný po restartu",
+      "featuresTitle": "Co AI umí",
+      "feature1": "Chytré řešení",
+      "feature1Desc": "Najít správný model pro libovolnou závislost napříč lokálním inventářem, Civitai a HuggingFace",
+      "feature2": "Generování workflow",
+      "feature2Desc": "Generovat ComfyUI workflow optimalizované pro vaše modely a parametry",
+      "feature3": "MCP nástroje",
+      "feature3Desc": "Spravovat inventář, kontrolovat aktualizace a analyzovat modely přirozenou konverzací"
     }
   }
 }

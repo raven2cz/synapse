@@ -153,6 +153,83 @@ fi
 echo ""
 
 # ============================================================================
+# Avatar Engine (optional)
+# ============================================================================
+
+echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Installing Avatar Engine (optional AI assistant)...${NC}"
+echo ""
+
+AVATAR_INSTALLED=false
+if [ "$USE_UV" = true ]; then
+    if uv pip install --python .venv/bin/python "avatar-engine[web]" 2>/dev/null; then
+        AVATAR_INSTALLED=true
+    fi
+else
+    if .venv/bin/pip install "avatar-engine[web]" 2>/dev/null; then
+        AVATAR_INSTALLED=true
+    fi
+fi
+
+if [ "$AVATAR_INSTALLED" = true ]; then
+    echo -e "${GREEN}  ✓ Avatar Engine installed${NC}"
+else
+    echo -e "${YELLOW}  ! Avatar Engine not available (package not yet published)${NC}"
+    echo -e "${YELLOW}    The AI assistant will be disabled. Synapse works fine without it.${NC}"
+fi
+
+# Install MCP SDK for Synapse Store tools
+MCP_INSTALLED=false
+if [ "$USE_UV" = true ]; then
+    if uv pip install --python .venv/bin/python "mcp>=1.0" 2>/dev/null; then
+        MCP_INSTALLED=true
+    fi
+else
+    if .venv/bin/pip install "mcp>=1.0" 2>/dev/null; then
+        MCP_INSTALLED=true
+    fi
+fi
+
+if [ "$MCP_INSTALLED" = true ]; then
+    echo -e "${GREEN}  ✓ MCP SDK installed (Synapse Store tools for AI avatar)${NC}"
+else
+    echo -e "${YELLOW}  ! MCP SDK not available. AI avatar will not have store tools.${NC}"
+fi
+
+# Create avatar config directory and default config
+mkdir -p ~/.synapse/avatar/skills
+mkdir -p ~/.synapse/store/state
+if [ ! -f ~/.synapse/store/state/avatar.yaml ]; then
+    # Migrate from old location if exists
+    if [ -f ~/.synapse/avatar.yaml ]; then
+        mv ~/.synapse/avatar.yaml ~/.synapse/store/state/avatar.yaml
+        echo -e "${GREEN}  ✓ Migrated avatar.yaml → ~/.synapse/store/state/avatar.yaml${NC}"
+    elif [ -f "$PROJECT_ROOT/config/avatar.yaml.example" ]; then
+        cp "$PROJECT_ROOT/config/avatar.yaml.example" ~/.synapse/store/state/avatar.yaml
+        echo -e "${GREEN}  ✓ Default avatar config created at ~/.synapse/store/state/avatar.yaml${NC}"
+    fi
+fi
+
+# Copy bundled skills
+if [ -d "$PROJECT_ROOT/config/avatar/skills" ]; then
+    cp "$PROJECT_ROOT/config/avatar/skills/"*.md ~/.synapse/avatar/skills/ 2>/dev/null
+    SKILL_COUNT=$(ls ~/.synapse/avatar/skills/*.md 2>/dev/null | wc -l)
+    echo -e "${GREEN}  ✓ ${SKILL_COUNT} skill files installed${NC}"
+fi
+
+# Detect AI CLI providers
+echo ""
+echo -e "  ${CYAN}AI CLI Provider Detection:${NC}"
+for CLI_NAME in gemini claude codex; do
+    if command -v "$CLI_NAME" &> /dev/null; then
+        echo -e "  ${GREEN}  ✓ $CLI_NAME found${NC}"
+    else
+        echo -e "  ${YELLOW}  - $CLI_NAME not found${NC}"
+    fi
+done
+
+echo ""
+
+# ============================================================================
 # Node.js Dependencies
 # ============================================================================
 

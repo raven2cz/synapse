@@ -204,7 +204,6 @@ export function usePackEdit(options: UsePackEditOptions = {}): UsePackEditReturn
       }
       autoSaveTimerRef.current = setTimeout(() => {
         // Auto-save would go here
-        console.log('[usePackEdit] Auto-save triggered')
       }, autoSaveInterval)
     }
 

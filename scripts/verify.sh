@@ -36,11 +36,13 @@ RUN_BACKEND=true
 RUN_FRONTEND=true
 RUN_TYPES=true
 RUN_BUILD=true
+RUN_AVATAR=true
+RUN_E2E=false
 QUICK_MODE=false
 VERBOSE=false
 
-# Test filters
-PYTEST_MARKERS="not smoke"
+# Test filters — external tests (real CDN/API) excluded by default
+PYTEST_MARKERS="not smoke and not external"
 PYTEST_PATHS="tests/"
 
 # ============================================================================
@@ -71,10 +73,17 @@ show_help() {
     echo "  --smoke           Run offline smoke tests (CDN/proxy pipeline)"
     echo "  --smoke-live      Run all smoke tests including live CDN"
     echo "  --no-slow         Exclude tests marked @pytest.mark.slow"
+    echo "  --external        Include external tests (real CDN/API calls)"
+    echo "  --full            Run ALL tests (external + slow + smoke)"
+    echo "  --avatar          Run only avatar-engine version checks"
+    echo "  --no-avatar       Skip avatar-engine version checks"
+    echo "  --e2e             Run Playwright E2E tests (requires running servers)"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./scripts/verify.sh                    # Full verification"
+    echo "  ./scripts/verify.sh                    # Standard CI (no external)"
     echo "  ./scripts/verify.sh --quick            # Fast verification"
+    echo "  ./scripts/verify.sh --external         # Include real CDN/API tests"
+    echo "  ./scripts/verify.sh --full             # ALL tests (pre-release)"
     echo "  ./scripts/verify.sh --backend --unit   # Only Python unit tests"
     echo "  ./scripts/verify.sh -b --no-slow       # Backend without slow tests"
     echo "  ./scripts/verify.sh --lint             # Architecture checks only"
@@ -92,7 +101,8 @@ show_help() {
     echo -e "${BOLD}Pytest Markers:${NC}"
     echo "  @pytest.mark.slow         # Long-running tests"
     echo "  @pytest.mark.integration  # Require multiple components"
-    echo "  @pytest.mark.civitai      # Civitai API related"
+    echo "  @pytest.mark.external     # Real external services (excluded by default)"
+    echo "  @pytest.mark.civitai      # Civitai API related (subset of external)"
     echo ""
 }
 
@@ -109,7 +119,7 @@ while [[ $# -gt 0 ]]; do
         --quick|-q)
             QUICK_MODE=true
             RUN_BUILD=false
-            PYTEST_MARKERS="not slow and not smoke"
+            PYTEST_MARKERS="not slow and not smoke and not external"
             shift
             ;;
         --verbose|-v)
@@ -179,6 +189,32 @@ while [[ $# -gt 0 ]]; do
             fi
             shift
             ;;
+        --avatar)
+            RUN_AVATAR=true
+            RUN_BACKEND=false
+            RUN_FRONTEND=false
+            RUN_TYPES=false
+            RUN_BUILD=false
+            shift
+            ;;
+        --no-avatar)
+            RUN_AVATAR=false
+            shift
+            ;;
+        --e2e)
+            RUN_E2E=true
+            shift
+            ;;
+        --external)
+            # Include external tests (real CDN/API calls)
+            PYTEST_MARKERS="not smoke"
+            shift
+            ;;
+        --full)
+            # Run ALL tests including external, slow, smoke
+            PYTEST_MARKERS=""
+            shift
+            ;;
         *)
             echo -e "${RED}Unknown option: $1${NC}"
             echo "Use --help for usage information"
@@ -219,10 +255,12 @@ STEP=0
 TOTAL_STEPS=0
 
 # Calculate total steps
+[ "$RUN_AVATAR" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))   # avatar version check
 [ "$RUN_BACKEND" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 2))  # env + tests
 [ "$RUN_FRONTEND" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 2)) # env + tests
 [ "$RUN_TYPES" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 [ "$RUN_BUILD" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
+[ "$RUN_E2E" == true ] && TOTAL_STEPS=$((TOTAL_STEPS + 1))
 
 # ============================================================================
 # Helper Functions
@@ -250,6 +288,52 @@ next_step() {
     STEP=$((STEP + 1))
     echo -e "${BOLD}[$STEP/$TOTAL_STEPS] $1${NC}"
 }
+
+# ============================================================================
+# Avatar Engine Version Check
+# ============================================================================
+
+if [ "$RUN_AVATAR" == true ]; then
+
+    next_step "Avatar Engine Version Check"
+
+    # Python avatar-engine
+    if command -v uv &> /dev/null; then
+        AE_PY_VERSION=$(uv run python -c "
+try:
+    import avatar_engine
+    print(getattr(avatar_engine, '__version__', 'unknown'))
+except ImportError:
+    print('not_installed')
+" 2>/dev/null || echo "error")
+    else
+        AE_PY_VERSION="error"
+    fi
+
+    if [ "$AE_PY_VERSION" == "not_installed" ]; then
+        check_warning "Python avatar-engine: not installed"
+    elif [ "$AE_PY_VERSION" == "error" ] || [ "$AE_PY_VERSION" == "unknown" ]; then
+        check_warning "Python avatar-engine: version unknown"
+    else
+        check_passed "Python avatar-engine: v${AE_PY_VERSION}"
+    fi
+
+    # npm packages — check they're from registry (not link:)
+    if [ -f "apps/web/pnpm-lock.yaml" ]; then
+        if grep -q "'@avatar-engine.*link:" apps/web/pnpm-lock.yaml 2>/dev/null; then
+            check_failed "npm @avatar-engine packages use link: — should be from registry"
+        else
+            # Extract versions from lockfile (pnpm hoisted store may not expose require())
+            NPM_AE_CORE=$(grep -oP '@avatar-engine/core@\K[0-9]+\.[0-9]+\.[0-9]+' apps/web/pnpm-lock.yaml 2>/dev/null | head -1 || echo "unknown")
+            NPM_AE_REACT=$(grep -oP '@avatar-engine/react@\K[0-9]+\.[0-9]+\.[0-9]+' apps/web/pnpm-lock.yaml 2>/dev/null | head -1 || echo "unknown")
+            check_passed "@avatar-engine/core: v${NPM_AE_CORE}, @avatar-engine/react: v${NPM_AE_REACT}"
+        fi
+    else
+        check_warning "No pnpm-lock.yaml found — skipping npm avatar check"
+    fi
+
+    echo ""
+fi
 
 # ============================================================================
 # Backend Checks
@@ -425,6 +509,40 @@ if [ "$RUN_BUILD" == true ]; then
 fi
 
 cd "$PROJECT_ROOT"
+
+# ============================================================================
+# E2E Tests (Playwright)
+# ============================================================================
+
+if [ "$RUN_E2E" == true ]; then
+
+    next_step "Running E2E Tests (Playwright)"
+
+    if [ ! -d "apps/web" ]; then
+        check_failed "Frontend directory not found: apps/web"
+    else
+        cd apps/web
+        # Run Tier 1 only (exclude @live tests)
+        E2E_CMD="npx playwright test --grep-invert @live"
+        if [ "$VERBOSE" == true ]; then
+            if $E2E_CMD; then
+                check_passed "E2E tests passed"
+            else
+                check_failed "E2E tests FAILED"
+            fi
+        else
+            if $E2E_CMD > /dev/null 2>&1; then
+                check_passed "E2E tests passed"
+            else
+                check_failed "E2E tests FAILED"
+                echo -e "${YELLOW}Running again to show errors:${NC}"
+                $E2E_CMD
+            fi
+        fi
+        cd "$PROJECT_ROOT"
+    fi
+    echo ""
+fi
 
 # ============================================================================
 # Summary

@@ -383,8 +383,8 @@ export const CivitaiPlugin: PackPlugin = {
     )
   },
 
-  onPackLoad: (pack: PackDetail) => {
-    console.log('[CivitaiPlugin] Loaded pack:', pack.name)
+  onPackLoad: (_pack: PackDetail) => {
+    // Pack loaded
   },
 
   validateChanges: (_pack, _changes) => {

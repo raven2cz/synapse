@@ -133,8 +133,8 @@ export const CustomPlugin: PackPlugin = {
     )
   },
 
-  onPackLoad: (pack: PackDetail) => {
-    console.log('[CustomPlugin] Loaded pack:', pack.name, 'category:', pack.pack?.pack_category)
+  onPackLoad: (_pack: PackDetail) => {
+    // Pack loaded
   },
 
   validateChanges: (_pack, changes) => {

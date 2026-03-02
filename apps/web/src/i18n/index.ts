@@ -17,6 +17,7 @@
 
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import { initAvatarI18n } from '@avatar-engine/react'
 
 import en from './locales/en.json'
 import cs from './locales/cs.json'
@@ -32,6 +33,7 @@ const getSavedLanguage = (): string => {
   return browserLang === 'cs' ? 'cs' : 'en'
 }
 
+// 1. Synapse init (main resources)
 i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },
@@ -47,6 +49,10 @@ i18n.use(initReactI18next).init({
     useSuspense: false,
   },
 })
+
+// 2. Avatar i18n — inject avatar translations into the existing instance
+//    (safe even if Synapse re-initializes later)
+initAvatarI18n([initReactI18next])
 
 /**
  * Change the current language and save to localStorage

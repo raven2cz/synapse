@@ -2,6 +2,48 @@
 
 All notable changes to Synapse will be documented in this file.
 
+## [2.8.0] - 2026-03-02 (Avatar Engine v1.2 + Stability Fixes)
+
+### Fixed
+- **Pack detail 500 error** — `config.paths.comfyui` AttributeError crashed pack detail endpoint, blocking all preview loading for ~1 minute (`config.comfyui.base_path` is correct)
+- **Preview loading stalls** — Moved `get_config()` call outside workflow loops (was called N× per request), combined with parallel model discovery in avatar-engine
+- **Video thumbnails in filmstrip** — FullscreenMediaViewer now uses `<video>` element for local `.mp4` thumbnail URLs (browsers can't render video files as `<img>`)
+- **Dynamic models in Settings** — AvatarSettings ModelSelect now uses `dynamicProviders` from avatar-engine context with fallback to static model list
+- **Browser crash on Ctrl+C** — `start-all.sh` now isolates child processes from SIGINT, uses graceful SIGTERM shutdown so Vite closes WebSocket/HMR connections cleanly
+- **Video autoPlay saturation** — MediaPreview defers video loading via IntersectionObserver until element is near viewport
+
+### Changed
+- Upgraded avatar-engine dependency to v1.2.0 (parallel model discovery, claude-sonnet-4-6 default)
+- `AVATAR_ENGINE_MIN_VERSION` bumped from `1.0.0` to `1.2.0`
+- Cleaned up console spam: removed debug `console.log` from CivitaiPlugin, CustomPlugin, InstallPlugin, usePackEdit, BrowsePage toast; downgraded MediaPreview image error to `console.debug`
+
+## [2.7.0] - 2026-02-27 (Avatar Engine Integration)
+
+### Added
+
+#### Avatar Engine — AI Chat Assistant
+- **Full avatar-engine integration** — WebSocket-based AI chat with multi-provider support (Gemini, Claude, Codex)
+- **AvatarProvider** — React context wrapper with `useAvatarChat`, `useDynamicModels`, provider detection
+- **AvatarWidget** — FAB → compact → fullscreen modes via `@avatar-engine/react`
+- **Page context** — Structured metadata sent to AI (current page, pack info, navigation state)
+- **Suggestion chips** — Context-aware quick actions per page
+- **i18n** — Full Czech/English translations for avatar UI
+- **E2E tests** — Playwright tests for avatar UI, suggestions, settings (Tier 1 offline + Tier 2 @live)
+
+#### Avatar Backend
+- **`src/avatar/`** — Routes, config, skills, task service, MCP tools
+- **AvatarTaskService** — Multi-task AI architecture with registry, fallback chains, and caching
+- **21 MCP tools** — Store, Civitai, Workflow, Dependencies tools for AI assistant
+- **Dynamic model discovery** — Backend scrapes provider docs for current model lists
+
+#### Avatar Documentation
+- **`docs/avatar/`** — Getting started, configuration, MCP tools reference, skills, theming, architecture, troubleshooting
+
+### Changed
+- Settings page: new Avatar AI section with provider config, model selector, skill management
+- Sidebar navigation: Avatar toggle in header
+- Vite proxy: `/api/avatar/ws`, `/api/avatar/models`, `/api/avatar` routes
+
 ## [2.6.0] - 2026-01-20 (Phase 4: Packs Video & Import Upgrade)
 
 ### Added

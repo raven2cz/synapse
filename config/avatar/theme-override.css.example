@@ -1,0 +1,52 @@
+/*
+ * Avatar Engine Theme Override for Synapse
+ *
+ * Copy this file to ~/.synapse/avatar/theme-override.css and customize
+ * the CSS variables below to match your preferred style.
+ *
+ * These variables override avatar-engine's default theme when the
+ * chat widget is rendered inside Synapse.
+ */
+
+:root {
+  /* --- Primary colors (Synapse defaults) --- */
+  --avatar-primary: #6366f1;           /* Indigo-500 — accent color */
+  --avatar-primary-hover: #4f46e5;     /* Indigo-600 */
+  --avatar-primary-light: rgba(99, 102, 241, 0.1);
+
+  /* --- Background colors --- */
+  --avatar-bg: #0f1729;                /* Synapse deep background */
+  --avatar-bg-secondary: #1a2332;      /* Card backgrounds */
+  --avatar-bg-input: #1e293b;          /* Input fields */
+  --avatar-bg-message-user: #1e293b;   /* User message bubble */
+  --avatar-bg-message-ai: #0f172a;     /* AI message bubble */
+
+  /* --- Text colors --- */
+  --avatar-text-primary: #e2e8f0;      /* Primary text */
+  --avatar-text-secondary: #94a3b8;    /* Secondary/muted text */
+  --avatar-text-placeholder: #475569;  /* Placeholder text */
+
+  /* --- Border colors --- */
+  --avatar-border: rgba(148, 163, 184, 0.15); /* Default border */
+  --avatar-border-focus: rgba(99, 102, 241, 0.5); /* Focus ring */
+
+  /* --- Spacing & sizing --- */
+  --avatar-radius: 0.75rem;            /* Border radius */
+  --avatar-radius-lg: 1rem;            /* Larger radius (panels) */
+  --avatar-font-size: 0.875rem;        /* Base font size */
+  --avatar-font-family: inherit;       /* Use Synapse's font stack */
+
+  /* --- Chat-specific --- */
+  --avatar-chat-max-width: 48rem;      /* Max width of chat messages */
+  --avatar-chat-gap: 1rem;             /* Gap between messages */
+  --avatar-input-height: 2.75rem;      /* Input field height */
+
+  /* --- Status colors --- */
+  --avatar-success: #22c55e;           /* Success/ready */
+  --avatar-warning: #f59e0b;           /* Warning */
+  --avatar-error: #ef4444;             /* Error */
+
+  /* --- Shadows --- */
+  --avatar-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --avatar-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+}

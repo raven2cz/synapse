@@ -13,6 +13,7 @@ import {
   transformTrpcModelDetail,
   transformMeilisearchModel,
 } from '@/lib/utils/civitaiTransformers'
+import trpcRealModels from './fixtures/trpc-real-models.json'
 
 // =============================================================================
 // detectMediaType Tests
@@ -910,9 +911,8 @@ describe('Real tRPC data pipeline (browse without query)', () => {
 })
 
 describe('E2E: ALL 12 real tRPC models through full pipeline', () => {
-  // Load real data captured from Civitai tRPC model.getAll
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const realModels = require('./fixtures/trpc-real-models.json') as Record<string, unknown>[]
+  // Real data captured from Civitai tRPC model.getAll
+  const realModels = trpcRealModels as Record<string, unknown>[]
 
   it('should transform ALL models and produce valid proxy URLs', () => {
     console.log(`\\n=== PROCESSING ${realModels.length} REAL tRPC MODELS ===\\n`)
@@ -924,7 +924,6 @@ describe('E2E: ALL 12 real tRPC models through full pipeline', () => {
       const model = transformTrpcModel(item)
       const firstPreview = model.previews[0]
       const src = firstPreview?.url || ''
-      const thumbnailSrc = firstPreview?.thumbnail_url
 
       const status = src ? (src.startsWith('/api/browse/image-proxy') ? 'OK' : 'NO PROXY') : 'EMPTY'
 

@@ -191,5 +191,93 @@ def test_v2_api_has_required_endpoints():
         )
 
 
+def test_no_legacy_ai_imports():
+    """Ensure no legacy src.ai imports remain — all AI code lives in src.avatar."""
+    project_root = Path(__file__).parent.parent.parent
+
+    dirs_to_check = [
+        project_root / 'src',
+        project_root / 'tests',
+    ]
+
+    violations = []
+
+    for check_dir in dirs_to_check:
+        if not check_dir.exists():
+            continue
+
+        for py_file in get_python_files(check_dir):
+            try:
+                content = py_file.read_text()
+                tree = ast.parse(content)
+
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        if node.module.startswith('src.ai.') or node.module == 'src.ai':
+                            violations.append(
+                                f"{py_file}:{node.lineno} - Legacy import: from {node.module}"
+                            )
+                    elif isinstance(node, ast.Import):
+                        for alias in node.names:
+                            if alias.name.startswith('src.ai.') or alias.name == 'src.ai':
+                                violations.append(
+                                    f"{py_file}:{node.lineno} - Legacy import: import {alias.name}"
+                                )
+            except SyntaxError:
+                pass
+
+    if violations:
+        pytest.fail(
+            f"Legacy src.ai imports detected! All AI code must use src.avatar.*\n"
+            f"Violations:\n" + "\n".join(violations)
+        )
+
+
+def test_task_service_no_legacy_ai_imports():
+    """task_service.py must not import from src.ai (legacy)."""
+    task_service_py = Path(__file__).parent.parent.parent / 'src' / 'avatar' / 'task_service.py'
+
+    if not task_service_py.exists():
+        pytest.skip("task_service.py not found")
+
+    content = task_service_py.read_text()
+    assert 'from src.ai' not in content, (
+        "task_service.py must not import from legacy src.ai module"
+    )
+
+
+def test_ai_service_is_reexport_only():
+    """ai_service.py must contain only re-exports (no class definitions)."""
+    ai_service_py = Path(__file__).parent.parent.parent / 'src' / 'avatar' / 'ai_service.py'
+
+    if not ai_service_py.exists():
+        pytest.skip("ai_service.py not found")
+
+    content = ai_service_py.read_text()
+    assert 'class ' not in content, (
+        "ai_service.py must not define classes — it should only re-export from task_service.py"
+    )
+
+
+def test_default_registry_has_parameter_extraction():
+    """get_default_registry() must include parameter_extraction task."""
+    from src.avatar.tasks.registry import get_default_registry
+
+    registry = get_default_registry()
+    assert 'parameter_extraction' in registry.list_tasks(), (
+        "Default registry must include parameter_extraction task"
+    )
+
+
+def test_default_registry_has_model_tagging():
+    """get_default_registry() must include model_tagging task."""
+    from src.avatar.tasks.registry import get_default_registry
+
+    registry = get_default_registry()
+    assert 'model_tagging' in registry.list_tasks(), (
+        "Default registry must include model_tagging task"
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

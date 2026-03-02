@@ -10,7 +10,7 @@
 
 set -e
 
-VERSION="2.6.0"
+VERSION="2.8.0"
 API_PORT=8000
 WEB_PORT=5173
 
@@ -182,18 +182,22 @@ echo ""
 
 cleanup() {
     echo ""
-    echo -e "${YELLOW}Shutting down Synapse...${NC}"
-    
-    if [ ! -z "$API_PID" ]; then
-        kill $API_PID 2>/dev/null || true
-    fi
-    if [ ! -z "$WEB_PID" ]; then
-        kill $WEB_PID 2>/dev/null || true
-    fi
-    
+    echo -e "${YELLOW}Shutting down Synapse gracefully...${NC}"
+
+    # Send SIGTERM for graceful shutdown (Vite closes WebSocket/HMR cleanly)
+    [ -n "$WEB_PID" ] && kill -TERM $WEB_PID 2>/dev/null
+    [ -n "$API_PID" ] && kill -TERM $API_PID 2>/dev/null
+
+    # Wait for graceful shutdown
+    sleep 2
+
+    # Force kill only if still running
+    [ -n "$WEB_PID" ] && kill -0 $WEB_PID 2>/dev/null && kill -9 $WEB_PID 2>/dev/null
+    [ -n "$API_PID" ] && kill -0 $API_PID 2>/dev/null && kill -9 $API_PID 2>/dev/null
+
     # Kill any orphan processes
     pkill -f "uvicorn apps.api.src.main:app" 2>/dev/null || true
-    
+
     echo -e "${GREEN}Goodbye! 👋${NC}"
     exit 0
 }
@@ -206,7 +210,9 @@ trap cleanup SIGINT SIGTERM EXIT
 echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Starting API server...${NC}"
 
 export PYTHONPATH="$PROJECT_ROOT"
-$PYTHON_BIN -m uvicorn apps.api.src.main:app --host 0.0.0.0 --port $API_PORT --log-level warning &
+# Children ignore SIGINT — only parent cleanup() handles shutdown via SIGTERM.
+# This prevents abrupt connection resets that can crash the browser.
+(trap '' INT; exec $PYTHON_BIN -m uvicorn apps.api.src.main:app --host 0.0.0.0 --port $API_PORT --log-level warning) &
 API_PID=$!
 
 # Wait for API to start
@@ -226,7 +232,7 @@ echo ""
 echo -e "${BOLD_MAGENTA}${HEX_ICON}${NC} ${CYAN}Starting Web server...${NC}"
 
 cd "$PROJECT_ROOT/apps/web"
-npm run dev --silent &
+(trap '' INT; exec npm run dev --silent) &
 WEB_PID=$!
 
 sleep 4

@@ -69,8 +69,10 @@ synapse/
 
 ### ⭐ Verifikace projektu (VŽDY před commitem!)
 ```bash
-./scripts/verify.sh            # Kompletní verifikace
+./scripts/verify.sh            # Standardní CI (bez external testů)
 ./scripts/verify.sh --quick    # Rychlá verifikace
+./scripts/verify.sh --external # Včetně reálných CDN/API testů
+./scripts/verify.sh --full     # VŠECHNY testy (před releasem)
 ./scripts/verify.sh --help     # Zobrazit všechny možnosti
 ```
 
@@ -112,6 +114,13 @@ pnpm build            # Production build
 | `src/store/cli.py` | **🆕** Typer CLI: inventory, backup, profiles, packs |
 | `src/utils/media_detection.py` | Detekce typu média (image/video), URL transformace |
 | `src/clients/civitai_client.py` | Civitai API client |
+| `src/avatar/__init__.py` | Avatar-engine feature flag, version check |
+| `src/avatar/config.py` | AvatarConfig dataclass, YAML loading, path resolution |
+| `src/avatar/routes.py` | FastAPI router (6 endpoints), avatar-engine mount |
+| `src/avatar/skills.py` | Skill loading, system prompt building |
+| `src/avatar/task_service.py` | AvatarTaskService — multi-task AI service with registry, fallback chain |
+| `src/avatar/ai_service.py` | Backward compat re-exports (AvatarAIService = AvatarTaskService) |
+| `src/avatar/mcp/store_server.py` | 21 MCP tools (Store, Civitai, Workflow, Dependencies) |
 
 ### Frontend
 | Soubor | Účel |
@@ -198,6 +207,9 @@ interface FullscreenMediaItem {
 # Verbose výstup
 ./scripts/verify.sh --verbose
 
+# E2E testy (Playwright — vyžaduje běžící servery)
+./scripts/verify.sh --e2e
+
 # Nápověda
 ./scripts/verify.sh --help
 ```
@@ -227,7 +239,8 @@ tests/
 ```python
 @pytest.mark.slow         # Dlouhotrvající testy
 @pytest.mark.integration  # Vyžadují více komponent
-@pytest.mark.civitai      # Civitai API testy
+@pytest.mark.external     # Reálné externí služby (CDN/API) — vyloučeno z CI by default
+@pytest.mark.civitai      # Civitai API testy (podmnožina external)
 @pytest.mark.e2e          # End-to-end testy
 ```
 
@@ -236,6 +249,8 @@ Použití:
 uv run pytest -m "not slow"           # Bez pomalých testů
 uv run pytest -m "integration"        # Pouze integrační
 uv run pytest -m "not integration"    # Bez integračních
+uv run pytest -m "external"           # Pouze reálné CDN/API testy
+uv run pytest -m "not external"       # Bez externích (default CI)
 ```
 
 ### Jak psát testy
@@ -288,6 +303,27 @@ pnpm test -- --ui      # UI mode
 ```
 
 Umístění: `apps/web/src/__tests__/`
+
+### E2E testy (Playwright)
+
+```bash
+cd apps/web
+pnpm e2e                         # All Tier 1 tests (offline, no AI provider)
+pnpm e2e --grep-invert @live     # Same as above (explicit)
+pnpm e2e --grep @live            # Tier 2 tests (requires running AI provider)
+pnpm e2e:headed                  # Headed mode (visual debug)
+pnpm e2e:ui                      # Interactive Playwright UI
+```
+
+Umístění: `apps/web/e2e/`
+
+**Tier 1 (offline):** `avatar-ui.spec.ts`, `avatar-suggestions.spec.ts`, `avatar-settings.spec.ts`
+- Testují DOM, vizuální přítomnost, přechody, navigaci
+- Nevyžadují AI provider
+
+**Tier 2 (@live):** `avatar-chat.spec.ts`, `avatar-settings.spec.ts` (1 test)
+- Označené `@live` v názvu testu
+- Vyžadují běžící backend + frontend + minimálně jeden AI provider CLI
 
 ### Požadavky na testy
 
@@ -439,6 +475,10 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 | **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | ✅ DOKONČENO (v2.2.0) |
 | **i18n** | `plans/PLAN-i18n.md` | ✅ DOKONČENO (v1.0.0) |
 | **CDN Video Fix** | `plans/PLAN-CDN-Video-Fix.md` | ✅ DOKONČENO (anim=true, smoke testy) |
+| **Avatar Engine** | `plans/PLAN-Avatar-Engine-Integration.md` | ✅ DOKONČENO (v2.7.0) |
+| **Avatar Bugfixes** | `plans/PLAN-Avatar-Engine-Bugfixes.md` | ✅ DOKONČENO (v1.1.0) |
+| **Avatar TaskService** | `plans/PLAN-Avatar-TaskService.md` | ✅ DOKONČENO (multi-task AI) |
+| **Avatar v1.2** | `plans/PLAN-Avatar-v1.2-Dynamic-Models.md` | ✅ DOKONČENO (dynamic models, v2.8.0) |
 
 ---
 
@@ -456,12 +496,59 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 
 ```
 1. Implementovat feature
-2. Napsat/aktualizovat testy
+2. Napsat/aktualizovat testy (unit + integration + smoke/E2E)
 3. ./scripts/verify.sh --quick    # Rychlá kontrola
 4. Opravit případné chyby
 5. ./scripts/verify.sh            # Plná verifikace
 6. Commit pouze pokud projde
 ```
+
+### ⭐ POVINNÉ: Review po každé iteraci/fázi
+
+Po dokončení každé iterace (nejen před commitem) provést **3 nezávislé review**:
+
+#### 1. Claude review (automatický)
+Přečíst KAŽDÝ nový/změněný soubor, zkontrolovat:
+- Error handling (žádné tiché `except: pass`)
+- Thread safety, validace vstupů, import guardy
+- Cachování (žádné zbytečné I/O na každém requestu)
+
+#### 2. Gemini review (přímé CLI ze synapse adresáře)
+```bash
+# Z kořene synapse projektu:
+gemini -p "You are a senior code reviewer. Review the following files for bugs, security issues, missing error handling, and code quality: <seznam souborů>. Provide numbered issues with severity." --yolo
+```
+
+#### 3. Codex review (přímé CLI ze synapse adresáře)
+```bash
+# Z kořene synapse projektu — VŽDY specifikovat scope (commit/soubory):
+codex review --commit <SHA>                  # Review konkrétního commitu
+codex exec "Review these files for bugs, security, error handling: <seznam souborů>"  # Explicitní seznam
+```
+**POZOR:** `codex review --uncommitted` reviewuje CELÉ repo diff, ne jen konkrétní fázi! Proto vždy specifikovat buď commit SHA nebo explicitní seznam souborů.
+
+#### Alternativně: přes avatar-engine
+```bash
+cd ~/git/github/avatar-engine && uv run avatar -w /home/box/git/github/synapse \
+  chat -p gemini --yolo --no-stream "<review prompt>"
+```
+**Pozor:** `-w` flag musí být PŘED subcommandem `chat`. Přímé CLI je spolehlivější pro cross-repo review.
+
+#### Avatar-engine info
+- **Umístění:** `~/git/github/avatar-engine`
+- **Spuštění (avatar CLI):** `cd ~/git/github/avatar-engine && uv run avatar chat -p <provider> ...`
+- **Přímé CLI:** `gemini -p "..."` / `codex review` / `codex exec "..."`
+- **Providery:** `gemini`, `claude`, `codex`
+- **Dokumentace:** `~/git/github/avatar-engine/README.md`
+
+#### Po review
+1. **Zvalidovat** nálezy ze všech 3 review
+2. **Implementovat** opravy pro validní nálezy
+3. **Test pyramid** — ověřit, že existují VŠECHNY tři typy testů:
+   - Unit testy (30-60): error paths, edge cases, all branches
+   - Integration testy (8-15): reálné komponenty, mockovaný HTTP
+   - Smoke/E2E testy (3-7): celý lifecycle, reálný Store
+4. **Zaznamenat do PLANu** — stav, počet testů, nalezené issues, kdo co našel
 
 ---
 
@@ -475,6 +562,29 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 - ❌ Neměnit existující API kontrakty bez migrace
 - ❌ NEPRACOVAT na Phase 4, 5, 6 - ty jsou DOKONČENY!
 - ❌ NEPŘESKAKOVAT iterace Model Inventory - musí jít po sobě!
+
+---
+
+## 🤖 Avatar Engine Documentation
+
+Avatar-related docs live in `docs/avatar/`. See `docs/avatar/README.md` for navigation.
+
+| Doc | Purpose |
+|-----|---------|
+| `docs/avatar/getting-started.md` | Setup & first chat |
+| `docs/avatar/configuration.md` | avatar.yaml reference |
+| `docs/avatar/mcp-tools-reference.md` | All 21 MCP tools |
+| `docs/avatar/skills-and-avatars.md` | Custom skills & avatars |
+| `docs/avatar/theming.md` | CSS theming |
+| `docs/avatar/architecture.md` | Developer reference |
+| `docs/avatar/troubleshooting.md` | Common issues |
+
+### Pravidla pro Avatar dokumentaci
+- Změna v `src/avatar/` → aktualizovat relevantní docs v `docs/avatar/`
+- Nové MCP tools → přidat do `docs/avatar/mcp-tools-reference.md`
+- Nové skills → přidat do `docs/avatar/skills-and-avatars.md`
+- Config změny → aktualizovat `docs/avatar/configuration.md` + `config/avatar.yaml.example`
+- Nové frontend avatar komponenty → aktualizovat `docs/avatar/architecture.md`
 
 ---
 
@@ -522,5 +632,6 @@ pozadí (`bg-slate-deep/50`), takže přetečený obsah (obrázky z Civitai HTML
 
 ---
 
-*Poslední aktualizace: 2026-01-24*
-*Aktivní fáze: Model Inventory - Iterace 3 (CLI příkazy)*
+*Poslední aktualizace: 2026-03-02*
+*Aktuální verze: v2.8.0 | avatar-engine v1.2.0*
+*Stav: Všechny avatar plány DOKONČENY*

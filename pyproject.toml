@@ -44,6 +44,11 @@ api = [
     "fastapi>=0.100",
     "uvicorn>=0.23",
 ]
+avatar = [
+    "mcp>=1.0",
+    "pyyaml>=6.0",
+    "avatar-engine>=1.0.0,<2.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -52,7 +57,7 @@ dev = [
     "mypy>=1.0",
 ]
 all = [
-    "synapse-store[api,dev]",
+    "synapse-store[api,avatar,dev]",
 ]
 
 [project.scripts]

@@ -246,7 +246,7 @@ class TestImportEndpointWithWizard:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -270,7 +270,7 @@ class TestImportEndpointWithWizard:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -295,7 +295,7 @@ class TestImportEndpointWithWizard:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -322,7 +322,7 @@ class TestImportEndpointWithWizard:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -356,7 +356,7 @@ class TestFullImportCycle:
         # 1. Import
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -422,7 +422,7 @@ class TestFullImportCycle:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -457,7 +457,7 @@ class TestFullImportCycle:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -482,7 +482,7 @@ class TestFullImportCycle:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -518,7 +518,7 @@ class TestImportIdempotency:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}
@@ -554,7 +554,7 @@ class TestStoreIntegration:
 
         with patch('src.store.pack_service.requests.get', return_value=mock_response), \
              patch('src.store.download_service.requests.Session') as MockDLSession, \
-             patch('src.ai.AIService', return_value=_mock_ai_service()):
+             patch('src.avatar.ai_service.AvatarAIService', return_value=_mock_ai_service()):
             MockDLSession.return_value.get.return_value = mock_response
             MockDLSession.return_value.get.return_value.status_code = 200
             MockDLSession.return_value.headers = {}

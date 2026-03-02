@@ -99,7 +99,7 @@ class TestAIParameterExtractionIntegration:
     def test_full_flow_with_task_result(self):
         """Test full flow from TaskResult to Pack parameters."""
         from src.store.models import GenerationParameters
-        from src.ai.tasks.base import TaskResult
+        from src.avatar.tasks.base import TaskResult
 
         # Simulate TaskResult from AIService
         output = {

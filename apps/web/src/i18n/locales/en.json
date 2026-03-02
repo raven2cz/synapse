@@ -708,7 +708,8 @@
     "inventory": "Inventory",
     "profiles": "Profiles",
     "settings": "Settings",
-    "downloads": "Downloads"
+    "downloads": "Downloads",
+    "avatar": "AI Assistant"
   },
   "header": {
     "tagline": "The Pack-First Model Manager",
@@ -1678,6 +1679,141 @@
       "updateModelInfo": "Sync Model Info",
       "updateModelInfoDesc": "Update trigger words, base model, and other metadata from Civitai.",
       "apply": "Apply Update"
+    }
+  },
+  "settingsAvatar": {
+    "title": "AI Assistant (Avatar Engine)",
+    "subtitle": "AI assistant powered by avatar-engine",
+    "configReadOnly": "Provider and model can be switched live. Other settings are managed via avatar.yaml:",
+    "installed": "Installed",
+    "notInstalled": "Not installed",
+    "none": "None",
+    "activeProvider": "Active provider",
+    "availableProvider": "Available",
+    "stats": {
+      "engine": "Engine",
+      "provider": "Provider",
+      "serviceDefault": "Service Default",
+      "safety": "Safety Mode",
+      "skills": "Skills"
+    },
+    "masterToggle": "Enable AI Assistant",
+    "masterToggleDesc": "When disabled, the AI chat FAB is hidden and all AI features are inactive.",
+    "providersTitle": "AI Providers",
+    "providerEnabled": "Enabled for chat",
+    "providerDefault": "Default for services",
+    "providerNotInstalled": "Not installed",
+    "providerDefaultHint": "Backend services (MCP tools, AI extraction) use the default provider and model. Chat window can switch freely between all enabled providers.",
+    "modelPlaceholder": "Default model (optional)",
+    "safetyTitle": "Safety Mode",
+    "currentSafety": "Current Safety Mode",
+    "safety": {
+      "safe": "Safe",
+      "safeDesc": "All commands require explicit approval before execution.",
+      "ask": "Ask",
+      "askDesc": "AI will ask before running potentially dangerous commands.",
+      "unrestricted": "Unrestricted",
+      "unrestrictedDesc": "Commands execute without confirmation. Use with caution."
+    },
+    "skillsTitle": "Skills",
+    "builtinSkills": "{{count}} built-in",
+    "customSkills": "{{count}} custom",
+    "builtinLabel": "Built-in",
+    "customLabel": "Custom",
+    "avatarsTitle": "Avatars",
+    "builtinAvatars": "8 built-in avatar characters",
+    "avatarCount": "{{builtin}} built-in, {{custom}} custom",
+    "changeAvatar": "Change Avatar",
+    "avatarsHint": "Custom avatars can be added in the avatars/ directory. See avatar-engine documentation.",
+    "safetyConfigHint": "Safety mode is configured in avatar.yaml. Restart Synapse after changes.",
+    "cacheTitle": "Cache Maintenance",
+    "cacheEntries": "Entries",
+    "cacheSize": "Size",
+    "cacheTTL": "TTL",
+    "cacheDays": "{{count}} days",
+    "cacheCleanup": "Cleanup Expired",
+    "cacheClearAll": "Clear All",
+    "cacheCleared": "Cache cleared ({{count}} entries removed)",
+    "cacheCleaned": "Expired entries cleaned ({{count}} removed)",
+    "configFile": "Configuration File",
+    "configFileHint": "Edit this file to change safety mode and other advanced settings. Restart Synapse after changes.",
+    "loadFailed": "Failed to load avatar configuration. Check that the backend is running."
+  },
+  "avatar": {
+    "title": "AI Assistant",
+    "loading": "Connecting to AI assistant...",
+    "fab": {
+      "openChat": "Open AI Assistant",
+      "setupRequired": "AI Assistant — Setup required"
+    },
+    "chat": {
+      "welcomeMessage": "Hello! I'm your Synapse AI assistant. I can help you manage packs, resolve dependencies, explain generation parameters, and more. What would you like to do?",
+      "placeholder": "Avatar Engine is not yet connected. This chat will be fully functional once avatar-engine is installed and configured.",
+      "thinking": "Thinking...",
+      "inputPlaceholder": "Ask about your models, parameters, dependencies...",
+      "enterHint": "Enter to send · Shift+Enter for new line",
+      "skillsCount": "{{count}} skills"
+    },
+    "suggestions": {
+      "inventory": "How much disk space are my models using?",
+      "parameters": "Explain CFG Scale and recommended values",
+      "dependencies": "Which packs have missing dependencies?",
+      "packsPage": {
+        "overview": "Give me an overview of my installed packs",
+        "unresolved": "Which packs have unresolved dependencies?",
+        "recommend": "Recommend a workflow for my packs"
+      },
+      "packDetail": {
+        "explain": "Explain what {{packName}} does",
+        "dependencies": "Check dependencies for {{packName}}",
+        "workflow": "Generate a workflow for {{packName}}"
+      },
+      "inventoryPage": {
+        "diskUsage": "How much disk space are my models using?",
+        "orphans": "Are there any orphan blobs I can clean up?",
+        "cleanup": "Help me free up disk space"
+      },
+      "browsePage": {
+        "recommend": "Recommend a model for anime style",
+        "compare": "Compare SDXL vs Flux checkpoints",
+        "trending": "What models are trending right now?"
+      },
+      "downloadsPage": {
+        "status": "What's the status of my downloads?",
+        "queue": "Are there any failed downloads to retry?"
+      },
+      "profilesPage": {
+        "explain": "Explain how profiles work",
+        "conflicts": "Are there any file conflicts between profiles?"
+      },
+      "settingsPage": {
+        "optimize": "Suggest optimal settings for my setup",
+        "providers": "Help me configure AI providers"
+      }
+    },
+    "setup": {
+      "title": "AI Assistant",
+      "description": "Synapse includes an optional AI assistant powered by avatar-engine. It can help you manage your model inventory, resolve dependencies, generate workflows, and explain generation parameters.",
+      "statusTitle": "Current Status",
+      "engineLabel": "Avatar Engine",
+      "providerLabel": "AI Provider (CLI)",
+      "providersTitle": "Available Providers",
+      "installed": "Ready",
+      "notInstalled": "Not installed",
+      "stepsTitle": "Setup Steps",
+      "step1Title": "Install avatar-engine",
+      "step1Desc": "pip install avatar-engine[web]",
+      "step2Title": "Install an AI CLI provider",
+      "step2Desc": "Install Gemini CLI, Claude Code, or Codex CLI",
+      "step3Title": "Restart Synapse",
+      "step3Desc": "The AI assistant will be available after restart",
+      "featuresTitle": "What AI Can Do",
+      "feature1": "Smart Resolution",
+      "feature1Desc": "Find the right model for any dependency across local inventory, Civitai, and HuggingFace",
+      "feature2": "Workflow Generation",
+      "feature2Desc": "Generate ComfyUI workflows optimized for your models and parameters",
+      "feature3": "MCP Tools",
+      "feature3Desc": "Manage inventory, check updates, and analyze models through natural conversation"
     }
   }
 }

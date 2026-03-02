@@ -45,7 +45,7 @@ CIVITAI_PUBLIC_DOWNLOAD_URL = "https://civitai.com/api/download/models/128713"
 JPEG_MAGIC = b"\xff\xd8"
 PNG_MAGIC = b"\x89PNG"
 
-pytestmark = pytest.mark.civitai
+pytestmark = [pytest.mark.civitai, pytest.mark.external]
 
 
 def _is_image(data: bytes) -> bool:
@@ -67,6 +67,23 @@ def _check_network():
         return False
 
 
+def _skip_on_cdn_error(func):
+    """Decorator: skip test gracefully when Civitai CDN returns server errors (5xx)."""
+    import functools
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except DownloadError as e:
+            msg = str(e)
+            if any(f"{code} Server Error" in msg for code in (500, 502, 503, 504)):
+                pytest.skip(f"Civitai CDN server error: {msg[:120]}")
+            raise
+
+    return wrapper
+
+
 # ============================================================================
 # Public CDN tests (no API key needed)
 # ============================================================================
@@ -75,6 +92,7 @@ def _check_network():
 class TestCivitaiPublicDownload:
     """Test downloading public preview images — no API key needed."""
 
+    @_skip_on_cdn_error
     def test_download_preview_to_bytes(self):
         """DownloadService.download_to_bytes returns image data from Civitai CDN."""
         ds = DownloadService()
@@ -84,6 +102,7 @@ class TestCivitaiPublicDownload:
         assert _is_image(data), f"Not image, first bytes: {data[:10].hex()}"
         assert _is_not_html(data), "Got HTML instead of image"
 
+    @_skip_on_cdn_error
     def test_download_preview_to_file(self, tmp_path):
         """DownloadService.download_to_file saves image with correct SHA256."""
         ds = DownloadService()
@@ -95,6 +114,7 @@ class TestCivitaiPublicDownload:
         assert len(result.sha256) == 64
         assert _is_image(dest.read_bytes())
 
+    @_skip_on_cdn_error
     def test_token_in_url_does_not_break_cdn(self, tmp_path):
         """Adding ?token= to CDN URL should not break the download.
 
@@ -113,6 +133,7 @@ class TestCivitaiPublicDownload:
         assert _is_image(content), "Token in URL broke CDN download"
         assert _is_not_html(content), "Got HTML — token caused auth redirect"
 
+    @_skip_on_cdn_error
     def test_resume_download(self, tmp_path):
         """Resume should detect complete file and return cached result."""
         ds = DownloadService()

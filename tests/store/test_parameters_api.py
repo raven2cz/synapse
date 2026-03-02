@@ -223,7 +223,7 @@ class TestExtractFromDescription:
         mock_ai_service = MagicMock()
         mock_ai_service.extract_parameters.return_value = mock_ai_result
 
-        with patch('src.ai.AIService', return_value=mock_ai_service):
+        with patch('src.avatar.ai_service.AvatarAIService', return_value=mock_ai_service):
             response = client.post(
                 "/api/packs/test-pack/parameters/extract",
                 json={"source": "description"},
