@@ -15,16 +15,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      // Avatar Engine WebSocket (must be before /api catch-all)
       '/api/avatar/ws': {
         target: 'ws://localhost:8000',
         ws: true,
-        rewrite: (path) => '/api/avatar/engine' + path,
       },
-      '/api/avatar/models': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        rewrite: (path) => '/api/avatar/engine' + path,
-      },
+      // All API requests (Synapse + Avatar Engine — no rewriting needed,
+      // avatar-engine is mounted at /api/avatar with empty internal prefix)
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

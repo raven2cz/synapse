@@ -265,7 +265,7 @@ class TestTryMountAvatarEngine:
             result = try_mount_avatar_engine(app)
 
         assert result is True
-        app.mount.assert_called_once_with("/api/avatar/engine", mock_avatar_app)
+        app.mount.assert_called_once_with("/api/avatar", mock_avatar_app)
 
 
 class TestPatchConfigEndpoint:

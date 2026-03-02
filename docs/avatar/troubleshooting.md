@@ -62,7 +62,7 @@ curl -s http://localhost:8000/api/avatar/status | python -m json.tool
    }
    ```
 3. **Check browser console**: Look for WebSocket connection errors
-4. **Check engine mount**: Backend logs should show "Avatar engine mounted at /api/avatar/engine"
+4. **Check engine mount**: Backend logs should show "Avatar Engine mounted at /api/avatar"
 
 ### Provider Errors
 

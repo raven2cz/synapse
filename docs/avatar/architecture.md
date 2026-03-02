@@ -25,7 +25,7 @@ This document describes the internal architecture of the avatar-engine integrati
 │                                                                  │
 │  ┌─────────────────┐   ┌─────────────────────────────────────┐  │
 │  │ avatar_router    │   │ avatar-engine (mounted app)          │  │
-│  │ /api/avatar/*    │   │ /api/avatar/engine/*                 │  │
+│  │ /api/avatar/*    │   │ /api/avatar/* (mounted at /api/avatar)│  │
 │  │  GET /status     │   │  WebSocket /ws                       │  │
 │  │  GET /providers  │   │  REST endpoints                      │  │
 │  │  GET /config     │   │  ├── AI CLI subprocess (gemini/      │  │
@@ -104,8 +104,8 @@ engine installed? ──┤
 2. Run `check_avatar_engine_compat()` (warns if version too old)
 3. Load config, skip if `enabled == False`
 4. Build system prompt (base + skills via `build_system_prompt()`)
-5. Call `avatar_engine.web.create_api_app(provider, config_path, system_prompt)`
-6. Mount at `/api/avatar/engine`
+5. Call `avatar_engine.web.create_api_app(provider, config_path, system_prompt, api_prefix="")`
+6. Mount at `/api/avatar` (engine uses empty prefix, Starlette prepends mount path → final URLs `/api/avatar/*`)
 
 ### `skills.py` — System Prompt Builder
 

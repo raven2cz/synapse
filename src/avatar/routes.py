@@ -312,15 +312,21 @@ def try_mount_avatar_engine(app) -> bool:
             provider=config.provider,
             config_path=str(config_file) if config_file and config_file.exists() else None,
             system_prompt=system_prompt,
+            api_prefix="",
         )
-        app.mount("/api/avatar/engine", avatar_app)
+        # Mount at /api/avatar — engine routes use empty prefix (api_prefix="")
+        # so they register as /sessions, /ws, etc. Starlette prepends the mount
+        # path → final URLs are /api/avatar/sessions, /api/avatar/ws, etc.
+        # Synapse's own avatar routes (/api/avatar/status, /config, /skills, /avatars)
+        # are registered via include_router() which takes precedence over sub-app mount.
+        app.mount("/api/avatar", avatar_app)
 
         # Store manager reference on parent app so its lifespan can
         # initialize the engine (mounted sub-app lifespans are not
         # called automatically by Starlette).
         app.state.avatar_manager = getattr(avatar_app.state, "manager", None)
 
-        logger.info("Avatar Engine mounted at /api/avatar/engine")
+        logger.info("Avatar Engine mounted at /api/avatar")
         return True
 
     except Exception as e:
