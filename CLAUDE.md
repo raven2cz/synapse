@@ -475,6 +475,10 @@ Model Inventory je **PRIMÁRNÍ feature** store - nová hlavní záložka pro sp
 | **Blob Manifest** | `plans/PLAN-Blob-Manifest.md` | ✅ DOKONČENO (v2.2.0) |
 | **i18n** | `plans/PLAN-i18n.md` | ✅ DOKONČENO (v1.0.0) |
 | **CDN Video Fix** | `plans/PLAN-CDN-Video-Fix.md` | ✅ DOKONČENO (anim=true, smoke testy) |
+| **Avatar Engine** | `plans/PLAN-Avatar-Engine-Integration.md` | ✅ DOKONČENO (v2.7.0) |
+| **Avatar Bugfixes** | `plans/PLAN-Avatar-Engine-Bugfixes.md` | ✅ DOKONČENO (v1.1.0) |
+| **Avatar TaskService** | `plans/PLAN-Avatar-TaskService.md` | ✅ DOKONČENO (multi-task AI) |
+| **Avatar v1.2** | `plans/PLAN-Avatar-v1.2-Dynamic-Models.md` | ✅ DOKONČENO (dynamic models, v2.8.0) |
 
 ---
 
@@ -628,5 +632,6 @@ pozadí (`bg-slate-deep/50`), takže přetečený obsah (obrázky z Civitai HTML
 
 ---
 
-*Poslední aktualizace: 2026-02-24*
-*Aktivní fáze: Avatar Engine - Iterace 9 (Dokumentace)*
+*Poslední aktualizace: 2026-03-02*
+*Aktuální verze: v2.8.0 | avatar-engine v1.2.0*
+*Stav: Všechny avatar plány DOKONČENY*

@@ -1543,13 +1543,18 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
         # Build workflows list - use pack.json as primary source, enrich with filesystem info
         workflows = []
         workflows_dir = store.layout.pack_workflows_path(pack_name)
-        
+
+        # Resolve ComfyUI workflows path once (outside loops)
+        from config.settings import get_config
+        config = get_config()
+        comfyui_workflows = config.comfyui.base_path / "user" / "default" / "workflows"
+
         # First, collect all workflow files on disk
         workflow_files = {}
         if workflows_dir.exists():
             for f in sorted(workflows_dir.glob("*.json")):
                 workflow_files[f.name] = f
-        
+
         # Process workflows from pack.json
         for wf in pack.workflows:
             workflow_info = {
@@ -1564,18 +1569,13 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "symlink_valid": False,
                 "symlink_path": None,
             }
-            
+
             # Check if file exists
             if wf.filename in workflow_files:
                 f = workflow_files[wf.filename]
                 workflow_info["local_path"] = str(f)
                 workflow_info["file_exists"] = True
-                
-                # Check for symlink in ComfyUI workflows
-                from config.settings import get_config
-                config = get_config()
-                comfyui_workflows = config.paths.comfyui / "user" / "default" / "workflows"
-                
+
                 # Check both symlink formats
                 for symlink_name in [f.name, f"[{pack_name}] {f.name}"]:
                     symlink_path = comfyui_workflows / symlink_name
@@ -1584,12 +1584,12 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                         workflow_info["symlink_path"] = str(symlink_path)
                         workflow_info["symlink_valid"] = symlink_path.exists() and symlink_path.resolve() == f.resolve()
                         break
-                
+
                 # Remove from dict so we don't process it again
                 del workflow_files[wf.filename]
-            
+
             workflows.append(workflow_info)
-        
+
         # Add any workflow files not in pack.json (orphaned files)
         for filename, f in workflow_files.items():
             workflow_info = {
@@ -1605,12 +1605,7 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                 "symlink_path": None,
                 "orphaned": True,  # Not in pack.json
             }
-            
-            # Check for symlink
-            from config.settings import get_config
-            config = get_config()
-            comfyui_workflows = config.paths.comfyui / "user" / "default" / "workflows"
-            
+
             for symlink_name in [f.name, f"[{pack_name}] {f.name}"]:
                 symlink_path = comfyui_workflows / symlink_name
                 if symlink_path.exists() or symlink_path.is_symlink():
@@ -1618,7 +1613,7 @@ def get_pack(pack_name: str, store=Depends(require_initialized)):
                     workflow_info["symlink_path"] = str(symlink_path)
                     workflow_info["symlink_valid"] = symlink_path.exists() and symlink_path.resolve() == f.resolve()
                     break
-            
+
             workflows.append(workflow_info)
         
         # Check for unresolved and not installed assets

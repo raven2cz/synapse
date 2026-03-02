@@ -65,8 +65,8 @@ This document describes the internal architecture of the avatar-engine integrati
 
 ```python
 AVATAR_ENGINE_AVAILABLE: bool   # True if avatar_engine package is importable
-AVATAR_ENGINE_VERSION: str|None # e.g. "1.0.0"
-AVATAR_ENGINE_MIN_VERSION = "1.0.0"
+AVATAR_ENGINE_VERSION: str|None # e.g. "1.2.0"
+AVATAR_ENGINE_MIN_VERSION = "1.2.0"
 
 def check_avatar_engine_compat() -> bool
 ```

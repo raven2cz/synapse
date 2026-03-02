@@ -1,8 +1,8 @@
 # Plan: Integrace Avatar Engine v1.2 — Dynamic Models + Claude additional_dirs
 
-**Status:** 🚧 IMPLEMENTACE
+**Status:** ✅ DOKONČENO (2026-03-02) — avatar-engine v1.2.0 publikován, Synapse deps `^1.2.0`
 **Datum:** 2026-02-26
-**Závislost:** avatar-engine branch `feature/v1.2-stability` (lokální npm link)
+**Závislost:** ~~avatar-engine branch `feature/v1.2-stability` (lokální npm link)~~ → v1.2.0 npm registry
 
 ---
 

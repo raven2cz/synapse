@@ -173,7 +173,6 @@ export function BrowsePage() {
   // Toast functions
   const addToast = useCallback((type: Toast['type'], message: string, details?: string) => {
     const id = Math.random().toString(36).slice(2)
-    console.log(`[Toast] ${type.toUpperCase()}: ${message}`, details || '')
     setToasts(prev => [...prev, { id, type, message, details }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 8000)
   }, [])

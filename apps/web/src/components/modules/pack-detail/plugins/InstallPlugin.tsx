@@ -306,8 +306,8 @@ export const InstallPlugin: PackPlugin = {
     )
   },
 
-  onPackLoad: (pack: PackDetail) => {
-    console.log('[InstallPlugin] Loaded install pack:', pack.name)
+  onPackLoad: (_pack: PackDetail) => {
+    // Pack loaded
   },
 
   validateChanges: (_pack, changes) => {

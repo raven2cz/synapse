@@ -358,13 +358,12 @@ export function MediaPreview({
   // Handle image error
   const handleImageError = useCallback(() => {
     if (isVideo) {
-      console.warn('[MediaPreview] Thumbnail failed for video, using video element fallback')
       setForceVideoDisplay(true)
       // We do NOT set imageError(true) because we are handling it gracefully
       return
     }
 
-    console.warn('[MediaPreview] Image load failed:', thumbnailUrl?.substring(0, 50))
+    console.debug('[MediaPreview] Image load failed:', thumbnailUrl?.substring(0, 50))
     setImageError(true)
     onError?.()
   }, [onError, thumbnailUrl, isVideo])

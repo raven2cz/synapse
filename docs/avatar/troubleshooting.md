@@ -16,7 +16,7 @@ curl -s http://localhost:8000/api/avatar/status | python -m json.tool
 |-------|---------|-----|
 | `ready` | Everything works | No action needed |
 | `disabled` | Config has `enabled: false` | Set `enabled: true` in `~/.synapse/store/state/avatar.yaml` |
-| `incompatible` | Engine installed but version too old | Upgrade: `uv add "avatar-engine[web]>=1.0.0"` |
+| `incompatible` | Engine installed but version too old | Upgrade: `uv add "avatar-engine[web]>=1.2.0"` |
 | `no_engine` | `avatar-engine` package not installed | `uv add "avatar-engine[web]"` |
 | `no_provider` | Engine OK but no CLI providers found | Install `gemini`, `claude`, or `codex` CLI |
 | `setup_required` | Neither engine nor providers installed | Install both (see [Getting Started](getting-started.md)) |
@@ -29,8 +29,8 @@ curl -s http://localhost:8000/api/avatar/status | python -m json.tool
   "state": "ready",            // see table above
   "enabled": true,             // from config
   "engine_installed": true,    // avatar_engine package importable
-  "engine_version": "1.0.0",   // installed version (null if not installed)
-  "engine_min_version": "1.0.0", // minimum required version
+  "engine_version": "1.2.0",   // installed version (null if not installed)
+  "engine_min_version": "1.2.0", // minimum required version
   "active_provider": "gemini", // current provider (null if no provider)
   "safety": "safe",            // safety mode
   "providers": [               // detected CLI tools
@@ -124,7 +124,7 @@ curl -s http://localhost:8000/api/avatar/status | python -m json.tool | grep ver
 # Upgrade if needed
 scripts/avatar-upgrade.sh
 # or manually:
-uv add "avatar-engine[web]>=1.0.0"
+uv add "avatar-engine[web]>=1.2.0"
 cd apps/web && pnpm update @avatar-engine/react @avatar-engine/core
 ```
 

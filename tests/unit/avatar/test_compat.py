@@ -40,7 +40,7 @@ class TestCheckAvatarEngineCompat:
         from src.avatar import check_avatar_engine_compat
 
         with patch("src.avatar.AVATAR_ENGINE_AVAILABLE", True), \
-             patch("src.avatar.AVATAR_ENGINE_VERSION", "1.0.0"):
+             patch("src.avatar.AVATAR_ENGINE_VERSION", "1.2.0"):
             assert check_avatar_engine_compat() is True
 
     def test_returns_true_when_version_exceeds_minimum(self):
@@ -54,7 +54,7 @@ class TestCheckAvatarEngineCompat:
         from src.avatar import check_avatar_engine_compat
 
         with patch("src.avatar.AVATAR_ENGINE_AVAILABLE", True), \
-             patch("src.avatar.AVATAR_ENGINE_VERSION", "0.9.0"):
+             patch("src.avatar.AVATAR_ENGINE_VERSION", "1.1.0"):
             assert check_avatar_engine_compat() is False
 
     def test_logs_warning_when_below_minimum(self, caplog):
@@ -84,7 +84,7 @@ class TestCheckAvatarEngineCompat:
         from src.avatar import check_avatar_engine_compat
 
         with patch("src.avatar.AVATAR_ENGINE_AVAILABLE", True), \
-             patch("src.avatar.AVATAR_ENGINE_VERSION", "1.0.0"), \
+             patch("src.avatar.AVATAR_ENGINE_VERSION", "1.2.0"), \
              patch.dict("sys.modules", {"packaging": None, "packaging.version": None}):
             # Should not raise, returns False (treats as incompatible when can't verify)
             result = check_avatar_engine_compat()
@@ -106,7 +106,7 @@ class TestMinVersionConstant:
     def test_min_version_value(self):
         from src.avatar import AVATAR_ENGINE_MIN_VERSION
 
-        assert AVATAR_ENGINE_MIN_VERSION == "1.0.0"
+        assert AVATAR_ENGINE_MIN_VERSION == "1.2.0"
 
 
 class TestStatusEndpointMinVersion:
@@ -131,7 +131,7 @@ class TestStatusEndpointMinVersion:
             result = avatar_status()
 
         assert "engine_min_version" in result
-        assert result["engine_min_version"] == "1.0.0"
+        assert result["engine_min_version"] == "1.2.0"
 
     @patch("src.avatar.routes.detect_available_providers")
     @patch("src.avatar.routes.load_avatar_config")

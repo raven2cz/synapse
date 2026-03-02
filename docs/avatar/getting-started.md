@@ -81,7 +81,7 @@ You should see:
   "available": true,
   "state": "ready",
   "engine_installed": true,
-  "engine_version": "1.0.0",
+  "engine_version": "1.2.0",
   "active_provider": "gemini"
 }
 ```
