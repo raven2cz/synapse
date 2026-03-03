@@ -26,7 +26,6 @@ import type {
   PluginContext,
   PluginBadge,
 } from './types'
-import { PackDepsSection } from '../sections/PackDepsSection'
 import i18n from '@/i18n'
 import { ANIMATION_PRESETS } from '../constants'
 
@@ -128,7 +127,6 @@ export const CustomPlugin: PackPlugin = {
     return (
       <div className="space-y-4">
         <EditCapabilitiesInfo context={context} />
-        <PackDepsSection context={context} />
       </div>
     )
   },

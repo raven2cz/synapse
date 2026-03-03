@@ -19,6 +19,9 @@ export { PackInfoSection, type PackInfoSectionProps } from './PackInfoSection'
 // Dependencies - asset management (ALL data and features preserved)
 export { PackDependenciesSection, type PackDependenciesSectionProps } from './PackDependenciesSection'
 
+// Pack Dependencies - pack-to-pack dependency management
+export { PackDepsSection } from './PackDepsSection'
+
 // Workflows - ComfyUI workflow management
 export { PackWorkflowsSection, type PackWorkflowsSectionProps } from './PackWorkflowsSection'
 

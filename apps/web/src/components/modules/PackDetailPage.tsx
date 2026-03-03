@@ -34,6 +34,7 @@ import {
   PackGallery,
   PackInfoSection,
   PackDependenciesSection,
+  PackDepsSection,
   PackWorkflowsSection,
   PackParametersSection,
   PackStorageSection,
@@ -371,6 +372,13 @@ function PackDetailPageContent() {
           animationDelay={150}
         />
       </SectionErrorBoundary>
+
+      {/* Pack Dependencies Section (pack-to-pack) - right after file dependencies */}
+      {pluginContext && (
+        <SectionErrorBoundary sectionName="Pack Dependencies" onRetry={packData.refetch}>
+          <PackDepsSection context={pluginContext} />
+        </SectionErrorBoundary>
+      )}
 
       {/* Workflows Section */}
       <SectionErrorBoundary sectionName="Workflows" onRetry={packData.refetch}>
