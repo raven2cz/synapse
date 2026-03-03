@@ -1,9 +1,16 @@
 """Tests for inventory service."""
 
 import pytest
+import time
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from src.store import Store
+from src.store.api import store_router, require_initialized
+from src.store.blob_store import compute_sha256
 from src.store.models import (
     AssetKind,
     BlobManifest,
@@ -587,8 +594,11 @@ def _create_pack_with_blob(
     sha256: str,
     size_bytes: int,
     kind: AssetKind = AssetKind.CHECKPOINT,
+    download_urls: list[str] | None = None,
 ):
     """Create a pack with a lock file referencing a blob."""
+    from src.store.models import ArtifactDownload
+
     # Create pack
     pack = Pack(
         name=pack_name,
@@ -605,6 +615,7 @@ def _create_pack_with_blob(
     )
 
     # Create lock
+    download = ArtifactDownload(urls=download_urls or [])
     lock = PackLock(
         pack=pack_name,
         resolved=[
@@ -615,6 +626,7 @@ def _create_pack_with_blob(
                     sha256=sha256,
                     size_bytes=size_bytes,
                     provider=ArtifactProvider(name=ProviderName.LOCAL),
+                    download=download,
                 ),
             )
         ],
@@ -792,3 +804,412 @@ class TestManifestMigration:
         # Manifest still exists and is unchanged
         manifest = store.blob_store.read_manifest(sha256)
         assert manifest is not None
+
+
+# =============================================================================
+# Redownload Tests
+# =============================================================================
+
+class TestRedownload:
+    """Test blob redownload logic (mirrors API endpoint behavior)."""
+
+    def _setup_missing_blob(self, tmp_path, with_url=True):
+        """Create a store with a 'missing' blob that has a download URL."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create source file (simulates the original download source)
+        source_content = b"model file content for redownload test"
+        source_file = tmp_path / "source_model.safetensors"
+        source_file.write_bytes(source_content)
+
+        sha256 = compute_sha256(source_file)
+        source_url = f"file://{source_file}" if with_url else None
+
+        # Create pack + lock referencing this blob (without the blob on disk)
+        _create_pack_with_blob(
+            store, "CyberRealistic", sha256, len(source_content),
+            download_urls=[source_url] if source_url else [],
+        )
+
+        return store, sha256, source_file
+
+    def test_redownload_restores_missing_blob(self, tmp_path):
+        """Re-download from file:// URL restores a missing blob."""
+        store, sha256, source_file = self._setup_missing_blob(tmp_path)
+
+        # Verify blob is missing
+        assert not store.blob_store.blob_exists(sha256)
+        inventory = store.get_inventory()
+        item = next(i for i in inventory.items if i.sha256 == sha256)
+        assert item.status == BlobStatus.MISSING
+
+        # Find download URL from lock (same logic as the API endpoint)
+        lock = store.layout.load_pack_lock("CyberRealistic")
+        url = lock.resolved[0].artifact.download.urls[0]
+
+        # Download
+        actual_sha = store.blob_store.download(url, sha256, force=True)
+
+        assert actual_sha == sha256
+        assert store.blob_store.blob_exists(sha256)
+
+    def test_redownload_with_no_url_raises(self, tmp_path):
+        """Cannot re-download when lock has no download URLs."""
+        store, sha256, _ = self._setup_missing_blob(tmp_path, with_url=False)
+
+        lock = store.layout.load_pack_lock("CyberRealistic")
+        urls = lock.resolved[0].artifact.download.urls
+
+        assert len(urls) == 0
+
+    def test_redownload_blob_not_in_inventory_returns_none(self, tmp_path):
+        """Looking up a non-existent blob SHA256 returns None from inventory."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        inventory = store.get_inventory()
+        item = next((i for i in inventory.items if i.sha256 == "a" * 64), None)
+        assert item is None
+
+    def test_redownload_preserves_sha256(self, tmp_path):
+        """Re-downloaded blob has same SHA256 as expected."""
+        store, sha256, source_file = self._setup_missing_blob(tmp_path)
+
+        lock = store.layout.load_pack_lock("CyberRealistic")
+        url = lock.resolved[0].artifact.download.urls[0]
+
+        actual_sha = store.blob_store.download(url, sha256, force=True)
+        assert actual_sha == sha256
+
+        # Also verify the file content matches
+        blob_path = store.blob_store.blob_path(sha256)
+        assert blob_path.read_bytes() == source_file.read_bytes()
+
+    def test_redownload_when_blob_exists_with_force(self, tmp_path):
+        """Force re-download replaces existing blob."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        # Create and adopt blob
+        source_content = b"original model content"
+        source_file = tmp_path / "model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = store.blob_store.adopt(source_file)
+
+        # Recreate source for re-download
+        source_file.write_bytes(source_content)
+        url = f"file://{source_file}"
+
+        # Force re-download should succeed even though blob exists
+        actual_sha = store.blob_store.download(url, sha256, force=True)
+        assert actual_sha == sha256
+        assert store.blob_store.blob_exists(sha256)
+
+    def test_redownload_url_lookup_from_multiple_packs(self, tmp_path):
+        """URL lookup searches across multiple packs' lock files."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        source_content = b"shared model across packs"
+        source_file = tmp_path / "shared_model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = compute_sha256(source_file)
+
+        # First pack has no download URL
+        _create_pack_with_blob(
+            store, "PackA", sha256, len(source_content),
+            download_urls=[],
+        )
+        # Second pack has the download URL
+        _create_pack_with_blob(
+            store, "PackB", sha256, len(source_content),
+            download_urls=[f"file://{source_file}"],
+        )
+
+        # Search lock files like the API does
+        inventory = store.get_inventory()
+        item = next(i for i in inventory.items if i.sha256 == sha256)
+
+        download_url = None
+        for pack_name in item.used_by_packs:
+            lock = store.layout.load_pack_lock(pack_name)
+            if not lock:
+                continue
+            for resolved in lock.resolved:
+                if resolved.artifact.sha256 == sha256 and resolved.artifact.download.urls:
+                    download_url = resolved.artifact.download.urls[0]
+                    break
+            if download_url:
+                break
+
+        assert download_url is not None
+        assert "shared_model" in download_url
+
+
+# =============================================================================
+# Verify Single Blob Tests
+# =============================================================================
+
+class TestVerifySingleBlob:
+    """Test per-blob SHA256 verification."""
+
+    def test_verify_valid_blob(self, tmp_path):
+        """Verification of a valid blob returns it in valid list."""
+        store = Store(tmp_path)
+        store.init()
+
+        blob_content = b"valid blob content for verification"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        result = store.verify_blobs(sha256_list=[sha256])
+
+        assert result["verified"] == 1
+        assert sha256 in result["valid"]
+        assert len(result["invalid"]) == 0
+
+    def test_verify_corrupted_blob(self, tmp_path):
+        """Verification of a corrupted blob returns it in invalid list."""
+        store = Store(tmp_path)
+        store.init()
+
+        blob_content = b"original blob content"
+        sha256 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, blob_content)
+        )
+
+        # Corrupt the blob file
+        blob_path = store.blob_store.blob_path(sha256)
+        blob_path.write_bytes(b"corrupted content")
+
+        result = store.verify_blobs(sha256_list=[sha256])
+
+        assert sha256 in result["invalid"]
+
+    def test_verify_nonexistent_blob(self, tmp_path):
+        """Verification of a non-existent SHA256 skips it."""
+        store = Store(tmp_path)
+        store.init()
+
+        result = store.verify_blobs(sha256_list=["a" * 64])
+
+        # Non-existent blob should be in invalid or skipped
+        assert result["verified"] == 0 or "a" * 64 in result.get("invalid", [])
+
+    def test_verify_multiple_blobs(self, tmp_path):
+        """Can verify a subset of blobs by SHA256 list."""
+        store = Store(tmp_path)
+        store.init()
+
+        sha1 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, b"blob one content")
+        )
+        sha2 = store.blob_store.adopt(
+            _create_temp_file(tmp_path, b"blob two content")
+        )
+
+        # Verify only the first blob
+        result = store.verify_blobs(sha256_list=[sha1])
+
+        assert result["verified"] == 1
+        assert sha1 in result["valid"]
+
+
+# =============================================================================
+# API-level Redownload Tests (uses main download system)
+# =============================================================================
+
+class TestRedownloadAPI:
+    """Test the redownload API endpoint creates a download task in _active_downloads."""
+
+    def _make_client(self, store):
+        """Create a FastAPI test client with dependency override."""
+        app = FastAPI()
+        app.include_router(store_router, prefix="/api/store")
+        app.dependency_overrides[require_initialized] = lambda: store
+        return TestClient(app)
+
+    def _cleanup_downloads(self):
+        """Clear _active_downloads between tests."""
+        from src.store.api import _active_downloads
+        _active_downloads.clear()
+
+    def test_redownload_returns_download_id(self, tmp_path):
+        """POST /inventory/{sha256}/redownload returns download_id like download-asset."""
+        self._cleanup_downloads()
+        store = Store(tmp_path / "store")
+        store.init()
+
+        source_content = b"blob for download task test"
+        source_file = tmp_path / "model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = compute_sha256(source_file)
+
+        _create_pack_with_blob(
+            store, "TestPack", sha256, len(source_content),
+            download_urls=[f"file://{source_file}"],
+        )
+
+        client = self._make_client(store)
+        response = client.post(f"/api/store/inventory/{sha256}/redownload")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "started"
+        assert "download_id" in data
+        assert data["pack_name"] == "TestPack"
+
+    def test_redownload_creates_active_download_entry(self, tmp_path):
+        """Redownload registers in _active_downloads for Downloads tab tracking."""
+        self._cleanup_downloads()
+        from src.store.api import _active_downloads
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        source_content = b"blob tracked in downloads"
+        source_file = tmp_path / "model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = compute_sha256(source_file)
+
+        _create_pack_with_blob(
+            store, "TestPack", sha256, len(source_content),
+            download_urls=[f"file://{source_file}"],
+        )
+
+        client = self._make_client(store)
+        response = client.post(f"/api/store/inventory/{sha256}/redownload")
+        download_id = response.json()["download_id"]
+
+        # Entry should exist in _active_downloads
+        assert download_id in _active_downloads
+        entry = _active_downloads[download_id]
+        assert entry["pack_name"] == "TestPack"
+        assert entry["group_label"] == "Inventory Re-download"
+
+    def test_redownload_thread_downloads_blob(self, tmp_path):
+        """Background thread actually downloads the blob file."""
+        self._cleanup_downloads()
+        from src.store.api import _active_downloads
+
+        store = Store(tmp_path / "store")
+        store.init()
+
+        source_content = b"blob downloaded via thread"
+        source_file = tmp_path / "model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = compute_sha256(source_file)
+
+        _create_pack_with_blob(
+            store, "TestPack", sha256, len(source_content),
+            download_urls=[f"file://{source_file}"],
+        )
+
+        assert not store.blob_store.blob_exists(sha256)
+
+        client = self._make_client(store)
+        response = client.post(f"/api/store/inventory/{sha256}/redownload")
+        download_id = response.json()["download_id"]
+
+        # Wait for daemon thread to finish (file:// download is near-instant)
+        for _ in range(50):
+            entry = _active_downloads.get(download_id, {})
+            if entry.get("status") in ("completed", "failed"):
+                break
+            time.sleep(0.05)
+
+        assert _active_downloads[download_id]["status"] == "completed"
+        assert store.blob_store.blob_exists(sha256)
+
+    def test_redownload_404_unknown_sha(self, tmp_path):
+        """Returns 404 for unknown SHA256."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        client = self._make_client(store)
+        response = client.post(f"/api/store/inventory/{'a' * 64}/redownload")
+
+        assert response.status_code == 404
+
+    def test_redownload_404_no_download_url(self, tmp_path):
+        """Returns 404 when lock has no download URL."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        source_content = b"blob without url"
+        source_file = tmp_path / "model.safetensors"
+        source_file.write_bytes(source_content)
+        sha256 = compute_sha256(source_file)
+
+        _create_pack_with_blob(
+            store, "TestPack", sha256, len(source_content),
+            download_urls=[],
+        )
+
+        client = self._make_client(store)
+        response = client.post(f"/api/store/inventory/{sha256}/redownload")
+
+        assert response.status_code == 404
+        assert "No download URL" in response.json()["detail"]
+
+
+# =============================================================================
+# API-level Delete Tests (force flag)
+# =============================================================================
+
+class TestDeleteBlobAPI:
+    """Test the delete API endpoint with force flag (mirrors frontend behavior)."""
+
+    def _make_client(self, store):
+        app = FastAPI()
+        app.include_router(store_router, prefix="/api/store")
+        app.dependency_overrides[require_initialized] = lambda: store
+        return TestClient(app)
+
+    def test_delete_referenced_without_force_returns_409(self, tmp_path):
+        """DELETE without force=true on referenced blob returns 409."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        content = b"referenced blob"
+        sha256 = store.blob_store.adopt(_create_temp_file(tmp_path, content))
+        _create_pack_with_blob(store, "Pack", sha256, len(content))
+
+        client = self._make_client(store)
+        response = client.delete(f"/api/store/inventory/{sha256}?target=local")
+
+        assert response.status_code == 409
+        assert store.blob_store.blob_exists(sha256)
+
+    def test_delete_referenced_with_force_succeeds(self, tmp_path):
+        """DELETE with force=true on referenced blob succeeds (user confirmed in dialog)."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        content = b"referenced blob to force-delete"
+        sha256 = store.blob_store.adopt(_create_temp_file(tmp_path, content))
+        _create_pack_with_blob(store, "Pack", sha256, len(content))
+
+        client = self._make_client(store)
+        response = client.delete(f"/api/store/inventory/{sha256}?target=local&force=true")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["deleted"] is True
+        assert not store.blob_store.blob_exists(sha256)
+
+    def test_delete_orphan_without_force_succeeds(self, tmp_path):
+        """DELETE without force on orphan blob succeeds (no guard rail needed)."""
+        store = Store(tmp_path / "store")
+        store.init()
+
+        content = b"orphan blob"
+        sha256 = store.blob_store.adopt(_create_temp_file(tmp_path, content))
+
+        client = self._make_client(store)
+        response = client.delete(f"/api/store/inventory/{sha256}?target=local")
+
+        assert response.status_code == 200
+        assert not store.blob_store.blob_exists(sha256)

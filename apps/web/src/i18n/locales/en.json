@@ -959,7 +959,16 @@
       "bulkSuccess": "Bulk {{action}} completed for {{count}} blob(s)",
       "bulkFailed": "Bulk action failed: {{error}}",
       "doctorSuccess": "Doctor completed successfully",
-      "doctorFailed": "Doctor failed"
+      "doctorFailed": "Doctor failed",
+      "redownloadStarted": "Download queued — check the Downloads tab for progress",
+      "redownloadSuccess": "Blob re-downloaded successfully",
+      "redownloadFailed": "Re-download failed: {{error}}",
+      "verifyStarted": "Verifying {{name}}...",
+      "verifyValid": "{{name}} — SHA256 verified OK",
+      "verifyInvalid": "{{name}} — SHA256 mismatch!",
+      "verifyFailed": "Verification failed: {{error}}",
+      "shaCopied": "SHA256 copied to clipboard",
+      "shaCopyFailed": "Failed to copy SHA256"
     },
     "stats": {
       "localStorage": "Local Storage",
@@ -1081,7 +1090,8 @@
       "deleteFromLocal": "Delete from Local",
       "deleteFromBackup": "Delete from Backup",
       "deleteEverywhere": "Delete Everywhere",
-      "redownloadFrom": "Re-download from {{provider}}"
+      "redownloadFrom": "Re-download from {{provider}}",
+      "verifySha256": "Verify SHA256"
     },
     "delete": {
       "title": "Delete Blob?",

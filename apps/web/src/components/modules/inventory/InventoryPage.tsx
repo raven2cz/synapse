@@ -69,25 +69,12 @@ const api = {
   },
 
   async deleteBlob(sha256: string, target: 'local' | 'backup' | 'both'): Promise<void> {
-    const res = await fetch(`/api/store/inventory/${sha256}?target=${target}`, {
+    // Always send force=true — user already confirmed via DeleteConfirmationDialog
+    // which shows full guard rails (last copy warning, referenced packs warning).
+    const res = await fetch(`/api/store/inventory/${sha256}?target=${target}&force=true`, {
       method: 'DELETE',
     })
     if (!res.ok) {
-      // Handle 409 Conflict (blob is referenced by packs)
-      if (res.status === 409) {
-        try {
-          const data = await res.json()
-          // FastAPI wraps HTTPException detail in "detail" key
-          const impacts = data.detail?.impacts || data.impacts
-          const packs = impacts?.used_by_packs || []
-          if (packs.length > 0) {
-            throw new Error(`Cannot delete: blob is used by ${packs.length} pack(s): ${packs.slice(0, 3).join(', ')}${packs.length > 3 ? '...' : ''}`)
-          }
-        } catch (e) {
-          if (e instanceof Error && e.message.startsWith('Cannot delete:')) throw e
-        }
-        throw new Error('Cannot delete: blob is referenced by other packs')
-      }
       const errorText = await res.text()
       throw new Error(errorText || 'Failed to delete blob')
     }
@@ -132,6 +119,29 @@ const api = {
       throw new Error(errorText || 'Failed to get impact analysis')
     }
     return res.json()
+  },
+
+  async redownloadBlob(sha256: string): Promise<{ status: string; message: string }> {
+    const res = await fetch(`/api/store/inventory/${sha256}/redownload`, { method: 'POST' })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to re-download blob')
+    }
+    return res.json()
+  },
+
+  async verifySingleBlob(sha256: string): Promise<{ valid: boolean }> {
+    const res = await fetch('/api/store/inventory/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sha256: [sha256], all: false }),
+    })
+    if (!res.ok) {
+      const errorText = await res.text()
+      throw new Error(errorText || 'Failed to verify blob')
+    }
+    const data = await res.json()
+    return { valid: (data.valid || []).includes(sha256) }
   },
 
   async verifyIntegrity(): Promise<VerifyResult> {
@@ -232,6 +242,33 @@ export function InventoryPage() {
     },
   })
 
+  const redownloadMutation = useMutation({
+    mutationFn: api.redownloadBlob,
+    onSuccess: () => {
+      toast.success(t('inventory.toast.redownloadStarted'))
+    },
+    onError: (error: Error) => {
+      toast.error(t('inventory.toast.redownloadFailed', { error: error.message }))
+    },
+  })
+
+  const verifyMutation = useMutation({
+    mutationFn: api.verifySingleBlob,
+    onSuccess: (_data, sha256) => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] })
+      const item = inventory?.items.find((i) => i.sha256 === sha256)
+      const name = item?.display_name || sha256.slice(0, 12)
+      if (_data.valid) {
+        toast.success(t('inventory.toast.verifyValid', { name }))
+      } else {
+        toast.error(t('inventory.toast.verifyInvalid', { name }))
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(t('inventory.toast.verifyFailed', { error: error.message }))
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: ({ sha256, target }: { sha256: string; target: 'local' | 'backup' | 'both' }) =>
       api.deleteBlob(sha256, target),
@@ -281,6 +318,17 @@ export function InventoryPage() {
   const handleRestore = useCallback(async (sha256: string) => {
     await restoreMutation.mutateAsync(sha256)
   }, [restoreMutation])
+
+  const handleRedownload = useCallback(async (sha256: string) => {
+    await redownloadMutation.mutateAsync(sha256)
+  }, [redownloadMutation])
+
+  const handleVerifySingle = useCallback(async (sha256: string) => {
+    const item = inventory?.items.find((i) => i.sha256 === sha256)
+    const name = item?.display_name || sha256.slice(0, 12)
+    toast.info(t('inventory.toast.verifyStarted', { name }))
+    await verifyMutation.mutateAsync(sha256)
+  }, [verifyMutation, inventory?.items, t])
 
   const handleDeleteRequest = useCallback(
     (sha256: string, target: 'local' | 'backup' | 'both') => {
@@ -476,6 +524,8 @@ export function InventoryPage() {
             onRestore={handleRestore}
             onDelete={handleDeleteRequest}
             onShowImpacts={handleShowImpacts}
+            onRedownload={handleRedownload}
+            onVerify={handleVerifySingle}
             onBulkAction={handleBulkAction}
           />
         </>

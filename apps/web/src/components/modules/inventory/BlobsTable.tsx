@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { Button } from '../../ui/Button'
 import { Card } from '../../ui/Card'
+import { toast } from '../../../stores/toastStore'
 import { LocationIcon } from './LocationIcon'
 import { StatusBadge } from './StatusBadge'
 import { AssetKindIcon, getKindLabel } from './AssetKindIcon'
@@ -41,11 +42,13 @@ interface BlobsTableProps {
   onRestore: (sha256: string) => Promise<void>
   onDelete: (sha256: string, target: 'local' | 'backup' | 'both') => void
   onShowImpacts: (item: InventoryItem) => void
+  onRedownload: (sha256: string) => Promise<void>
+  onVerify: (sha256: string) => Promise<void>
   onBulkAction: (sha256s: string[], action: BulkAction) => void
   isLoading?: boolean
 }
 
-type SortKey = 'display_name' | 'size_bytes' | 'status' | 'location' | 'kind'
+type SortKey = 'display_name' | 'size_bytes' | 'status' | 'location' | 'kind' | 'used_by_packs'
 type SortDirection = 'asc' | 'desc'
 
 export function BlobsTable({
@@ -56,6 +59,8 @@ export function BlobsTable({
   onRestore,
   onDelete,
   onShowImpacts,
+  onRedownload,
+  onVerify,
   onBulkAction,
   isLoading,
 }: BlobsTableProps) {
@@ -72,8 +77,22 @@ export function BlobsTable({
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
       const { key, direction } = sortConfig
-      let aVal: string | number = a[key] as string | number
-      let bVal: string | number = b[key] as string | number
+
+      // Special handling for used_by_packs (array field):
+      // Primary sort by pack count, secondary by first pack name alphabetically
+      if (key === 'used_by_packs') {
+        const countDiff = a.used_by_packs.length - b.used_by_packs.length
+        if (countDiff !== 0) {
+          return direction === 'asc' ? countDiff : -countDiff
+        }
+        const aFirst = (a.used_by_packs[0] || '').toLowerCase()
+        const bFirst = (b.used_by_packs[0] || '').toLowerCase()
+        const cmp = aFirst.localeCompare(bFirst)
+        return direction === 'asc' ? cmp : -cmp
+      }
+
+      const aVal: string | number = a[key] as string | number
+      const bVal: string | number = b[key] as string | number
 
       if (typeof aVal === 'number' && typeof bVal === 'number') {
         return direction === 'asc' ? aVal - bVal : bVal - aVal
@@ -297,8 +316,13 @@ export function BlobsTable({
                 </th>
 
                 {/* Used By */}
-                <th className="w-[220px] px-4 py-3 text-left text-xs font-medium text-text-muted uppercase">
-                  {t('inventory.table.usedBy')}
+                <th className="w-[220px] px-4 py-3 text-left">
+                  <SortableHeader
+                    label={t('inventory.table.usedBy')}
+                    sortKey="used_by_packs"
+                    currentSort={sortConfig}
+                    onSort={handleSort}
+                  />
                 </th>
 
                 {/* Actions - sticky */}
@@ -320,6 +344,8 @@ export function BlobsTable({
                   onRestore={onRestore}
                   onDelete={onDelete}
                   onShowImpacts={onShowImpacts}
+                  onRedownload={onRedownload}
+                  onVerify={onVerify}
                   isMenuOpen={openMenuId === item.sha256}
                   onMenuToggle={(open) => setOpenMenuId(open ? item.sha256 : null)}
                 />
@@ -390,6 +416,8 @@ function BlobRow({
   onRestore,
   onDelete,
   onShowImpacts,
+  onRedownload,
+  onVerify,
   isMenuOpen,
   onMenuToggle,
 }: {
@@ -402,6 +430,8 @@ function BlobRow({
   onRestore: (sha256: string) => Promise<void>
   onDelete: (sha256: string, target: 'local' | 'backup' | 'both') => void
   onShowImpacts: (item: InventoryItem) => void
+  onRedownload: (sha256: string) => Promise<void>
+  onVerify: (sha256: string) => Promise<void>
   isMenuOpen: boolean
   onMenuToggle: (open: boolean) => void
 }) {
@@ -445,7 +475,12 @@ function BlobRow({
   }
 
   const handleCopySha = async () => {
-    await copyToClipboard(item.sha256)
+    try {
+      await copyToClipboard(item.sha256)
+      toast.success(t('inventory.toast.shaCopied'))
+    } catch {
+      toast.error(t('inventory.toast.shaCopyFailed'))
+    }
     setCopiedSha(true)
     setTimeout(() => setCopiedSha(false), 2000)
     onMenuToggle(false)
@@ -505,7 +540,8 @@ function BlobRow({
       {/* Name */}
       <td className="px-4 py-3">
         <div className="flex flex-col gap-0.5">
-          <span className="font-medium text-text-primary">
+          <span className="font-medium text-text-primary flex items-center gap-2">
+            {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-synapse shrink-0" />}
             {item.display_name}
           </span>
           {/* Original filename from origin */}
@@ -688,8 +724,8 @@ function BlobRow({
                 )}
 
                 {/* Delete actions */}
-                {/* Delete from Local: allowed for orphans OR if backup exists (safe - copy remains) */}
-                {item.on_local && (item.status === 'orphan' || item.on_backup) && (
+                {/* Delete from Local: always shown for local blobs. Backend + DeleteConfirmationDialog handle guard rails */}
+                {item.on_local && (
                   <button
                     className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-500/10 flex items-center gap-2"
                     onClick={() => handleDelete('local')}
@@ -723,10 +759,21 @@ function BlobRow({
                 {item.status === 'missing' && item.origin && (
                   <button
                     className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
-                    onClick={() => onMenuToggle(false)}
+                    onClick={() => handleAction(() => onRedownload(item.sha256))}
                   >
                     <RefreshCw className="w-4 h-4" />
                     {t('inventory.table.redownloadFrom', { provider: item.origin.provider })}
+                  </button>
+                )}
+
+                {/* Verify SHA256 integrity */}
+                {item.on_local && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary flex items-center gap-2"
+                    onClick={() => handleAction(() => onVerify(item.sha256))}
+                  >
+                    <Check className="w-4 h-4" />
+                    {t('inventory.table.verifySha256')}
                   </button>
                 )}
               </div>

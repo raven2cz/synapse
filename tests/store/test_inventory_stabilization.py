@@ -584,12 +584,14 @@ class TestBug26DeleteDialogErrorHandling:
     - Close dialog in onError callback too (not just onSuccess)
     """
 
-    def test_delete_blob_handles_409_response(self):
+    def test_delete_blob_sends_force_after_dialog_confirmation(self):
         """
-        Verify that deleteBlob function parses 409 response properly.
+        Verify that deleteBlob sends force=true (user already confirmed in dialog).
 
-        This is a code structure test - we check the source code to ensure
-        the bug fix is in place.
+        Previously (Bug #26), the frontend didn't handle 409 properly.
+        Now the fix is simpler: always send force=true because the
+        DeleteConfirmationDialog provides full guard rails (last copy warning,
+        referenced packs warning) BEFORE the API call.
         """
         page_path = Path(__file__).parent.parent.parent / "apps/web/src/components/modules/inventory/InventoryPage.tsx"
 
@@ -598,20 +600,9 @@ class TestBug26DeleteDialogErrorHandling:
 
         content = page_path.read_text()
 
-        # Check that we handle 409 status specifically
-        assert "res.status === 409" in content, \
-            "deleteBlob should check for 409 status"
-
-        # Check that we parse JSON for 409 response
-        assert "res.json()" in content, \
-            "deleteBlob should parse JSON response for 409"
-
-        # Check that we extract pack info from impacts (handling FastAPI's detail wrapper)
-        assert "data.detail?.impacts" in content or "detail?.impacts" in content, \
-            "deleteBlob should handle FastAPI's detail wrapper"
-
-        assert "used_by_packs" in content, \
-            "deleteBlob should extract used_by_packs from impacts"
+        # Check that we send force=true in the delete request
+        assert "force=true" in content, \
+            "deleteBlob should send force=true (user confirmed in DeleteConfirmationDialog)"
 
     def test_delete_mutation_closes_dialog_on_error(self):
         """
@@ -717,11 +708,13 @@ class TestFeature28DeleteLocalForSyncedBlobs:
     - Bulk actions: "Free Local" button for selected synced blobs
     """
 
-    def test_delete_local_available_for_synced_blobs(self):
+    def test_delete_local_available_for_all_local_blobs(self):
         """
-        Verify that Delete from Local is shown for blobs with backup.
+        Verify that Delete from Local is shown for ALL local blobs.
 
-        This is a code structure test.
+        Previously (Feature #28), delete was only shown for orphans or synced blobs.
+        Now it's shown for all local blobs — the DeleteConfirmationDialog handles
+        guard rails (last copy warning, referenced packs warning).
         """
         table_path = Path(__file__).parent.parent.parent / "apps/web/src/components/modules/inventory/BlobsTable.tsx"
 
@@ -730,13 +723,13 @@ class TestFeature28DeleteLocalForSyncedBlobs:
 
         content = table_path.read_text()
 
-        # Check that Delete from Local condition includes on_backup check
-        assert "item.on_backup" in content, \
-            "Delete from Local should consider if backup exists"
+        # Check that Delete from Local is conditioned only on item.on_local
+        # The comment should mention that dialog handles guard rails
+        assert "item.on_local" in content, \
+            "Delete from Local should be available for all local blobs"
 
-        # The condition should be: on_local && (orphan OR on_backup)
-        assert "item.status === 'orphan' || item.on_backup" in content, \
-            "Delete from Local should be available for orphans OR synced blobs"
+        assert "DeleteConfirmationDialog" in content or "guard rail" in content.lower() or "dialog handles" in content.lower(), \
+            "Code should reference that dialog handles safety checks"
 
     def test_bulk_free_local_action_exists(self):
         """

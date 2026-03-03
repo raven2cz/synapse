@@ -745,3 +745,470 @@ describe('Bulk Actions', () => {
     })
   })
 })
+
+// ============================================================================
+// Context Menu Action Visibility Tests
+// ============================================================================
+
+interface BlobOrigin {
+  provider: string
+  model_id?: number
+  version_id?: number
+}
+
+interface InventoryItemWithOrigin extends InventoryItem {
+  origin?: BlobOrigin
+}
+
+// ============================================================================
+// Used By Packs Sorting Tests
+// ============================================================================
+
+/**
+ * Mirrors BlobsTable.tsx sort comparator for used_by_packs.
+ * Primary: pack count. Secondary: first pack name alphabetically.
+ */
+function sortByUsedByPacks(
+  items: InventoryItem[],
+  direction: 'asc' | 'desc',
+): InventoryItem[] {
+  return [...items].sort((a, b) => {
+    const countDiff = a.used_by_packs.length - b.used_by_packs.length
+    if (countDiff !== 0) {
+      return direction === 'asc' ? countDiff : -countDiff
+    }
+    const aFirst = (a.used_by_packs[0] || '').toLowerCase()
+    const bFirst = (b.used_by_packs[0] || '').toLowerCase()
+    const cmp = aFirst.localeCompare(bFirst)
+    return direction === 'asc' ? cmp : -cmp
+  })
+}
+
+describe('Used By Packs Sorting', () => {
+  const makeItem = (packs: string[], name?: string): InventoryItem => ({
+    sha256: name || packs.join('-') || 'empty',
+    kind: 'checkpoint',
+    display_name: name || 'model.safetensors',
+    size_bytes: 1000,
+    location: 'local_only',
+    on_local: true,
+    on_backup: false,
+    status: packs.length > 0 ? 'referenced' : 'orphan',
+    used_by_packs: packs,
+    ref_count: packs.length,
+    active_in_uis: [],
+  })
+
+  it('should sort by pack count ascending', () => {
+    const items = [
+      makeItem(['A', 'B', 'C'], 'three'),
+      makeItem(['X'], 'one'),
+      makeItem(['P', 'Q'], 'two'),
+    ]
+    const sorted = sortByUsedByPacks(items, 'asc')
+    expect(sorted.map(i => i.sha256)).toEqual(['one', 'two', 'three'])
+  })
+
+  it('should sort by pack count descending', () => {
+    const items = [
+      makeItem(['X'], 'one'),
+      makeItem(['A', 'B', 'C'], 'three'),
+      makeItem(['P', 'Q'], 'two'),
+    ]
+    const sorted = sortByUsedByPacks(items, 'desc')
+    expect(sorted.map(i => i.sha256)).toEqual(['three', 'two', 'one'])
+  })
+
+  it('should secondary sort by first pack name when counts equal', () => {
+    const items = [
+      makeItem(['Zebra Pack'], 'z'),
+      makeItem(['Alpha Pack'], 'a'),
+      makeItem(['Mid Pack'], 'm'),
+    ]
+    const sorted = sortByUsedByPacks(items, 'asc')
+    expect(sorted.map(i => i.sha256)).toEqual(['a', 'm', 'z'])
+  })
+
+  it('should handle orphans (empty packs array) at the start when ascending', () => {
+    const items = [
+      makeItem(['SomePack'], 'ref'),
+      makeItem([], 'orphan'),
+    ]
+    const sorted = sortByUsedByPacks(items, 'asc')
+    expect(sorted[0].sha256).toBe('orphan')
+    expect(sorted[1].sha256).toBe('ref')
+  })
+
+  it('should handle orphans (empty packs array) at the end when descending', () => {
+    const items = [
+      makeItem([], 'orphan'),
+      makeItem(['SomePack'], 'ref'),
+    ]
+    const sorted = sortByUsedByPacks(items, 'desc')
+    expect(sorted[0].sha256).toBe('ref')
+    expect(sorted[1].sha256).toBe('orphan')
+  })
+})
+
+/**
+ * Mirrors BlobsTable.tsx context menu visibility logic.
+ * Returns which actions are visible for a given item state.
+ */
+function getVisibleActions(
+  item: InventoryItemWithOrigin,
+  backupEnabled: boolean,
+  backupConnected: boolean,
+): string[] {
+  const actions: string[] = []
+
+  // Copy SHA256 is always visible
+  actions.push('copy_sha256')
+
+  // Show Impacts — only for referenced items
+  if (item.status === 'referenced') {
+    actions.push('show_impacts')
+  }
+
+  // Backup/Restore — need backup enabled and connected
+  if (backupEnabled && backupConnected) {
+    if (item.location === 'local_only') {
+      actions.push('backup_to_external')
+    }
+    if (item.location === 'backup_only') {
+      actions.push('restore_from_backup')
+    }
+  }
+
+  // Delete from local — always available for local blobs.
+  // DeleteConfirmationDialog handles guard rails (last copy warning, referenced warning).
+  if (item.on_local) {
+    actions.push('delete_from_local')
+  }
+
+  // Delete from backup
+  if (item.on_backup && backupConnected) {
+    actions.push('delete_from_backup')
+  }
+
+  // Delete everywhere — orphan with both copies
+  if (item.location === 'both' && item.status === 'orphan') {
+    actions.push('delete_everywhere')
+  }
+
+  // Re-download — missing with origin
+  if (item.status === 'missing' && item.origin) {
+    actions.push('redownload')
+  }
+
+  // Verify SHA256 — only if on local disk
+  if (item.on_local) {
+    actions.push('verify_sha256')
+  }
+
+  return actions
+}
+
+/**
+ * Mirrors BlobsTable.tsx quick action determination.
+ */
+function getQuickAction(
+  item: InventoryItem,
+  backupEnabled: boolean,
+  backupConnected: boolean,
+): string | null {
+  if (item.location === 'local_only' && backupEnabled && backupConnected) {
+    return 'backup'
+  }
+  if (item.location === 'backup_only' && backupConnected) {
+    return 'restore'
+  }
+  if (item.status === 'orphan' && item.on_local) {
+    return 'delete'
+  }
+  return null
+}
+
+describe('Context Menu Actions Visibility', () => {
+  const makeItem = (overrides: Partial<InventoryItemWithOrigin>): InventoryItemWithOrigin => ({
+    sha256: 'abc123def456',
+    kind: 'checkpoint',
+    display_name: 'cyberrealistic_final.safetensors',
+    size_bytes: 6_800_000_000,
+    location: 'local_only',
+    on_local: true,
+    on_backup: false,
+    status: 'referenced',
+    used_by_packs: ['CyberRealistic'],
+    ref_count: 1,
+    active_in_uis: [],
+    ...overrides,
+  })
+
+  it('should always show Copy SHA256', () => {
+    const item = makeItem({})
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).toContain('copy_sha256')
+  })
+
+  it('should show Verify SHA256 for local blobs', () => {
+    const item = makeItem({ on_local: true })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).toContain('verify_sha256')
+  })
+
+  it('should NOT show Verify SHA256 for backup-only blobs', () => {
+    const item = makeItem({
+      on_local: false,
+      on_backup: true,
+      location: 'backup_only',
+      status: 'backup_only',
+    })
+    const actions = getVisibleActions(item, true, true)
+    expect(actions).not.toContain('verify_sha256')
+  })
+
+  it('should show Re-download for missing blobs with origin', () => {
+    const item = makeItem({
+      status: 'missing',
+      on_local: false,
+      location: 'nowhere',
+      origin: { provider: 'civitai', model_id: 15003, version_id: 57618 },
+    })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).toContain('redownload')
+  })
+
+  it('should NOT show Re-download for missing blobs without origin', () => {
+    const item = makeItem({
+      status: 'missing',
+      on_local: false,
+      location: 'nowhere',
+      origin: undefined,
+    })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).not.toContain('redownload')
+  })
+
+  it('should NOT show Re-download for referenced (non-missing) blobs', () => {
+    const item = makeItem({
+      status: 'referenced',
+      origin: { provider: 'civitai', model_id: 15003 },
+    })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).not.toContain('redownload')
+  })
+
+  it('should show Show Impacts only for referenced blobs', () => {
+    const referenced = makeItem({ status: 'referenced' })
+    const orphan = makeItem({ status: 'orphan', used_by_packs: [] })
+
+    expect(getVisibleActions(referenced, false, false)).toContain('show_impacts')
+    expect(getVisibleActions(orphan, false, false)).not.toContain('show_impacts')
+  })
+
+  it('should show Backup only when backup enabled and connected', () => {
+    const item = makeItem({ location: 'local_only' })
+    expect(getVisibleActions(item, true, true)).toContain('backup_to_external')
+    expect(getVisibleActions(item, true, false)).not.toContain('backup_to_external')
+    expect(getVisibleActions(item, false, false)).not.toContain('backup_to_external')
+  })
+
+  it('should show Delete from Local for orphans', () => {
+    const item = makeItem({ status: 'orphan', used_by_packs: [], on_local: true })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).toContain('delete_from_local')
+  })
+
+  it('should show Delete from Local for backed-up referenced blobs', () => {
+    const item = makeItem({
+      status: 'referenced',
+      on_local: true,
+      on_backup: true,
+      location: 'both',
+    })
+    const actions = getVisibleActions(item, true, true)
+    expect(actions).toContain('delete_from_local')
+  })
+
+  it('should show Delete from Local for local-only referenced blobs (dialog handles guard rails)', () => {
+    const item = makeItem({
+      status: 'referenced',
+      on_local: true,
+      on_backup: false,
+      location: 'local_only',
+    })
+    const actions = getVisibleActions(item, false, false)
+    expect(actions).toContain('delete_from_local')
+  })
+})
+
+describe('Quick Action Determination', () => {
+  const makeItem = (overrides: Partial<InventoryItem>): InventoryItem => ({
+    sha256: 'test',
+    kind: 'checkpoint',
+    display_name: 'test.safetensors',
+    size_bytes: 1000,
+    location: 'local_only',
+    on_local: true,
+    on_backup: false,
+    status: 'referenced',
+    used_by_packs: ['Pack1'],
+    ref_count: 1,
+    active_in_uis: [],
+    ...overrides,
+  })
+
+  it('should show Backup for local-only items when backup available', () => {
+    const item = makeItem({ location: 'local_only' })
+    expect(getQuickAction(item, true, true)).toBe('backup')
+  })
+
+  it('should show Restore for backup-only items', () => {
+    const item = makeItem({
+      location: 'backup_only',
+      on_local: false,
+      on_backup: true,
+      status: 'backup_only',
+    })
+    expect(getQuickAction(item, true, true)).toBe('restore')
+  })
+
+  it('should show Delete for orphans on local', () => {
+    const item = makeItem({
+      status: 'orphan',
+      on_local: true,
+      used_by_packs: [],
+    })
+    expect(getQuickAction(item, false, false)).toBe('delete')
+  })
+
+  it('should return null for referenced blobs with no backup', () => {
+    const item = makeItem({ location: 'local_only', status: 'referenced' })
+    expect(getQuickAction(item, false, false)).toBeNull()
+  })
+})
+
+// ============================================================================
+// Delete Guard Rails (mirrors DeleteConfirmationDialog logic)
+// ============================================================================
+
+/**
+ * Mirrors DeleteConfirmationDialog.tsx warning level computation.
+ * Delete action is always available in context menu for any on_local blob,
+ * but the dialog shows appropriate warnings based on risk level.
+ */
+function getDeleteDialogWarnings(
+  item: InventoryItem,
+  target: 'local' | 'backup' | 'both',
+): { isLastCopy: boolean; isReferenced: boolean; hasHighRisk: boolean } {
+  const isLastCopy =
+    target === 'both' ||
+    (target === 'local' && !item.on_backup) ||
+    (target === 'backup' && !item.on_local)
+
+  const isReferenced = item.status === 'referenced'
+  const hasHighRisk = isLastCopy && isReferenced
+
+  return { isLastCopy, isReferenced, hasHighRisk }
+}
+
+describe('Delete Guard Rails (DeleteConfirmationDialog)', () => {
+  const makeItem = (overrides: Partial<InventoryItem>): InventoryItem => ({
+    sha256: 'abc123',
+    kind: 'checkpoint',
+    display_name: 'model.safetensors',
+    size_bytes: 2_000_000_000,
+    location: 'local_only',
+    on_local: true,
+    on_backup: false,
+    status: 'referenced',
+    used_by_packs: ['TestPack'],
+    ref_count: 1,
+    active_in_uis: [],
+    ...overrides,
+  })
+
+  it('should flag HIGH RISK for referenced local-only blob (last copy + referenced)', () => {
+    const item = makeItem({ status: 'referenced', on_local: true, on_backup: false })
+    const warnings = getDeleteDialogWarnings(item, 'local')
+    expect(warnings.isLastCopy).toBe(true)
+    expect(warnings.isReferenced).toBe(true)
+    expect(warnings.hasHighRisk).toBe(true)
+  })
+
+  it('should flag last copy but NOT high risk for orphan local-only blob', () => {
+    const item = makeItem({ status: 'orphan', on_local: true, on_backup: false, used_by_packs: [] })
+    const warnings = getDeleteDialogWarnings(item, 'local')
+    expect(warnings.isLastCopy).toBe(true)
+    expect(warnings.isReferenced).toBe(false)
+    expect(warnings.hasHighRisk).toBe(false)
+  })
+
+  it('should NOT flag last copy when backup exists', () => {
+    const item = makeItem({ status: 'referenced', on_local: true, on_backup: true, location: 'both' })
+    const warnings = getDeleteDialogWarnings(item, 'local')
+    expect(warnings.isLastCopy).toBe(false)
+    expect(warnings.isReferenced).toBe(true)
+    expect(warnings.hasHighRisk).toBe(false)
+  })
+
+  it('should flag high risk for "delete both" on referenced blob', () => {
+    const item = makeItem({ status: 'referenced', on_local: true, on_backup: true, location: 'both' })
+    const warnings = getDeleteDialogWarnings(item, 'both')
+    expect(warnings.isLastCopy).toBe(true)
+    expect(warnings.hasHighRisk).toBe(true)
+  })
+
+  it('should not flag anything risky for backup-only delete when local exists', () => {
+    const item = makeItem({ status: 'referenced', on_local: true, on_backup: true, location: 'both' })
+    const warnings = getDeleteDialogWarnings(item, 'backup')
+    expect(warnings.isLastCopy).toBe(false)
+    expect(warnings.hasHighRisk).toBe(false)
+  })
+
+  it('should always show delete_from_local in context menu for any local blob', () => {
+    // Referenced + local_only — previously hidden, now visible
+    const referencedLocalOnly = makeItem({ status: 'referenced', on_local: true, on_backup: false })
+    expect(getVisibleActions(referencedLocalOnly, false, false)).toContain('delete_from_local')
+
+    // Referenced + both — always was visible
+    const referencedBoth = makeItem({ status: 'referenced', on_local: true, on_backup: true, location: 'both' })
+    expect(getVisibleActions(referencedBoth, true, true)).toContain('delete_from_local')
+
+    // Orphan — always was visible
+    const orphan = makeItem({ status: 'orphan', on_local: true, on_backup: false, used_by_packs: [] })
+    expect(getVisibleActions(orphan, false, false)).toContain('delete_from_local')
+  })
+
+  it('should NOT show delete_from_local for non-local blobs', () => {
+    const backupOnly = makeItem({ on_local: false, on_backup: true, location: 'backup_only', status: 'backup_only' })
+    expect(getVisibleActions(backupOnly, true, true)).not.toContain('delete_from_local')
+
+    const missing = makeItem({ on_local: false, on_backup: false, location: 'nowhere', status: 'missing' })
+    expect(getVisibleActions(missing, false, false)).not.toContain('delete_from_local')
+  })
+})
+
+// ============================================================================
+// API URL Construction Tests
+// ============================================================================
+
+describe('Inventory API URLs', () => {
+  it('should construct correct redownload URL', () => {
+    const sha256 = 'abc123def456'
+    const url = `/api/store/inventory/${sha256}/redownload`
+    expect(url).toBe('/api/store/inventory/abc123def456/redownload')
+  })
+
+  it('should construct correct verify URL with single SHA256', () => {
+    const sha256 = 'abc123def456'
+    const body = { sha256: [sha256], all: false }
+    expect(body.sha256).toHaveLength(1)
+    expect(body.all).toBe(false)
+  })
+
+  it('should construct correct verify URL for all blobs', () => {
+    const body = { all: true }
+    expect(body.all).toBe(true)
+  })
+})

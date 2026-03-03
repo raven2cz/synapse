@@ -964,7 +964,16 @@
       "bulkSuccess": "Hromadná akce {{action}} dokončena pro {{count}} blob(ů)",
       "bulkFailed": "Hromadná akce selhala: {{error}}",
       "doctorSuccess": "Doctor úspěšně dokončen",
-      "doctorFailed": "Doctor selhal"
+      "doctorFailed": "Doctor selhal",
+      "redownloadStarted": "Stahování zařazeno — sleduj průběh v záložce Downloads",
+      "redownloadSuccess": "Blob úspěšně znovu stažen",
+      "redownloadFailed": "Stažení selhalo: {{error}}",
+      "verifyStarted": "Ověřování {{name}}...",
+      "verifyValid": "{{name}} — SHA256 ověřen OK",
+      "verifyInvalid": "{{name}} — SHA256 nesouhlasí!",
+      "verifyFailed": "Ověření selhalo: {{error}}",
+      "shaCopied": "SHA256 zkopírován do schránky",
+      "shaCopyFailed": "Nepodařilo se zkopírovat SHA256"
     },
     "stats": {
       "localStorage": "Lokální úložiště",
@@ -1086,7 +1095,8 @@
       "deleteFromLocal": "Smazat z lokálního",
       "deleteFromBackup": "Smazat ze zálohy",
       "deleteEverywhere": "Smazat všude",
-      "redownloadFrom": "Znovu stáhnout z {{provider}}"
+      "redownloadFrom": "Znovu stáhnout z {{provider}}",
+      "verifySha256": "Ověřit SHA256"
     },
     "delete": {
       "title": "Smazat blob?",

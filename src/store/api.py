@@ -735,6 +735,186 @@ def verify_blobs(
         raise HTTPException(500, f"Verification failed: {str(e)}")
 
 
+@store_router.post("/inventory/{sha256}/redownload", response_model=Dict[str, Any])
+def redownload_blob(
+    sha256: str,
+    store=Depends(require_initialized),
+):
+    """
+    Re-download a blob from its original source.
+
+    Resolves pack_name + dependency_id + download URL from inventory/lock files,
+    then delegates to the main download-asset system (_active_downloads + daemon thread)
+    so the download appears in the Downloads tab with full progress tracking.
+    """
+    import uuid
+    import threading
+
+    sha256 = sha256.lower()
+    logger.info("[API] POST /inventory/%s/redownload", sha256[:12])
+
+    # Find which packs reference this blob
+    inventory = store.get_inventory()
+    item = next((i for i in inventory.items if i.sha256 == sha256), None)
+    if not item:
+        raise HTTPException(404, f"Blob not found: {sha256}")
+
+    # Search lock files for download URL, pack name, and dependency ID
+    download_url = None
+    source_pack = None
+    dep_id = None
+    dep = None
+    for pack_name in item.used_by_packs:
+        try:
+            lock = store.layout.load_pack_lock(pack_name)
+            if not lock:
+                continue
+            for resolved in lock.resolved:
+                if resolved.artifact.sha256 == sha256 and resolved.artifact.download.urls:
+                    download_url = resolved.artifact.download.urls[0]
+                    dep_id = resolved.dependency_id
+                    source_pack = pack_name
+                    break
+            if download_url:
+                # Also find the dependency for asset_type
+                pack = store.get_pack(pack_name)
+                if pack:
+                    dep = next((d for d in pack.dependencies if d.id == dep_id), None)
+                break
+        except Exception:
+            continue
+
+    if not download_url:
+        raise HTTPException(
+            404,
+            f"No download URL found for blob {sha256[:12]}. "
+            "The pack lock file may need to be re-resolved.",
+        )
+
+    # Create download tracking entry in the MAIN download system
+    filename = item.display_name or f"{sha256[:12]}.safetensors"
+    download_id = str(uuid.uuid4())[:8]
+    _active_downloads[download_id] = {
+        "download_id": download_id,
+        "pack_name": source_pack,
+        "asset_name": dep_id or sha256[:12],
+        "filename": filename,
+        "status": "pending",
+        "progress": 0.0,
+        "downloaded_bytes": 0,
+        "total_bytes": 0,
+        "speed_bps": 0,
+        "speed_mbps": 0,
+        "eta_seconds": 0,
+        "error": None,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "completed_at": None,
+        "target_path": None,
+        "group_id": f"redownload-{sha256[:8]}",
+        "group_label": "Inventory Re-download",
+    }
+
+    def do_download():
+        """Background download — same pattern as download-asset."""
+        import time
+
+        entry = _active_downloads[download_id]
+        entry["status"] = "downloading"
+        start_time = time.time()
+        last_update_time = start_time
+        last_downloaded = 0
+
+        try:
+            def progress_callback(downloaded: int, total: int):
+                nonlocal last_update_time, last_downloaded
+
+                current_time = time.time()
+                time_delta = current_time - last_update_time
+
+                entry["downloaded_bytes"] = downloaded
+                entry["total_bytes"] = total
+                if total > 0:
+                    entry["progress"] = (downloaded / total) * 100
+
+                if time_delta > 0.5:
+                    bytes_delta = downloaded - last_downloaded
+                    speed_bps = bytes_delta / time_delta if time_delta > 0 else 0
+                    entry["speed_bps"] = speed_bps
+                    entry["speed_mbps"] = speed_bps / (1024 * 1024)
+
+                    remaining_bytes = total - downloaded
+                    if speed_bps > 0:
+                        entry["eta_seconds"] = int(remaining_bytes / speed_bps)
+                    else:
+                        entry["eta_seconds"] = 0
+
+                    last_update_time = current_time
+                    last_downloaded = downloaded
+
+            actual_sha = store.blob_store.download(
+                download_url,
+                expected_sha256=sha256,
+                force=True,
+                progress_callback=progress_callback,
+            )
+
+            # Create symlink to ComfyUI models folder
+            type_map = {
+                'checkpoint': 'checkpoints',
+                'base_model': 'checkpoints',
+                'base_checkpoint': 'checkpoints',
+                'lora': 'loras',
+                'vae': 'vae',
+                'controlnet': 'controlnet',
+                'upscaler': 'upscale_models',
+                'embedding': 'embeddings',
+                'clip': 'clip',
+                'text_encoder': 'text_encoders',
+                'diffusion_model': 'diffusion_models',
+            }
+            asset_type = (dep.kind.value if dep else item.kind.value).lower()
+            model_dir = type_map.get(asset_type, 'checkpoints')
+
+            try:
+                from config.settings import get_config
+                config = get_config()
+                target_dir = config.comfyui.base_path / "models" / model_dir
+                target_dir.mkdir(parents=True, exist_ok=True)
+                target_path = target_dir / filename
+
+                blob_path = store.blob_store.blob_path(actual_sha)
+                if target_path.exists() or target_path.is_symlink():
+                    target_path.unlink()
+                target_path.symlink_to(blob_path)
+                entry["target_path"] = str(target_path)
+            except Exception as e:
+                logger.warning("[redownload] Symlink creation failed: %s", e)
+
+            entry["status"] = "completed"
+            entry["progress"] = 100.0
+            entry["sha256"] = actual_sha
+            entry["completed_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info(
+                "[API] Re-downloaded blob %s from %s (pack=%s)",
+                sha256[:12], download_url[:60], source_pack,
+            )
+
+        except Exception as e:
+            entry["status"] = "failed"
+            entry["error"] = str(e)
+            logger.error("[API] Re-download failed for %s: %s", sha256[:12], e, exc_info=True)
+
+    thread = threading.Thread(target=do_download, daemon=True)
+    thread.start()
+
+    return {
+        "download_id": download_id,
+        "pack_name": source_pack,
+        "asset_name": dep_id or sha256[:12],
+        "status": "started",
+    }
+
+
 # =============================================================================
 # Backup Storage Endpoints
 # =============================================================================

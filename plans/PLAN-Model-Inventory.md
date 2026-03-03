@@ -3492,6 +3492,40 @@ class TestAutoRestore:
 *Aktualizovano: 2026-01-24 (Iterace 3 DOKONČENA - CLI příkazy inventory/backup, 34 testů)*
 *Aktualizovano: 2026-01-24 (Iterace 4 DOKONČENA - UI komponenty: InventoryPage, InventoryStats, BlobsTable, LocationIcon, StatusBadge, AssetKindIcon, InventoryFilters)*
 *Aktualizovano: 2026-01-24 (CLI backup pull/push implementováno - viz sekce 6.6)*
+*Aktualizovano: 2026-03-03 (Inventory Actions opravy — viz sekce 12.x níže)*
+
+---
+
+## 12.x Inventory Actions — Opravy a vylepšení (2026-03-03)
+
+### ✅ Re-download from Civitai
+- Nový endpoint `POST /api/store/inventory/{sha256}/redownload`
+- Používá **hlavní download systém** (`_active_downloads` dict + daemon thread + progress callback)
+- Download se zobrazí v **Downloads tabu** s plným progress trackingem (speed, ETA, %)
+- Group label "Inventory Re-download" odlišuje od běžných downloadů
+- Endpoint najde pack + dependency + URL z lock filu, spustí download, vrátí `download_id`
+- Testy: 6 unit (TestRedownload) + 5 API-level (TestRedownloadAPI) + 3 API delete (TestDeleteBlobAPI)
+
+### ✅ Copy SHA256 — toast feedback
+- Přidán `toast.success()` po úspěšném zkopírování, `toast.error()` při selhání
+
+### ✅ Verify SHA256 — nová akce v context menu
+- Volá `POST /api/store/inventory/verify` pro jednotlivý blob
+- Toast s výsledkem (valid/invalid)
+
+### ✅ Delete — force flag po potvrzení v dialogu
+- Frontend posílá `force=true` v DELETE requestu (uživatel potvrdil v DeleteConfirmationDialog)
+- Dialog zobrazuje guard rails: last copy warning, referenced packs warning
+- Delete from Local dostupné pro VŠECHNY lokální bloby (ne jen orphany/synced)
+
+### ✅ Used By — sortovatelný sloupec
+- SortableHeader na sloupci "Used By"
+- Primární sort: počet packů, sekundární: jméno prvního packu
+- 5 frontend testů pro sorting logic
+
+### Celkový počet nových testů: 26
+- Backend: 14 (6 unit + 5 API redownload + 3 API delete)
+- Frontend: 12 (5 sorting + 7 delete guard rails)
 *Tento navrh vychazi z detailni analyzy existujici architektury Synapse Store v2.*
 
 ---
