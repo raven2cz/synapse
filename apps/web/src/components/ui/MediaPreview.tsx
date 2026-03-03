@@ -227,6 +227,17 @@ export function MediaPreview({
   const [forceVideoDisplay, setForceVideoDisplay] = useState(false) // Fallback when thumbnail fails
   const [isNearViewport, setIsNearViewport] = useState(!autoPlay) // Skip observer when not autoPlay
 
+  // CRITICAL: Reset all media states when src changes.
+  // Without this, stale state from a previous image/video can persist,
+  // causing wrong loading indicators, error states, or visual artifacts.
+  useEffect(() => {
+    setImageLoaded(false)
+    setImageError(false)
+    setVideoLoaded(false)
+    setVideoError(false)
+    setForceVideoDisplay(false)
+  }, [src])
+
   // Computed: should we blur this content?
   const shouldBlur = nsfw && nsfwBlurEnabled && !isRevealed
 

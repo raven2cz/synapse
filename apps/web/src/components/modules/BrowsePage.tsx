@@ -153,6 +153,8 @@ export function BrowsePage() {
   }, [searchProvider])
 
   const [selectedModel, setSelectedModel] = useState<number | null>(null)
+  // Store search result previews when user clicks a card (Meilisearch previews are correct)
+  const [selectedModelPreviews, setSelectedModelPreviews] = useState<ModelPreview[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
 
   const [fullscreenIndex, setFullscreenIndex] = useState<number>(-1)
@@ -249,13 +251,15 @@ export function BrowsePage() {
   // CRITICAL: Handle search results for pagination
   useEffect(() => {
     if (searchResults) {
+      const items = searchResults.items || []
+
       if (isLoadingMore.current) {
         // Append to existing results (Load More)
-        setAllModels(prev => [...prev, ...(searchResults.items || [])])
+        setAllModels(prev => [...prev, ...items])
         isLoadingMore.current = false
       } else {
         // Replace with new results (new search)
-        setAllModels(searchResults.items || [])
+        setAllModels(items)
       }
       // Save next cursor for Load More
       setNextCursor(searchResults.next_cursor)
@@ -315,9 +319,20 @@ export function BrowsePage() {
   })
 
   // Merge model info + progressively loaded previews
+  // CRITICAL: Prefer search result previews (from Meilisearch, known correct)
+  // over model.getById images (tRPC version images may differ from Civitai page)
   const modelDetail = useMemo(() => {
     if (!modelInfo) return undefined
-    const previews = modelPreviews?.length ? modelPreviews : modelInfo.previews
+
+    // CRITICAL: Use search result previews (captured at click time from Meilisearch) as primary source.
+    // tRPC model.getById and image.getInfinite return DIFFERENT images than what Meilisearch/Civitai
+    // page shows — model.getById has version-embedded images, image.getInfinite has community gallery.
+    // Only the search results match the model's actual cover/showcase images.
+    const previews = selectedModelPreviews.length
+      ? selectedModelPreviews
+      : modelPreviews?.length
+        ? modelPreviews
+        : modelInfo.previews
 
     // Derive example_params from loaded previews (tRPC model.getById has no images to extract from)
     let exampleParams = modelInfo.example_params
@@ -338,7 +353,7 @@ export function BrowsePage() {
       return modelInfo
     }
     return { ...modelInfo, previews, example_params: exampleParams }
-  }, [modelInfo, modelPreviews])
+  }, [modelInfo, modelPreviews, selectedModelPreviews])
 
   // Handlers
   const handleSearch = (e: React.FormEvent) => {
@@ -645,7 +660,6 @@ export function BrowsePage() {
       )}
 
       {/* Results grid */}
-      {/* Results grid */}
       <div
         className="flex flex-wrap gap-4"
         style={{ '--card-width': `${cardWidth}px` } as React.CSSProperties}
@@ -653,7 +667,7 @@ export function BrowsePage() {
         {allModels.map(model => (
           <div
             key={model.id}
-            onClick={() => setSelectedModel(model.id)}
+            onClick={() => { setSelectedModel(model.id); setSelectedModelPreviews(model.previews) }}
             className="group cursor-pointer"
             style={{ width: cardWidth }}
           >

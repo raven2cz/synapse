@@ -307,7 +307,7 @@ describe('transformTrpcModel', () => {
     expect(result.previews[0].nsfw).toBe(true)
   })
 
-  it('should detect NSFW from nsfwLevel >= 2', () => {
+  it('should detect NSFW from nsfwLevel >= 4 (Mature)', () => {
     const result = transformTrpcModel(
       createMockTrpcModel({
         modelVersions: [
@@ -318,7 +318,7 @@ describe('transformTrpcModel', () => {
               {
                 url: 'https://image.civitai.com/uuid/image.jpg',
                 nsfw: false,
-                nsfwLevel: 3,
+                nsfwLevel: 4,
               },
             ],
           },
@@ -327,6 +327,28 @@ describe('transformTrpcModel', () => {
     )
 
     expect(result.previews[0].nsfw).toBe(true)
+  })
+
+  it('should NOT mark nsfwLevel 2 (Soft/PG-13) as NSFW', () => {
+    const result = transformTrpcModel(
+      createMockTrpcModel({
+        modelVersions: [
+          {
+            id: 456,
+            name: 'v1.0',
+            images: [
+              {
+                url: 'https://image.civitai.com/uuid/image.jpg',
+                nsfw: false,
+                nsfwLevel: 2,
+              },
+            ],
+          },
+        ],
+      })
+    )
+
+    expect(result.previews[0].nsfw).toBe(false)
   })
 
   it('should limit previews to 8 items', () => {
@@ -364,6 +386,71 @@ describe('transformTrpcModel', () => {
     expect(result.creator).toBe('')
     expect(result.versions).toEqual([])
     expect(result.previews).toEqual([])
+  })
+
+  it('should collect images from ALL versions in fallback (no top-level images)', () => {
+    // When there are no top-level images, collect from ALL modelVersions.
+    // First version's images come first, followed by other versions.
+    const result = transformTrpcModel({
+      id: 999,
+      name: 'Multi-Version Model',
+      type: 'LORA',
+      // No top-level images — triggers fallback to modelVersions
+      modelVersions: [
+        {
+          id: 100,
+          name: 'v2.0',
+          images: [
+            { url: 'uuid-v2-img1', name: 'v2-image1.jpg', type: 'image' },
+            { url: 'uuid-v2-img2', name: 'v2-image2.jpg', type: 'image' },
+          ],
+        },
+        {
+          id: 200,
+          name: 'v1.0',
+          images: [
+            { url: 'uuid-v1-img1', name: 'v1-image1.jpg', type: 'image' },
+            { url: 'uuid-v1-img2', name: 'v1-image2.jpg', type: 'image' },
+          ],
+        },
+      ],
+    })
+
+    // Should have images from ALL versions (4 total)
+    expect(result.previews).toHaveLength(4)
+
+    // First version's images should come first
+    const innerUrl0 = decodeURIComponent(result.previews[0].url)
+    expect(innerUrl0).toContain('uuid-v2-img1')
+    const innerUrl2 = decodeURIComponent(result.previews[2].url)
+    expect(innerUrl2).toContain('uuid-v1-img1')
+  })
+
+  it('should prefer top-level images over modelVersions images', () => {
+    const result = transformTrpcModel({
+      id: 888,
+      name: 'Top Level Images Model',
+      type: 'Checkpoint',
+      // Top-level images (tRPC list format)
+      images: [
+        { url: 'uuid-toplevel', name: 'toplevel.jpg', type: 'image' },
+      ],
+      modelVersions: [
+        {
+          id: 100,
+          name: 'v1.0',
+          images: [
+            { url: 'uuid-version', name: 'version.jpg', type: 'image' },
+          ],
+        },
+      ],
+    })
+
+    // Should use top-level images, not version images
+    expect(result.previews).toHaveLength(1)
+    const innerUrl = decodeURIComponent(result.previews[0].url)
+    expect(innerUrl).toContain('uuid-toplevel')
+    expect(innerUrl).not.toContain('uuid-version')
   })
 })
 
@@ -667,6 +754,38 @@ describe('Meilisearch vs tRPC format differences', () => {
     expect(meiliModel).toHaveProperty('stats')
     expect(meiliModel).toHaveProperty('versions')
     expect(meiliModel).toHaveProperty('previews')
+  })
+
+  it('NSFW threshold should be consistent (>= 4) for both formats', () => {
+    // nsfwLevel 2 (Soft/PG-13) should NOT be NSFW in either format
+    const trpcSoft = transformTrpcModel({
+      id: 1,
+      modelVersions: [{
+        id: 10,
+        images: [{ url: 'uuid-1', name: 'img.jpg', nsfwLevel: 2, nsfw: false }],
+      }],
+    })
+    const meiliSoft = transformMeilisearchModel({
+      id: 2,
+      images: [{ url: 'uuid-2', name: 'img.jpg', nsfwLevel: 2, type: 'image' }],
+    })
+    expect(trpcSoft.previews[0].nsfw).toBe(false)
+    expect(meiliSoft.previews[0].nsfw).toBe(false)
+
+    // nsfwLevel 4 (Mature) SHOULD be NSFW in both formats
+    const trpcMature = transformTrpcModel({
+      id: 3,
+      modelVersions: [{
+        id: 30,
+        images: [{ url: 'uuid-3', name: 'img.jpg', nsfwLevel: 4, nsfw: false }],
+      }],
+    })
+    const meiliMature = transformMeilisearchModel({
+      id: 4,
+      images: [{ url: 'uuid-4', name: 'img.jpg', nsfwLevel: 4, type: 'image' }],
+    })
+    expect(trpcMature.previews[0].nsfw).toBe(true)
+    expect(meiliMature.previews[0].nsfw).toBe(true)
   })
 
   it('stats should be compatible between formats', () => {

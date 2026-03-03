@@ -276,8 +276,10 @@ export function transformPreview(img: Record<string, unknown>): ModelPreview {
   const mediaType: MediaType = isVideo ? 'video' : 'image'
 
   // CRITICAL: NSFW detection - both flag and nsfwLevel
+  // Civitai nsfwLevel: 1=PG, 2=PG-13(Soft), 4=R(Mature), 8=X, 16=XXX
+  // Threshold >= 4 matches Civitai's own "Mature" boundary (consistent with Meilisearch)
   const nsfwLevel = (img.nsfwLevel as number) || 0
-  const isNsfw = (img.nsfw as boolean) === true || nsfwLevel >= 2
+  const isNsfw = (img.nsfw as boolean) === true || nsfwLevel >= 4
 
   // CRITICAL: Video thumbnail - also needs proxy
   const thumbnailUrl =
