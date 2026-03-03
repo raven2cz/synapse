@@ -70,9 +70,16 @@ logging.getLogger("uvicorn.access").addFilter(StatusEndpointFilter())
 
 
 async def _start_avatar_engine(mgr) -> None:
-    """Background task: start avatar engine (may take seconds for AI init)."""
+    """Background task: start avatar engine (may take seconds for AI init).
+
+    Must call broadcast_ready() after start_engine() so WS clients that
+    connected during startup receive the CONNECTED message with capabilities.
+    Without this, clients stay stuck at INITIALIZING (sub-app lifespans are
+    not called by Starlette, so the engine's built-in broadcast never fires).
+    """
     try:
         await mgr.start_engine()
+        mgr.broadcast_ready()
         logger.info("Avatar Engine started successfully")
     except asyncio.CancelledError:
         logger.info("Avatar Engine startup cancelled")

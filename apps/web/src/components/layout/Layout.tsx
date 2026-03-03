@@ -107,6 +107,7 @@ function LayoutInner({ children }: LayoutProps) {
         activeOptions={chat.activeOptions}
         availableProviders={providers}
         switchProvider={chat.switchProvider}
+        newSession={chat.newSession}
         onCompactModeRef={compactRef}
         avatars={ALL_AVATARS}
         avatarBasePath="/avatars"
@@ -142,6 +143,7 @@ function LayoutInner({ children }: LayoutProps) {
             onSwitch={chat.switchProvider}
             onResume={chat.resumeSession}
             onNewSession={chat.newSession}
+            isStreaming={chat.isStreaming}
             onCompactMode={() => compactRef.current?.()}
           />
           <main className="flex-1 flex flex-col min-h-0">

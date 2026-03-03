@@ -9,11 +9,11 @@ importers:
   .:
     dependencies:
       '@avatar-engine/core':
-        specifier: ^1.2.0
-        version: 1.2.0(typescript@5.9.3)
+        specifier: file:../../../avatar-engine/packages/core
+        version: file:../../../avatar-engine/packages/core(typescript@5.9.3)
       '@avatar-engine/react':
-        specifier: ^1.2.0
-        version: 1.2.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
+        specifier: file:../../../avatar-engine/packages/react
+        version: file:../../../avatar-engine/packages/react(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)
       '@codemirror/autocomplete':
         specifier: ^6.20.0
         version: 6.20.0
@@ -155,8 +155,11 @@ packages:
   '@avatar-engine/core@1.2.0':
     resolution: {integrity: sha512-eSkKMbCGyyyZjbG0nKkgqCDCpE9/ITUp3103uTLVa6r8jK9vVaQZ9J6EgfjoclqsGqXDzfa5ypuyCrEABlT9OA==}
 
-  '@avatar-engine/react@1.2.0':
-    resolution: {integrity: sha512-bal3Dx+MSFFh6t/IWu/60bZWAz7rwhVddkckPDqYTxfzFTDUv2Qcm2KUWbCVgzdD2p54SGyH0Of/zaSPCtrlcA==}
+  '@avatar-engine/core@file:../../../avatar-engine/packages/core':
+    resolution: {directory: ../../../avatar-engine/packages/core, type: directory}
+
+  '@avatar-engine/react@file:../../../avatar-engine/packages/react':
+    resolution: {directory: ../../../avatar-engine/packages/react, type: directory}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -2476,7 +2479,13 @@ snapshots:
     transitivePeerDependencies:
       - typescript
 
-  '@avatar-engine/react@1.2.0(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
+  '@avatar-engine/core@file:../../../avatar-engine/packages/core(typescript@5.9.3)':
+    dependencies:
+      i18next: 25.8.13(typescript@5.9.3)
+    transitivePeerDependencies:
+      - typescript
+
+  '@avatar-engine/react@file:../../../avatar-engine/packages/react(@types/react@18.3.28)(i18next@25.8.13(typescript@5.9.3))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)':
     dependencies:
       '@avatar-engine/core': 1.2.0(typescript@5.9.3)
       lucide-react: 0.300.0(react@18.3.1)

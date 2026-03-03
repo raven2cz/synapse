@@ -4,6 +4,11 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react()],
+  // Suppress Firefox "No sources are declared in this source map" warnings
+  // for pre-bundled dependencies (esbuild generates empty source maps).
+  optimizeDeps: {
+    esbuildOptions: { sourcemap: false },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -15,19 +20,19 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Avatar Engine WebSocket (must be before /api catch-all)
+      // Avatar Engine WebSocket — explicit 127.0.0.1 to avoid Firefox
+      // IPv6/IPv4 ambiguity (Firefox resolves localhost to ::1 first).
       '/api/avatar/ws': {
-        target: 'ws://localhost:8000',
+        target: 'ws://127.0.0.1:8000',
         ws: true,
       },
-      // All API requests (Synapse + Avatar Engine — no rewriting needed,
-      // avatar-engine is mounted at /api/avatar with empty internal prefix)
+      // All API requests (Synapse + Avatar Engine REST)
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
       '/previews': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
     },
