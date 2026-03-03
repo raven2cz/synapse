@@ -15,6 +15,8 @@ import { BreathingOrb } from '../ui/BreathingOrb'
 import { Button } from '../ui/Button'
 import { CreatePackModal, type CreatePackData } from './pack-detail/modals'
 import { UpdatesPanel } from './packs/UpdatesPanel'
+import { AssetKindIcon, getKindLabel } from './inventory/AssetKindIcon'
+import type { AssetKind } from './inventory/types'
 import { toast } from '@/stores/toastStore'
 
 interface PackSummary {
@@ -32,7 +34,7 @@ interface PackSummary {
   tags: string[]
   user_tags: string[]
   has_unresolved: boolean
-  model_type?: string
+  pack_type?: string
   base_model?: string
   is_nsfw?: boolean
   is_nsfw_hidden?: boolean
@@ -373,8 +375,11 @@ export function PacksPage() {
 
                 {/* Top badges */}
                 <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap max-w-[80%]">
-                  <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold">
-                    {t('packs.card.assets', { count: pack.assets_count })}
+                  <span className="px-2 py-1 bg-black/60 backdrop-blur-sm rounded-lg text-xs text-white font-semibold flex items-center gap-1.5">
+                    {pack.pack_type && (
+                      <AssetKindIcon kind={pack.pack_type as AssetKind} size="sm" />
+                    )}
+                    {pack.pack_type ? getKindLabel(pack.pack_type as AssetKind) : t('packs.card.assets', { count: pack.assets_count })}
                   </span>
                 </div>
 
@@ -412,13 +417,8 @@ export function PacksPage() {
                     {pack.name}
                   </h3>
 
-                  {/* Model type and base model badges */}
+                  {/* Base model and version badges */}
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    {pack.model_type && (
-                      <span className="px-2 py-0.5 bg-synapse/80 rounded text-xs text-white font-medium">
-                        {pack.model_type}
-                      </span>
-                    )}
                     {pack.base_model && (
                       <span className="px-2 py-0.5 bg-white/20 rounded text-xs text-white/90">
                         {pack.base_model}
