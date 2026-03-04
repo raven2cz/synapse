@@ -1052,8 +1052,12 @@ class PackService:
         results: List[PreviewInfo] = []
 
         for i, preview in enumerate(previews):
-            url = preview.get("url", "") if isinstance(preview, dict) else str(preview)
-            nsfw = preview.get("nsfw", False) if isinstance(preview, dict) else False
+            is_dict = isinstance(preview, dict)
+            url = preview.get("url", "") if is_dict else str(preview)
+            nsfw = preview.get("nsfw", False) if is_dict else False
+            width = preview.get("width") if is_dict else None
+            height = preview.get("height") if is_dict else None
+            meta = preview.get("meta") if is_dict else None
             if not url:
                 continue
 
@@ -1099,6 +1103,9 @@ class PackService:
                     filename=filename,
                     url=url,
                     nsfw=nsfw,
+                    width=width,
+                    height=height,
+                    meta=meta,
                     media_type=media_type,
                     thumbnail_url=thumbnail_url,
                 ))

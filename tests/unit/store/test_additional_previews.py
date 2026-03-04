@@ -83,6 +83,41 @@ class TestDownloadAdditionalPreviews:
         assert results[1].nsfw is True
         assert results[2].nsfw is True
 
+    def test_metadata_preserved_from_frontend(self, tmp_path):
+        """Generation metadata (width, height, meta) must survive the pipeline."""
+        mock_ds = MagicMock()
+        service = self._make_service(tmp_path, download_service=mock_ds)
+
+        meta = {"prompt": "a cat", "seed": 12345, "model": "sdxl"}
+        previews = [
+            {"url": "https://example.com/img.jpg", "nsfw": False, "width": 512, "height": 768, "meta": meta},
+        ]
+
+        results = service._download_additional_previews(
+            pack_name="test-pack", previews=previews
+        )
+
+        assert results[0].width == 512
+        assert results[0].height == 768
+        assert results[0].meta == meta
+        assert results[0].meta["prompt"] == "a cat"
+
+    def test_metadata_absent_when_not_provided(self, tmp_path):
+        """Preview without metadata fields should have None for those fields."""
+        mock_ds = MagicMock()
+        service = self._make_service(tmp_path, download_service=mock_ds)
+
+        previews = [{"url": "https://example.com/img.jpg", "nsfw": True}]
+
+        results = service._download_additional_previews(
+            pack_name="test-pack", previews=previews
+        )
+
+        assert results[0].width is None
+        assert results[0].height is None
+        assert results[0].meta is None
+        assert results[0].nsfw is True
+
     def test_backward_compat_plain_string_defaults_nsfw_false(self, tmp_path):
         """Legacy: plain string URL (not dict) defaults to nsfw=False."""
         mock_ds = MagicMock()

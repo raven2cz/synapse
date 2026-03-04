@@ -115,6 +115,8 @@ export interface ImportOptions {
 export interface CommunityImageOptions {
     /** Whether to include community images */
     include: boolean
+    /** Whether to include generation metadata (prompt, seed, etc.) */
+    includeMetadata: boolean
 }
 
 /** Props for ImportWizardModal */
@@ -129,7 +131,7 @@ export interface ImportWizardModalProps {
         options: ImportOptions,
         thumbnailUrl?: string,
         customPackName?: string,
-        additionalPreviews?: { url: string; nsfw: boolean }[]
+        additionalPreviews?: { url: string; nsfw: boolean; width?: number; height?: number; meta?: Record<string, unknown> }[]
     ) => Promise<void>
     /** Model name for display */
     modelName: string
@@ -436,6 +438,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
     // Community gallery options + self-contained image state
     const [communityOpts, setCommunityOpts] = useState<CommunityImageOptions>({
         include: false,
+        includeMetadata: true,
     })
     const [communityImages, setCommunityImages] = useState<ModelPreview[]>([])
 
@@ -571,10 +574,18 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
         // Pass custom pack name if it differs from original
         const customName = packName !== modelName ? packName : undefined
 
-        // Build additional previews with nsfw flags from community images if opted in
+        // Build additional previews with nsfw flags + optional metadata from community images
         // All displayed images are imported — user controls count via CommunityGalleryPanel's Limit dropdown
         const additionalPreviews = communityOpts.include && communityImages.length
-            ? communityImages.map(p => ({ url: fromProxyUrl(p.url), nsfw: p.nsfw }))
+            ? communityImages.map(p => ({
+                url: fromProxyUrl(p.url),
+                nsfw: p.nsfw,
+                ...(communityOpts.includeMetadata ? {
+                    width: p.width,
+                    height: p.height,
+                    meta: p.meta,
+                } : {}),
+            }))
             : undefined
 
         await onImport(
@@ -911,6 +922,28 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                                     </p>
                                 </div>
                             </label>
+
+                            {communityOpts.include && (
+                                <label className="flex items-center gap-3 cursor-pointer ml-8">
+                                    <input
+                                        type="checkbox"
+                                        checked={communityOpts.includeMetadata}
+                                        onChange={e => setCommunityOpts(prev => ({
+                                            ...prev,
+                                            includeMetadata: e.target.checked
+                                        }))}
+                                        className="w-4 h-4 rounded accent-synapse"
+                                    />
+                                    <div>
+                                        <span className="text-sm text-text-primary">
+                                            {t('import.includeMetadata')}
+                                        </span>
+                                        <p className="text-xs text-text-muted">
+                                            {t('import.includeMetadataDesc')}
+                                        </p>
+                                    </div>
+                                </label>
+                            )}
 
                             {communityOpts.include && (
                                 <CommunityGalleryPanel

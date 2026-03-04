@@ -28,6 +28,7 @@ interface ModelPreview {
 
 interface CommunityImageOptions {
   include: boolean
+  includeMetadata: boolean
 }
 
 // ============================================================================
@@ -58,7 +59,7 @@ function hasCommunityTabSupport(adapter: { getModelPreviews?: Function }): boole
 }
 
 /**
- * Builds additional_previews with nsfw flags for import request.
+ * Builds additional_previews with nsfw flags + optional metadata for import request.
  * All displayed community images are imported — user controls count
  * via CommunityGalleryPanel's Limit dropdown.
  * (Mirrors ImportWizardModal onImport logic)
@@ -67,11 +68,19 @@ function buildAdditionalPreviews(
   communityOpts: CommunityImageOptions | undefined,
   communityImages: ModelPreview[] | undefined,
   fromProxyUrl: (url: string) => string
-): { url: string; nsfw: boolean }[] | undefined {
+): { url: string; nsfw: boolean; width?: number; height?: number; meta?: Record<string, any> }[] | undefined {
   if (!communityOpts?.include || !communityImages?.length) {
     return undefined
   }
-  return communityImages.map(p => ({ url: fromProxyUrl(p.url), nsfw: p.nsfw }))
+  return communityImages.map(p => ({
+    url: fromProxyUrl(p.url),
+    nsfw: p.nsfw,
+    ...(communityOpts.includeMetadata ? {
+      width: p.width,
+      height: p.height,
+      meta: p.meta,
+    } : {}),
+  }))
 }
 
 // ============================================================================
@@ -158,35 +167,49 @@ describe('Community Images Import', () => {
     })
 
     it('returns undefined when include is false', () => {
-      const opts: CommunityImageOptions = { include: false }
+      const opts: CommunityImageOptions = { include: false, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, communityPreviews, identity)
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when community images are undefined', () => {
-      const opts: CommunityImageOptions = { include: true }
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, undefined, identity)
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when community images are empty', () => {
-      const opts: CommunityImageOptions = { include: true }
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, [], identity)
       expect(result).toBeUndefined()
     })
 
-    it('returns objects with url and nsfw when include is true', () => {
-      const opts: CommunityImageOptions = { include: true }
+    it('returns objects with url, nsfw, and metadata when includeMetadata is true', () => {
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, communityPreviews, identity)
       expect(result).toBeDefined()
       expect(result!.length).toBe(50)
-      expect(result![0]).toEqual({ url: 'https://example.com/community_1.jpg', nsfw: true })
       // communityPreviews: nsfw = i % 5 === 0, so index 0 is nsfw
-      expect(result![1]).toEqual({ url: 'https://example.com/community_2.jpg', nsfw: false })
+      expect(result![0].url).toBe('https://example.com/community_1.jpg')
+      expect(result![0].nsfw).toBe(true)
+      expect(result![0].width).toBe(512)
+      expect(result![0].height).toBe(768)
+      expect(result![1].nsfw).toBe(false)
+    })
+
+    it('omits metadata when includeMetadata is false', () => {
+      const opts: CommunityImageOptions = { include: true, includeMetadata: false }
+      const result = buildAdditionalPreviews(opts, communityPreviews, identity)
+      expect(result).toBeDefined()
+      expect(result![0].url).toBe('https://example.com/community_1.jpg')
+      expect(result![0].nsfw).toBe(true)
+      expect(result![0].width).toBeUndefined()
+      expect(result![0].height).toBeUndefined()
+      expect(result![0].meta).toBeUndefined()
     })
 
     it('preserves nsfw flags correctly', () => {
-      const opts: CommunityImageOptions = { include: true }
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, communityPreviews, identity)
       // Every 5th image (index 0, 5, 10...) is nsfw
       const nsfwCount = result!.filter(p => p.nsfw).length
@@ -195,13 +218,13 @@ describe('Community Images Import', () => {
 
     it('returns all images regardless of count', () => {
       const small = communityPreviews.slice(0, 3)
-      const opts: CommunityImageOptions = { include: true }
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const result = buildAdditionalPreviews(opts, small, identity)
       expect(result!.length).toBe(3)
     })
 
     it('applies fromProxyUrl transform to each URL', () => {
-      const opts: CommunityImageOptions = { include: true }
+      const opts: CommunityImageOptions = { include: true, includeMetadata: true }
       const images = communityPreviews.slice(0, 2)
       const transform = (url: string) => url.replace('example.com', 'transformed.com')
       const result = buildAdditionalPreviews(opts, images, transform)
@@ -242,7 +265,7 @@ describe('Community Images Import', () => {
 
   describe('CommunityImageOptions defaults', () => {
     it('defaults to include=false', () => {
-      const opts: CommunityImageOptions = { include: false }
+      const opts: CommunityImageOptions = { include: false, includeMetadata: true }
       expect(opts.include).toBe(false)
     })
   })

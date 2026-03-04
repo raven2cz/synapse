@@ -766,7 +766,9 @@
     "importing": "Importování...",
     "importPack": "Importovat pack",
     "includeCommunity": "Zahrnout komunitní galerii",
-    "includeCommunityDesc": "Stáhnout {{count}} komunitních obrázků vytvořených s tímto modelem"
+    "includeCommunityDesc": "Stáhnout {{count}} komunitních obrázků vytvořených s tímto modelem",
+    "includeMetadata": "Zahrnout generační metadata",
+    "includeMetadataDesc": "Uložit prompt, seed, model a další generační parametry"
   },
   "browse": {
     "title": "Procházet Civitai",

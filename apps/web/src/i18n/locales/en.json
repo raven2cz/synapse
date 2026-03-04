@@ -762,7 +762,9 @@
     "importing": "Importing...",
     "importPack": "Import Pack",
     "includeCommunity": "Include community gallery images",
-    "includeCommunityDesc": "Download {{count}} community-generated images with this model"
+    "includeCommunityDesc": "Download {{count}} community-generated images with this model",
+    "includeMetadata": "Include generation metadata",
+    "includeMetadataDesc": "Save prompt, seed, model and other generation parameters"
   },
   "browse": {
     "title": "Browse Civitai",
