@@ -478,6 +478,7 @@ async def get_model_version(model_id: int, version_id: int):
 from fastapi.responses import Response, StreamingResponse
 import requests as req_lib
 from urllib.parse import unquote
+import ipaddress
 
 # Allowed domains for image proxy (security)
 ALLOWED_IMAGE_DOMAINS = [
@@ -485,6 +486,19 @@ ALLOWED_IMAGE_DOMAINS = [
     'images.civitai.com',
     'cdn.civitai.com',
 ]
+
+
+def _is_private_host(hostname: str | None) -> bool:
+    """Check if hostname resolves to a private/internal address (SSRF protection)."""
+    if not hostname:
+        return True
+    if hostname in ('localhost', '0.0.0.0'):
+        return True
+    try:
+        ip = ipaddress.ip_address(hostname)
+        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+    except ValueError:
+        return False  # Regular hostname, not an IP — allow
 
 
 @router.get("/image-proxy")
@@ -519,13 +533,15 @@ async def proxy_image(url: str, request: Request):
         "Referer": "https://civitai.com/",
     }
 
-    client: httpx.AsyncClient = request.app.state.http_client
+    # Dedicated proxy client: isolated pool + follow_redirects=False
+    client: httpx.AsyncClient = request.app.state.image_proxy_client
 
     async def _stream_with_redirect(target_url: str, req_headers: dict) -> httpx.Response:
         """Open a stream, following one CDN redirect with stripped headers.
 
-        Unlike a buffered probe+stream pattern, this streams immediately so
-        non-redirect responses (200) are never downloaded twice.
+        Uses follow_redirects=False (set on the dedicated client) so we can
+        intercept 3xx, strip custom headers, and validate redirect target
+        before streaming from storage backends (B2/DO reject Referer etc.).
         """
         resp = await client.send(
             client.build_request("GET", target_url, headers=req_headers),
@@ -536,10 +552,12 @@ async def proxy_image(url: str, request: Request):
             await resp.aclose()
             if not redirect_url:
                 raise HTTPException(status_code=502, detail="Empty redirect from upstream")
-            # SSRF protection: validate redirect URL scheme
+            # SSRF protection: validate redirect URL
             rp = urlparse(redirect_url)
             if rp.scheme not in ('http', 'https'):
                 raise HTTPException(status_code=502, detail="Invalid redirect URL scheme")
+            if _is_private_host(rp.hostname):
+                raise HTTPException(status_code=502, detail="Redirect to private address blocked")
             # Stream from storage backend without custom headers (B2/DO reject them)
             resp = await client.send(
                 client.build_request("GET", redirect_url),
@@ -583,6 +601,8 @@ async def proxy_image(url: str, request: Request):
             try:
                 async for chunk in streaming_resp.aiter_bytes(chunk_size=65536):
                     yield chunk
+            except httpx.HTTPError as stream_err:
+                logger.warning(f"Image proxy stream interrupted: {stream_err}")
             finally:
                 await streaming_resp.aclose()
 

@@ -95,6 +95,14 @@ async def lifespan(app: FastAPI):
         follow_redirects=True,
         limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
     )
+    # Dedicated client for image proxy — isolated pool prevents proxy traffic
+    # from starving other API calls; follow_redirects=False for manual redirect
+    # handling (Civitai CDN → B2/DO requires header stripping on redirect).
+    app.state.image_proxy_client = httpx.AsyncClient(
+        timeout=30,
+        follow_redirects=False,
+        limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
+    )
     logger.info("=" * 50)
     logger.info("  SYNAPSE API v2.1.8")
     logger.info("  V2 Store Architecture - No v1 Code")
@@ -125,6 +133,7 @@ async def lifespan(app: FastAPI):
             await avatar_mgr.shutdown()
         except Exception as exc:
             logger.warning("Avatar Engine shutdown error: %s", exc)
+    await app.state.image_proxy_client.aclose()
     await app.state.http_client.aclose()
 
 
