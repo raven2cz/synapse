@@ -476,20 +476,35 @@ async def get_model_version(model_id: int, version_id: int):
 # ============================================================================
 
 from fastapi.responses import Response, StreamingResponse
-import requests as req_lib
-from urllib.parse import unquote
+from urllib.parse import unquote, urljoin
 import ipaddress
+import socket
 
 # Allowed domains for image proxy (security)
-ALLOWED_IMAGE_DOMAINS = [
+ALLOWED_IMAGE_DOMAINS = {
     'image.civitai.com',
     'images.civitai.com',
     'cdn.civitai.com',
-]
+}
+
+
+def _is_allowed_image_domain(netloc: str) -> bool:
+    """Check if netloc (host or host:port) is in the allowed domains list.
+
+    Case-insensitive, strips default ports (80/443) before comparison.
+    """
+    hostname = netloc.lower().split(':')[0]
+    return hostname in ALLOWED_IMAGE_DOMAINS
 
 
 def _is_private_host(hostname: str | None) -> bool:
-    """Check if hostname resolves to a private/internal address (SSRF protection)."""
+    """Check if hostname resolves to a private/internal address (SSRF protection).
+
+    Resolves DNS to catch hostnames that point to private IPs (e.g. DNS rebinding).
+    Note: TOCTOU gap exists between our check and httpx's connection, but this
+    raises the bar significantly for an attacker who'd also need an open redirect
+    on a whitelisted Civitai CDN domain.
+    """
     if not hostname:
         return True
     if hostname in ('localhost', '0.0.0.0'):
@@ -498,7 +513,19 @@ def _is_private_host(hostname: str | None) -> bool:
         ip = ipaddress.ip_address(hostname)
         return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
     except ValueError:
-        return False  # Regular hostname, not an IP — allow
+        pass  # Regular hostname — resolve DNS
+    try:
+        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for _family, _type, _proto, _canonname, sockaddr in addrinfo:
+            try:
+                ip = ipaddress.ip_address(sockaddr[0])
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                    return True
+            except ValueError:
+                continue
+    except socket.gaierror:
+        return True  # Can't resolve — block for safety
+    return False
 
 
 @router.get("/image-proxy")
@@ -518,7 +545,7 @@ async def proxy_image(url: str, request: Request):
     decoded_url = unquote(url)
 
     parsed = urlparse(decoded_url)
-    if parsed.netloc not in ALLOWED_IMAGE_DOMAINS:
+    if not _is_allowed_image_domain(parsed.netloc):
         raise HTTPException(status_code=400, detail=f"Domain not allowed: {parsed.netloc}")
     if parsed.scheme not in ('http', 'https'):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
@@ -547,11 +574,13 @@ async def proxy_image(url: str, request: Request):
             client.build_request("GET", target_url, headers=req_headers),
             stream=True,
         )
-        if resp.status_code in (301, 302, 307, 308):
-            redirect_url = resp.headers.get('location', '')
+        if resp.status_code in (301, 302, 303, 307, 308):
+            raw_redirect = resp.headers.get('location', '')
             await resp.aclose()
-            if not redirect_url:
+            if not raw_redirect:
                 raise HTTPException(status_code=502, detail="Empty redirect from upstream")
+            # Resolve relative redirects (e.g. Location: /path/to/img.jpg)
+            redirect_url = urljoin(target_url, raw_redirect)
             # SSRF protection: validate redirect URL
             rp = urlparse(redirect_url)
             if rp.scheme not in ('http', 'https'):
@@ -577,7 +606,7 @@ async def proxy_image(url: str, request: Request):
             await asyncio.sleep(0.5)
             resp = await _stream_with_redirect(decoded_url, headers)
 
-        if resp.status_code >= 400:
+        if resp.status_code != 200:
             status_code = resp.status_code
             await resp.aclose()
             resp = None
