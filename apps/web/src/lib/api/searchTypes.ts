@@ -269,6 +269,17 @@ export interface ModelDetail extends CivitaiModel {
 }
 
 // =============================================================================
+// Community Gallery Options
+// =============================================================================
+
+export interface CommunityGalleryOpts {
+  limit?: number
+  sort?: string
+  period?: string
+  browsingLevel?: number
+}
+
+// =============================================================================
 // Search Parameters
 // =============================================================================
 
@@ -335,7 +346,7 @@ export interface SearchAdapter {
    * Used by tRPC bridge where model.getById returns 0 images
    * and image.getInfinite must be called separately with modelVersionId.
    */
-  getModelPreviews?(modelId: number, versionId: number): Promise<ModelPreview[]>
+  getModelPreviews?(modelId: number, versionId: number, opts?: CommunityGalleryOpts): Promise<ModelPreview[]>
 }
 
 // =============================================================================

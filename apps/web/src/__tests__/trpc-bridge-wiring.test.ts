@@ -153,7 +153,7 @@ describe('TrpcBridgeAdapter — Split Query Pattern', () => {
       const previews = await adapter.getModelPreviews(123, 456)
 
       // Must use modelVersionId (456), NOT modelId (123)
-      expect(getModelImages).toHaveBeenCalledWith(456, expect.objectContaining({ limit: 50 }))
+      expect(getModelImages).toHaveBeenCalledWith(456, expect.objectContaining({ limit: 150 }))
       expect(previews.length).toBe(2)
       expect(previews[0].url).toBeDefined()
     })
@@ -173,7 +173,7 @@ describe('TrpcBridgeAdapter — Split Query Pattern', () => {
       await expect(adapter.getModelPreviews(123, 456)).rejects.toThrow('Timed out')
     })
 
-    it('should timeout after 15s when getModelImages hangs', async () => {
+    it('should timeout after IMAGE_FETCH_TIMEOUT when getModelImages hangs', async () => {
       vi.useFakeTimers()
 
       ;(window as unknown as Record<string, unknown>).SynapseSearchBridge = makeBridge({
@@ -189,7 +189,8 @@ describe('TrpcBridgeAdapter — Split Query Pattern', () => {
         caughtError = err
       })
 
-      await vi.advanceTimersByTimeAsync(16_000)
+      // IMAGE_FETCH_TIMEOUT = 60_000ms
+      await vi.advanceTimersByTimeAsync(61_000)
       await promise
 
       expect(caughtError).not.toBeNull()
@@ -263,7 +264,7 @@ describe('TrpcBridgeAdapter — Split Query Pattern', () => {
       expect(firstVersionId).toBe(32988)
 
       const previews = await adapter.getModelPreviews(25995, firstVersionId!)
-      expect(getModelImages).toHaveBeenCalledWith(32988, expect.objectContaining({ limit: 50 }))
+      expect(getModelImages).toHaveBeenCalledWith(32988, expect.objectContaining({ limit: 150 }))
       expect(previews.length).toBe(3)
     })
 

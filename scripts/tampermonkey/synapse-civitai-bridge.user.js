@@ -202,18 +202,41 @@
     )}`;
   }
 
-  function buildModelImagesUrl(modelVersionId, config, limit = 50) {
+  // -----------------------------------------------------------------------
+  // Civitai image endpoint URL builders
+  //
+  // ImageSort:       'Most Reactions' | 'Most Comments' | 'Most Collected' | 'Newest' | 'Oldest' | 'Random'
+  // MetricTimeframe: 'Day' | 'Week' | 'Month' | 'Year' | 'AllTime'
+  // NsfwLevel flags: PG=1, PG13=2, R=4, X=8, XXX=16, Blocked=32
+  //   Common combos:  1 = SFW only, 31 = all except Blocked, 63 = everything
+  // -----------------------------------------------------------------------
+
+  function buildModelImagesUrl(modelVersionId, config, opts = {}) {
     const input = {
       json: {
         modelVersionId: modelVersionId,
-        limit: limit,
-        sort: 'Most Reactions',
-        period: 'AllTime',
-        // browsingLevel: 31 = all content, 1 = SFW only
-        browsingLevel: config.nsfw ? 31 : 1,
+        limit: opts.limit || 150,
+        sort: opts.sort || 'Most Reactions',
+        period: opts.period || 'AllTime',
+        browsingLevel: opts.browsingLevel ?? (config.nsfw ? 31 : 1),
       },
     };
     return `${TRPC_BASE}/image.getInfinite?input=${encodeURIComponent(
+      JSON.stringify(input)
+    )}`;
+  }
+
+  function buildModelImagesAsPostsUrl(modelVersionId, config, opts = {}) {
+    const input = {
+      json: {
+        modelVersionId: modelVersionId,
+        limit: opts.limit || 50,
+        sort: opts.sort || 'Most Reactions',
+        period: opts.period || 'AllTime',
+        browsingLevel: opts.browsingLevel ?? (config.nsfw ? 31 : 1),
+      },
+    };
+    return `${TRPC_BASE}/image.getImagesAsPostsInfinite?input=${encodeURIComponent(
       JSON.stringify(input)
     )}`;
   }
@@ -692,7 +715,10 @@
      *
      * @param {number} modelVersionId - Model Version ID (from model.getById response)
      * @param {Object} opts - Request options
-     * @param {number} opts.limit - Max images to fetch (default: 50)
+     * @param {number} opts.limit - Max images to fetch (default: 150)
+     * @param {string} opts.sort - Sort order (default: 'Most Reactions')
+     * @param {string} opts.period - Time period (default: 'AllTime')
+     * @param {number} opts.browsingLevel - Browsing level bitmask (default: from config)
      */
     getModelImages: async (modelVersionId, opts = {}) => {
       const config = getConfig();
@@ -707,7 +733,44 @@
         };
       }
 
-      const url = buildModelImagesUrl(modelVersionId, config, opts.limit || 50);
+      const url = buildModelImagesUrl(modelVersionId, config, {
+        limit: opts.limit,
+        sort: opts.sort,
+        period: opts.period,
+        browsingLevel: opts.browsingLevel,
+      });
+      return trpcRequest(url, { ...opts, timeout: opts.timeout || IMAGE_FETCH_TIMEOUT });
+    },
+
+    /**
+     * Get images grouped by post for a model version via tRPC image.getImagesAsPostsInfinite.
+     * This is the same endpoint Civitai web uses for community gallery.
+     * Unlike getInfinite, this endpoint actually sorts by reactions/comments/collected.
+     *
+     * Response format: { items: [{ postId, user, images: [...], review?, pinned }] }
+     *
+     * @param {number} modelVersionId - Model Version ID
+     * @param {Object} opts - Request options
+     */
+    getModelImagesAsPosts: async (modelVersionId, opts = {}) => {
+      const config = getConfig();
+
+      if (!config.enabled) {
+        return {
+          ok: false,
+          error: {
+            code: 'DISABLED',
+            message: 'Bridge is disabled',
+          },
+        };
+      }
+
+      const url = buildModelImagesAsPostsUrl(modelVersionId, config, {
+        limit: opts.limit,
+        sort: opts.sort,
+        period: opts.period,
+        browsingLevel: opts.browsingLevel,
+      });
       return trpcRequest(url, { ...opts, timeout: opts.timeout || IMAGE_FETCH_TIMEOUT });
     },
 

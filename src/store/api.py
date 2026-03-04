@@ -171,6 +171,7 @@ class ImportRequest(BaseModel):
     pack_description: Optional[str] = Field(None, description="Custom description")
     max_previews: int = Field(100, description="Max previews to download")
     video_quality: int = Field(1080, description="Video quality width")
+    additional_preview_urls: Optional[List[str]] = Field(None, description="Additional preview URLs (e.g. community gallery)", max_length=100)
     # Legacy fields for compatibility
     download_previews: bool = True
     add_to_global: bool = True
@@ -2020,7 +2021,8 @@ def import_pack(
     logger.info(f"[import] Starting import from: {request.url}")
     logger.info(f"[import] Options: images={request.download_images}, "
                 f"videos={request.download_videos}, nsfw={request.include_nsfw}, "
-                f"all_versions={request.download_from_all_versions}")
+                f"all_versions={request.download_from_all_versions}, "
+                f"additional_urls={len(request.additional_preview_urls or [])}")
 
     try:
         pack = store.import_civitai(
@@ -2036,6 +2038,7 @@ def import_pack(
             download_from_all_versions=request.download_from_all_versions,
             cover_url=request.thumbnail_url,  # User-selected thumbnail
             selected_version_ids=request.version_ids,  # Multi-version import support
+            additional_preview_urls=request.additional_preview_urls,
         )
 
         # Count downloaded previews

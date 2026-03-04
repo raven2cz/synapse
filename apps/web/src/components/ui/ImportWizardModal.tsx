@@ -37,9 +37,13 @@ import {
     Sparkles,
     Pencil,
     RefreshCw,
+    Users,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { MediaPreview } from './MediaPreview'
+import { CommunityGalleryPanel } from './CommunityGalleryPanel'
+import { fromProxyUrl } from '@/lib/utils/civitaiTransformers'
+import type { SearchProvider, ModelPreview } from '@/lib/api/searchTypes'
 
 // =============================================================================
 // Types & Interfaces
@@ -107,18 +111,25 @@ export interface ImportOptions {
     downloadFromAllVersions: boolean
 }
 
+/** Community image options for import */
+export interface CommunityImageOptions {
+    /** Whether to include community images */
+    include: boolean
+}
+
 /** Props for ImportWizardModal */
 export interface ImportWizardModalProps {
     /** Whether modal is open */
     isOpen: boolean
     /** Close modal callback */
     onClose: () => void
-    /** Confirm import callback with selected versions, options, and custom pack name */
+    /** Confirm import callback with selected versions, options, custom pack name, and additional preview URLs */
     onImport: (
         selectedVersionIds: number[],
         options: ImportOptions,
         thumbnailUrl?: string,
-        customPackName?: string
+        customPackName?: string,
+        additionalPreviewUrls?: string[]
     ) => Promise<void>
     /** Model name for display */
     modelName: string
@@ -128,6 +139,12 @@ export interface ImportWizardModalProps {
     versions: ModelVersion[]
     /** Whether import is in progress */
     isLoading?: boolean
+    /** Model ID for self-contained community gallery */
+    modelId?: number
+    /** Version ID for self-contained community gallery */
+    versionId?: number
+    /** Search provider for community gallery */
+    searchProvider?: SearchProvider
 }
 
 // =============================================================================
@@ -389,6 +406,9 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
     modelDescription,
     versions,
     isLoading = false,
+    modelId,
+    versionId,
+    searchProvider,
 }) {
     const { t } = useTranslation()
 
@@ -412,6 +432,12 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
     // Pack name editing
     const [packName, setPackName] = useState(modelName)
     const [isEditingName, setIsEditingName] = useState(false)
+
+    // Community gallery options + self-contained image state
+    const [communityOpts, setCommunityOpts] = useState<CommunityImageOptions>({
+        include: false,
+    })
+    const [communityImages, setCommunityImages] = useState<ModelPreview[]>([])
 
     const [sectionsOpen, setSectionsOpen] = useState({
         packDetails: true,
@@ -545,13 +571,20 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
         // Pass custom pack name if it differs from original
         const customName = packName !== modelName ? packName : undefined
 
+        // Build additional preview URLs from community images if opted in
+        // All displayed images are imported — user controls count via CommunityGalleryPanel's Limit dropdown
+        const additionalPreviewUrls = communityOpts.include && communityImages.length
+            ? communityImages.map(p => fromProxyUrl(p.url))
+            : undefined
+
         await onImport(
             Array.from(selectedVersionIds),
             options,
             selectedThumbnail,
-            customName
+            customName,
+            additionalPreviewUrls
         )
-    }, [selectedVersionIds, options, selectedThumbnail, onImport, packName, modelName])
+    }, [selectedVersionIds, options, selectedThumbnail, onImport, packName, modelName, communityImages, communityOpts])
 
     // -------------------------------------------------------------------------
     // Render
@@ -854,6 +887,43 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
                             )}
                         </div>
                     </CollapsibleSection>
+
+                    {/* Community Gallery Images — self-contained with own sort/period */}
+                    {versionId && searchProvider && modelId && (
+                        <div className="border border-slate-mid/50 rounded-xl p-4 space-y-3">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={communityOpts.include}
+                                    onChange={e => setCommunityOpts(prev => ({
+                                        ...prev,
+                                        include: e.target.checked
+                                    }))}
+                                    className="w-5 h-5 rounded accent-synapse"
+                                />
+                                <Users className="w-5 h-5 text-emerald-400" />
+                                <div className="flex-1">
+                                    <span className="font-medium text-text-primary">
+                                        {t('import.includeCommunity')}
+                                    </span>
+                                    <p className="text-sm text-text-muted">
+                                        {t('import.includeCommunityDesc', { count: communityImages.length })}
+                                    </p>
+                                </div>
+                            </label>
+
+                            {communityOpts.include && (
+                                <CommunityGalleryPanel
+                                    modelId={modelId}
+                                    versionId={versionId}
+                                    searchProvider={searchProvider}
+                                    onImagesChange={setCommunityImages}
+                                    columns={8}
+                                    maxHeight="200px"
+                                />
+                            )}
+                        </div>
+                    )}
 
                     {/* Thumbnail Selection */}
                     {selectedVersionPreviews.length > 0 && (

@@ -522,6 +522,7 @@ class Store:
         download_from_all_versions: bool = True,
         cover_url: Optional[str] = None,
         selected_version_ids: Optional[List[int]] = None,
+        additional_preview_urls: Optional[List[str]] = None,
         **kwargs,  # For future extensibility
     ) -> Pack:
         """
@@ -540,6 +541,7 @@ class Store:
             download_from_all_versions: If True, download previews from all versions
             cover_url: User-selected thumbnail URL for pack cover
             selected_version_ids: List of version IDs to import (creates one dependency per version)
+            additional_preview_urls: Extra preview URLs to download (e.g. community gallery)
 
         Returns:
             Created Pack
@@ -563,6 +565,7 @@ class Store:
             download_config=download_config,
             cover_url=cover_url,
             selected_version_ids=selected_version_ids,
+            additional_preview_urls=additional_preview_urls,
         )
 
         if add_to_global:

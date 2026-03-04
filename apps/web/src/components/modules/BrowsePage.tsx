@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import {
   Search, Download, X, ExternalLink,
   User, Heart, Loader2, AlertCircle, CheckCircle, Info, Copy,
-  ZoomIn, ZoomOut, ThumbsUp
+  ZoomIn, ZoomOut, ThumbsUp, Users, Minimize2, Maximize2
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clsx } from 'clsx'
@@ -14,6 +14,7 @@ import { FullscreenMediaViewer } from '@/components/ui/FullscreenMediaViewer'
 import { ImportWizardModal } from '@/components/ui/ImportWizardModal'
 import { SearchFilters } from '@/components/ui/SearchFilters'
 import { BreathingOrb } from '@/components/ui/BreathingOrb'
+import { CommunityGalleryPanel } from '@/components/ui/CommunityGalleryPanel'
 
 import type { MediaType } from '@/lib/media'
 import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
@@ -156,6 +157,10 @@ export function BrowsePage() {
   // Store search result previews when user clicks a card (Meilisearch previews are correct)
   const [selectedModelPreviews, setSelectedModelPreviews] = useState<ModelPreview[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
+
+  // Community gallery tab state
+  const [galleryTab, setGalleryTab] = useState<'cover' | 'community'>('cover')
+  const [isGalleryCollapsed, setIsGalleryCollapsed] = useState(false)
 
   const [fullscreenIndex, setFullscreenIndex] = useState<number>(-1)
   const isFullscreenOpen = fullscreenIndex >= 0
@@ -318,6 +323,15 @@ export function BrowsePage() {
     retry: 1,
   })
 
+  // Community gallery: images come from CommunityGalleryPanel via callback
+  const hasCommunitySupport = !!getAdapter(searchProvider).getModelPreviews
+  const [communityImages, setCommunityImages] = useState<ModelPreview[]>([])
+
+  // Reset galleryTab when model changes
+  useEffect(() => {
+    setGalleryTab('cover')
+  }, [selectedModel])
+
   // Merge model info + progressively loaded previews
   // CRITICAL: Prefer search result previews (from Meilisearch, known correct)
   // over model.getById images (tRPC version images may differ from Civitai page)
@@ -442,23 +456,27 @@ export function BrowsePage() {
       </div>
 
       {/* Fullscreen media viewer */}
-      {modelDetail && (
-        <FullscreenMediaViewer
-          items={modelDetail.previews.map(p => ({
-            url: p.url,
-            type: p.media_type === 'video' ? 'video' : 'image',
-            thumbnailUrl: p.thumbnail_url,
-            nsfw: p.nsfw,
-            width: p.width,
-            height: p.height,
-            meta: p.meta
-          }))}
-          initialIndex={fullscreenIndex}
-          isOpen={isFullscreenOpen}
-          onClose={() => setFullscreenIndex(-1)}
-          onIndexChange={setFullscreenIndex}
-        />
-      )}
+      {modelDetail && (() => {
+        const activeGalleryItems = galleryTab === 'community' && communityImages?.length
+          ? communityImages : modelDetail.previews
+        return (
+          <FullscreenMediaViewer
+            items={activeGalleryItems.map(p => ({
+              url: fromProxyUrl(p.url),
+              type: p.media_type === 'video' ? 'video' : 'image',
+              thumbnailUrl: p.thumbnail_url ? fromProxyUrl(p.thumbnail_url) : undefined,
+              nsfw: p.nsfw,
+              width: p.width,
+              height: p.height,
+              meta: p.meta
+            }))}
+            initialIndex={fullscreenIndex}
+            isOpen={isFullscreenOpen}
+            onClose={() => setFullscreenIndex(-1)}
+            onIndexChange={setFullscreenIndex}
+          />
+        )
+      })()}
 
       {/* Import Wizard Modal */}
       {modelDetail && (
@@ -467,6 +485,9 @@ export function BrowsePage() {
           onClose={() => setShowImportWizard(false)}
           modelName={modelDetail.name}
           modelDescription={modelDetail.description}
+          modelId={modelDetail.id}
+          versionId={firstVersionId}
+          searchProvider={searchProvider}
           versions={modelDetail.versions.map(v => ({
             id: v.id,
             name: v.name,
@@ -488,7 +509,7 @@ export function BrowsePage() {
             })),
           }))}
           isLoading={importWizardLoading}
-          onImport={async (selectedVersionIds, options, thumbnailUrl, customPackName) => {
+          onImport={async (selectedVersionIds, options, thumbnailUrl, customPackName, additionalPreviewUrls) => {
             setImportWizardLoading(true)
             try {
               const res = await fetch('/api/packs/import', {
@@ -502,7 +523,8 @@ export function BrowsePage() {
                   include_nsfw: options.includeNsfw,
                   download_from_all_versions: options.downloadFromAllVersions,
                   thumbnail_url: thumbnailUrl ? fromProxyUrl(thumbnailUrl) : thumbnailUrl,
-                  pack_name: customPackName,  // Custom pack name if user edited it
+                  pack_name: customPackName,
+                  additional_preview_urls: additionalPreviewUrls,
                 }),
               })
               if (!res.ok) {
@@ -797,34 +819,107 @@ export function BrowsePage() {
 
                 {/* Modal Content - Scrollable */}
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                  {/* Preview Gallery — skeleton while images load progressively */}
+                  {/* Preview Gallery — with Cover/Community tabs */}
                   <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-text-primary">
-                      {isLoadingPreviews && !modelHasImages
-                        ? t('browse.modal.loadingImages')
-                        : t('browse.modal.previewImages', { count: modelDetail.previews.length })}
-                    </h3>
-                    <div className="grid grid-cols-6 gap-3 max-h-[360px] overflow-y-auto p-1">
-                      {isLoadingPreviews && !modelHasImages ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="aspect-[3/4] rounded-xl bg-slate-mid/30 animate-pulse" />
-                        ))
-                      ) : (
-                        modelDetail.previews.map((preview, idx) => (
-                          <MediaPreview
-                            key={idx}
-                            src={preview.url}
-                            type={preview.media_type}
-                            thumbnailSrc={preview.thumbnail_url}
-                            nsfw={preview.nsfw}
-                            aspectRatio="portrait"
-                            className="cursor-pointer hover:ring-2 ring-synapse"
-                            autoPlay={true}
-                            onClick={() => setFullscreenIndex(idx)}
-                          />
-                        ))
+                    {/* Tab bar */}
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setGalleryTab('cover')}
+                        className={clsx(
+                          'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                          galleryTab === 'cover'
+                            ? 'bg-synapse/20 text-synapse'
+                            : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+                        )}
+                      >
+                        {t('browse.modal.coverTab', { count: modelDetail.previews.length })}
+                      </button>
+                      {hasCommunitySupport && (
+                        <button
+                          onClick={() => setGalleryTab('community')}
+                          className={clsx(
+                            'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5',
+                            galleryTab === 'community'
+                              ? 'bg-synapse/20 text-synapse'
+                              : 'text-text-muted hover:text-text-primary hover:bg-white/5'
+                          )}
+                        >
+                          <Users className="w-3.5 h-3.5" />
+                          {t('browse.modal.communityTab', { count: communityImages?.length ?? 0 })}
+                        </button>
                       )}
+                      {/* Collapse/Expand toggle */}
+                      <button
+                        onClick={() => setIsGalleryCollapsed(!isGalleryCollapsed)}
+                        className={clsx(
+                          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ml-auto',
+                          'text-xs text-text-muted',
+                          'bg-slate-mid/30 hover:bg-slate-mid/50',
+                          'transition-colors duration-200'
+                        )}
+                        title={isGalleryCollapsed ? t('community.expand') : t('community.collapse')}
+                      >
+                        {isGalleryCollapsed ? (
+                          <><Maximize2 className="w-3.5 h-3.5" />{t('community.expand')}</>
+                        ) : (
+                          <><Minimize2 className="w-3.5 h-3.5" />{t('community.collapse')}</>
+                        )}
+                      </button>
                     </div>
+
+                    {/* Gallery content */}
+                    {galleryTab === 'cover' ? (
+                      <>
+                        <div
+                          className={clsx(
+                            'transition-[max-height] duration-300 ease-in-out overflow-hidden',
+                            isGalleryCollapsed
+                              ? 'max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-mid scrollbar-track-transparent'
+                              : 'max-h-[10000px]'
+                          )}
+                        >
+                          <div className="grid grid-cols-6 gap-3 p-1">
+                            {isLoadingPreviews && !modelHasImages ? (
+                              Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="aspect-[3/4] rounded-xl bg-slate-mid/30 animate-pulse" />
+                              ))
+                            ) : (
+                              modelDetail.previews.map((preview, idx) => (
+                                <MediaPreview
+                                  key={idx}
+                                  src={preview.url}
+                                  type={preview.media_type}
+                                  thumbnailSrc={preview.thumbnail_url}
+                                  nsfw={preview.nsfw}
+                                  aspectRatio="portrait"
+                                  className="cursor-pointer hover:ring-2 ring-synapse"
+                                  autoPlay={true}
+                                  onClick={() => setFullscreenIndex(idx)}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          className={clsx(
+                            'relative h-8 -mt-8 pointer-events-none',
+                            'bg-gradient-to-t from-obsidian to-transparent',
+                            'transition-opacity duration-300',
+                            isGalleryCollapsed ? 'opacity-100' : 'opacity-0'
+                          )}
+                        />
+                      </>
+                    ) : firstVersionId ? (
+                      <CommunityGalleryPanel
+                        modelId={selectedModel!}
+                        versionId={firstVersionId}
+                        searchProvider={searchProvider}
+                        onImagesChange={setCommunityImages}
+                        onImageClick={(idx) => setFullscreenIndex(idx)}
+                        columns={6}
+                        maxHeight="360px"
+                      />
+                    ) : null}
                   </div>
 
                   {/* Usage Tips */}

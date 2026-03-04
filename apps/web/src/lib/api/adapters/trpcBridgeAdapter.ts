@@ -16,6 +16,7 @@ import type {
   SearchResult,
   ModelDetail,
   ModelPreview,
+  CommunityGalleryOpts,
 } from '../searchTypes'
 import { transformTrpcModel, transformMeilisearchModel, transformTrpcModelDetail, transformPreview } from '@/lib/utils/civitaiTransformers'
 
@@ -102,7 +103,20 @@ interface SynapseSearchBridge {
     opts?: { signal?: AbortSignal; noCache?: boolean }
   ): Promise<BridgeSearchResult>
   getModel?(modelId: number, opts?: Record<string, unknown>): Promise<BridgeSearchResult>
-  getModelImages?(modelId: number, opts?: Record<string, unknown>): Promise<BridgeSearchResult>
+  getModelImages?(modelVersionId: number, opts?: {
+    limit?: number
+    sort?: string
+    period?: string
+    browsingLevel?: number
+    timeout?: number
+  }): Promise<BridgeSearchResult>
+  getModelImagesAsPosts?(modelVersionId: number, opts?: {
+    limit?: number
+    sort?: string
+    period?: string
+    browsingLevel?: number
+    timeout?: number
+  }): Promise<BridgeSearchResult>
   test?(): Promise<{ ok: boolean; results: { meilisearch: unknown; trpc: unknown } }>
 }
 
@@ -253,20 +267,62 @@ export class TrpcBridgeAdapter implements SearchAdapter {
   /**
    * Fetch preview images separately via bridge (progressive loading).
    *
-   * Called by BrowsePage as Query 2, only when getModelDetail returned 0 previews.
-   * Uses image.getInfinite which requires modelVersionId (NOT modelId!).
+   * Called by BrowsePage as Query 2/3 for community gallery.
+   * Uses image.getImagesAsPostsInfinite (same as Civitai web) which:
+   * - Groups images by post (diverse authors)
+   * - Actually sorts by reactions/comments/collected (unlike getInfinite)
+   * - Supports pinned posts per model
+   * Falls back to image.getInfinite if getImagesAsPostsInfinite unavailable.
    * 15s timeout protects against Civitai hangs.
    */
-  async getModelPreviews(_modelId: number, versionId: number): Promise<ModelPreview[]> {
+  async getModelPreviews(_modelId: number, versionId: number, opts?: CommunityGalleryOpts): Promise<ModelPreview[]> {
     const bridge = window.SynapseSearchBridge
+
+    // Prefer getImagesAsPostsInfinite (real Civitai community gallery endpoint)
+    if (bridge?.getModelImagesAsPosts) {
+      const result = await Promise.race([
+        bridge.getModelImagesAsPosts(versionId, {
+          limit: opts?.limit ?? 50,
+          sort: opts?.sort,
+          period: opts?.period,
+          browsingLevel: opts?.browsingLevel,
+          timeout: IMAGE_FETCH_TIMEOUT,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('getModelImagesAsPosts timeout')), IMAGE_FETCH_TIMEOUT)
+        ),
+      ])
+
+      if (result.ok) {
+        // Flatten posts → images (each post has images[] array)
+        // Note: limit applies to posts, not images — a post can have multiple images.
+        // We return ALL images from the fetched posts (no slicing).
+        const posts = (result.data?.items || []) as Record<string, unknown>[]
+        const allImages: Record<string, unknown>[] = []
+        for (const post of posts) {
+          const images = (post.images as Record<string, unknown>[]) || []
+          allImages.push(...images)
+        }
+        return allImages.map((item) => transformPreview(item))
+      }
+      // Fall through to getInfinite on failure
+    }
+
+    // Fallback: getInfinite (flat image list, sort not effective)
     if (!bridge?.getModelImages) {
       throw new Error('Bridge getModelImages not available')
     }
 
     const result = await Promise.race([
-      bridge.getModelImages(versionId, { limit: 50, timeout: IMAGE_FETCH_TIMEOUT }),
+      bridge.getModelImages(versionId, {
+        limit: opts?.limit ?? 150,
+        sort: opts?.sort,
+        period: opts?.period,
+        browsingLevel: opts?.browsingLevel,
+        timeout: IMAGE_FETCH_TIMEOUT,
+      }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('getModelImages timeout')), 15_000)
+        setTimeout(() => reject(new Error('getModelImages timeout')), IMAGE_FETCH_TIMEOUT)
       ),
     ])
 
