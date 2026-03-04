@@ -200,6 +200,16 @@ class ImportRequest(BaseModel):
     max_previews: int = Field(100, description="Max previews to download")
     video_quality: int = Field(1080, description="Video quality width")
     additional_preview_urls: Optional[List[str]] = Field(None, description="(DEPRECATED) Additional preview URLs without nsfw flags", max_length=100)
+
+    @field_validator('additional_preview_urls')
+    @classmethod
+    def validate_legacy_urls(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate legacy URL list: only allow https to prevent SSRF."""
+        if v is not None:
+            for url in v:
+                if not url.startswith('https://'):
+                    raise ValueError('All URLs must use https:// scheme')
+        return v
     additional_previews: Optional[List[AdditionalPreview]] = Field(None, description="Additional previews with nsfw flags", max_length=200)
     # Legacy fields for compatibility
     download_previews: bool = True

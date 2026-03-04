@@ -257,6 +257,58 @@ class TestDownloadAdditionalPreviews:
         assert len(results) == 1
         assert results[0].nsfw is True
         mock_get.assert_called_once()
+        # Verify allow_redirects=False is passed (SSRF protection)
+        _, kwargs = mock_get.call_args
+        assert kwargs.get("allow_redirects") is False
+
+    def test_fallback_requests_response_is_closed(self, tmp_path):
+        """REGRESSION: Fallback requests.get(stream=True) must close response to prevent leak."""
+        service = self._make_service(tmp_path, download_service=None)
+
+        previews = [{"url": "https://example.com/image.jpg", "nsfw": False}]
+
+        with patch("src.store.pack_service.requests.get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.iter_content.return_value = [b"data"]
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            service._download_additional_previews(pack_name="test-pack", previews=previews)
+
+        mock_response.close.assert_called_once()
+
+    def test_dest_variable_not_leaked_across_iterations(self, tmp_path):
+        """REGRESSION: Exception before dest assignment must not delete previous iteration's file.
+
+        If detect_media_type raises before dest=previews_dir/filename, the except block
+        must not reference dest from a previous iteration.
+        """
+        mock_ds = MagicMock()
+        # First download succeeds
+        mock_ds.download_to_file.return_value = None
+        service = self._make_service(tmp_path, download_service=mock_ds)
+
+        previews = [
+            {"url": "https://example.com/ok.jpg", "nsfw": False},
+            {"url": "https://example.com/bad.jpg", "nsfw": False},
+        ]
+
+        # Make detect_media_type fail on second call only
+        from src.utils.media_detection import MediaInfo, MediaType
+        with patch("src.utils.media_detection.detect_media_type") as mock_detect:
+            mock_detect.side_effect = [
+                MediaInfo(type=MediaType.IMAGE, extension="jpg"),
+                RuntimeError("detect_media_type exploded"),
+            ]
+
+            results = service._download_additional_previews(
+                pack_name="test-pack", previews=previews
+            )
+
+        # First succeeded, second failed — but first's file must NOT be deleted
+        assert len(results) == 1
+        assert results[0].filename == "community_1.jpg"
 
 
 class TestImportRequestAdditionalPreviews:
@@ -349,6 +401,36 @@ class TestImportRequestAdditionalPreviews:
             ImportRequest(url="https://civitai.com/models/123", additional_previews=[
                 {"url": "ftp://example.com/a.jpg", "nsfw": False}
             ])
+
+    def test_legacy_urls_rejects_http(self):
+        """SSRF: Legacy additional_preview_urls must reject http:// URLs."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError, match="https://"):
+            ImportRequest(
+                url="https://civitai.com/models/123",
+                additional_preview_urls=["http://127.0.0.1/internal"]
+            )
+
+    def test_legacy_urls_rejects_mixed_schemes(self):
+        """SSRF: If any legacy URL is non-https, the whole list is rejected."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            ImportRequest(
+                url="https://civitai.com/models/123",
+                additional_preview_urls=[
+                    "https://example.com/ok.jpg",
+                    "ftp://evil.com/exploit",
+                ]
+            )
+
+    def test_legacy_urls_accepts_https(self):
+        """Legacy additional_preview_urls with all https:// URLs pass validation."""
+        from src.store.api import ImportRequest
+        urls = ["https://example.com/a.jpg", "https://example.com/b.jpg"]
+        req = ImportRequest(url="https://civitai.com/models/123", additional_preview_urls=urls)
+        assert req.additional_preview_urls == urls
 
     def test_additional_preview_model_dump(self):
         """Test that AdditionalPreview model_dump works for pack_service."""

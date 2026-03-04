@@ -1062,6 +1062,7 @@ class PackService:
                 continue
 
             idx = start_index + i + 1
+            dest = None  # Initialize before try to prevent leakage from previous iteration
             try:
                 media_info = detect_media_type(url, use_head_request=False)
                 media_type = media_info.type.value
@@ -1092,12 +1093,18 @@ class PackService:
                         resume=False,
                     )
                 else:
-                    response = requests.get(download_url, timeout=timeout, stream=True)
+                    response = requests.get(
+                        download_url, timeout=timeout, stream=True,
+                        allow_redirects=False,
+                    )
                     response.raise_for_status()
-                    with open(dest, 'wb') as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
+                    try:
+                        with open(dest, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                    finally:
+                        response.close()
 
                 results.append(PreviewInfo(
                     filename=filename,
@@ -1112,8 +1119,7 @@ class PackService:
 
             except Exception as e:
                 logger.warning(f"[PackService] Failed to download additional preview {url[:60]}: {e}")
-                # Clean up partial download (dest is set before download attempt)
-                if dest.exists():
+                if dest is not None and dest.exists():
                     dest.unlink(missing_ok=True)
                 continue
 
