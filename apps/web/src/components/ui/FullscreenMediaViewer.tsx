@@ -162,6 +162,10 @@ export function FullscreenMediaViewer({
   const [showControls, setShowControls] = useState(true)
   const [showQualityMenu, setShowQualityMenu] = useState(false)
 
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0) // 0-100
+
   // Metadata panel state
   const [showMetadata, setShowMetadata] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -423,19 +427,52 @@ export function FullscreenMediaViewer({
     if (thumbnailsRef.current) thumbnailsRef.current.scrollLeft += (e.deltaY * 3.0)
   }, [])
 
-  // Download
+  // Download with progress tracking
   const handleDownload = useCallback(async () => {
+    if (isDownloading) return
+    setIsDownloading(true)
+    setDownloadProgress(0)
     try {
       const res = await fetch(downloadUrl)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch { window.open(downloadUrl, '_blank') }
-  }, [downloadUrl, isVideo, currentIndex])
+      const contentLength = res.headers.get('Content-Length')
+      const total = contentLength ? parseInt(contentLength, 10) : 0
+
+      if (!res.body || !total) {
+        // No streaming support or unknown size — fall back to blob
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
+        a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        // Stream with progress
+        const reader = res.body.getReader()
+        const chunks: Uint8Array[] = []
+        let received = 0
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          received += value.length
+          setDownloadProgress(Math.round((received / total) * 100))
+        }
+        const blob = new Blob(chunks as BlobPart[], { type: res.headers.get('Content-Type') || undefined })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch {
+      window.open(downloadUrl, '_blank')
+    } finally {
+      setIsDownloading(false)
+      setDownloadProgress(0)
+    }
+  }, [downloadUrl, isVideo, currentIndex, isDownloading])
 
   const handleOpenExternal = useCallback(() => { if (currentItem?.url) window.open(currentItem.url, '_blank') }, [currentItem])
 
@@ -665,7 +702,25 @@ export function FullscreenMediaViewer({
                 <Info className="w-5 h-5" />
               </button>
               <div className="w-px h-6 bg-white/20 mx-1" />
-              <button onClick={e => { e.stopPropagation(); handleDownload() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><Download className="w-5 h-5" /></button>
+              <button
+                onClick={e => { e.stopPropagation(); handleDownload() }}
+                disabled={isDownloading}
+                className={clsx(
+                  'rounded-xl backdrop-blur-sm text-white transition-all',
+                  isDownloading
+                    ? 'bg-indigo-500/30 px-3 py-1.5 flex items-center gap-2'
+                    : 'p-2.5 bg-white/10 hover:bg-white/20'
+                )}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs font-medium text-indigo-300">{downloadProgress > 0 ? `${downloadProgress}%` : '...'}</span>
+                  </>
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
+              </button>
               <button onClick={e => { e.stopPropagation(); handleOpenExternal() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ExternalLink className="w-5 h-5" /></button>
               <button onClick={e => { e.stopPropagation(); toggleFullscreen() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><Maximize className="w-5 h-5" /></button>
               <button onClick={e => { e.stopPropagation(); onClose() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-red-500/50 text-white ml-2"><X className="w-5 h-5" /></button>
