@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile, Form, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -157,6 +157,26 @@ class BulkUpdateCheckResponse(BaseModel):
     plans: Dict[str, Dict[str, Any]]
 
 
+class AdditionalPreview(BaseModel):
+    """A community preview image/video with nsfw flag and optional metadata."""
+    url: str = Field(..., min_length=1, max_length=2048)
+    nsfw: bool = False
+    width: Optional[int] = Field(None, ge=1, le=65536)
+    height: Optional[int] = Field(None, ge=1, le=65536)
+    meta: Optional[Dict[str, Any]] = Field(None, description="Generation metadata (prompt, seed, model, etc.)")
+
+    @field_validator('meta')
+    @classmethod
+    def validate_meta_size(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Limit meta dict to prevent abuse (max ~64KB serialized)."""
+        if v is not None:
+            import json
+            serialized = json.dumps(v, default=str)
+            if len(serialized) > 65536:
+                raise ValueError('meta field too large (max 64KB serialized)')
+        return v
+
+
 class ImportRequest(BaseModel):
     """Request for import command with wizard options."""
     url: str
@@ -172,7 +192,7 @@ class ImportRequest(BaseModel):
     max_previews: int = Field(100, description="Max previews to download")
     video_quality: int = Field(1080, description="Video quality width")
     additional_preview_urls: Optional[List[str]] = Field(None, description="(DEPRECATED) Additional preview URLs without nsfw flags", max_length=100)
-    additional_previews: Optional[List[dict]] = Field(None, description="Additional previews with nsfw flags [{url, nsfw}]", max_length=200)
+    additional_previews: Optional[List[AdditionalPreview]] = Field(None, description="Additional previews with nsfw flags", max_length=200)
     # Legacy fields for compatibility
     download_previews: bool = True
     add_to_global: bool = True
@@ -2021,8 +2041,11 @@ def import_pack(
     """
     logger.info(f"[import] Starting import from: {request.url}")
     # Merge new additional_previews with legacy additional_preview_urls
-    additional_previews = request.additional_previews
-    if not additional_previews and request.additional_preview_urls:
+    # Convert validated AdditionalPreview models to dicts for pack_service
+    additional_previews: Optional[List[dict]] = None
+    if request.additional_previews:
+        additional_previews = [p.model_dump(exclude_none=True) for p in request.additional_previews]
+    elif request.additional_preview_urls:
         # Legacy fallback: convert plain URLs to {url, nsfw=False}
         additional_previews = [{"url": u, "nsfw": False} for u in request.additional_preview_urls]
     logger.info(f"[import] Options: images={request.download_images}, "

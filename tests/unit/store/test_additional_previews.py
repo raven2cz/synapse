@@ -271,14 +271,29 @@ class TestImportRequestAdditionalPreviews:
 
     def test_import_request_with_additional_previews(self):
         """Test that additional_previews accepts list of {url, nsfw} dicts."""
-        from src.store.api import ImportRequest
+        from src.store.api import ImportRequest, AdditionalPreview
         previews = [
             {"url": "https://example.com/a.jpg", "nsfw": False},
             {"url": "https://example.com/b.jpg", "nsfw": True},
         ]
         req = ImportRequest(url="https://civitai.com/models/123", additional_previews=previews)
-        assert req.additional_previews == previews
-        assert req.additional_previews[1]["nsfw"] is True
+        assert len(req.additional_previews) == 2
+        assert isinstance(req.additional_previews[0], AdditionalPreview)
+        assert req.additional_previews[1].nsfw is True
+        assert req.additional_previews[0].url == "https://example.com/a.jpg"
+
+    def test_import_request_with_metadata(self):
+        """Test that additional_previews accepts metadata fields."""
+        from src.store.api import ImportRequest
+        meta = {"prompt": "a cat", "seed": 12345}
+        previews = [
+            {"url": "https://example.com/a.jpg", "nsfw": False, "width": 512, "height": 768, "meta": meta},
+        ]
+        req = ImportRequest(url="https://civitai.com/models/123", additional_previews=previews)
+        p = req.additional_previews[0]
+        assert p.width == 512
+        assert p.height == 768
+        assert p.meta == meta
 
     def test_import_request_legacy_urls_still_accepted(self):
         """Test backward compat: old additional_preview_urls field still works."""
@@ -298,4 +313,29 @@ class TestImportRequestAdditionalPreviews:
         from src.store.api import ImportRequest
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
-            ImportRequest(url="https://civitai.com/models/123", additional_previews=[{"url": "x", "nsfw": False}] * 201)
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[{"url": "https://x.com/i.jpg", "nsfw": False}] * 201)
+
+    def test_import_request_rejects_empty_url(self):
+        """Test that empty URL string is rejected by Pydantic."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[{"url": "", "nsfw": False}])
+
+    def test_import_request_rejects_oversized_meta(self):
+        """Test that meta field larger than 64KB is rejected."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        huge_meta = {"data": "x" * 70000}
+        with pytest.raises(ValidationError):
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[
+                {"url": "https://example.com/a.jpg", "nsfw": False, "meta": huge_meta}
+            ])
+
+    def test_additional_preview_model_dump(self):
+        """Test that AdditionalPreview model_dump works for pack_service."""
+        from src.store.api import AdditionalPreview
+        p = AdditionalPreview(url="https://example.com/a.jpg", nsfw=True, width=512, height=768)
+        d = p.model_dump(exclude_none=True)
+        assert d == {"url": "https://example.com/a.jpg", "nsfw": True, "width": 512, "height": 768}
+        assert "meta" not in d  # None fields excluded
