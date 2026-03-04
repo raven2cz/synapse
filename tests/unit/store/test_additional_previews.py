@@ -332,6 +332,24 @@ class TestImportRequestAdditionalPreviews:
                 {"url": "https://example.com/a.jpg", "nsfw": False, "meta": huge_meta}
             ])
 
+    def test_import_request_rejects_http_url(self):
+        """Test that http:// URLs are rejected (SSRF protection)."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError, match="https://"):
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[
+                {"url": "http://example.com/a.jpg", "nsfw": False}
+            ])
+
+    def test_import_request_rejects_ftp_url(self):
+        """Test that non-https schemes are rejected."""
+        from src.store.api import ImportRequest
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[
+                {"url": "ftp://example.com/a.jpg", "nsfw": False}
+            ])
+
     def test_additional_preview_model_dump(self):
         """Test that AdditionalPreview model_dump works for pack_service."""
         from src.store.api import AdditionalPreview

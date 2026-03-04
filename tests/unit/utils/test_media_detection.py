@@ -139,15 +139,31 @@ class TestCivitaiDetection:
     
     def test_civitai_anim_false_indicates_static(self):
         """Civitai anim=false on image URL stays as image."""
-        # Note: .jpeg extension has priority, anim=false just confirms it's static
         url = "https://image.civitai.com/preview.jpeg?anim=false"
         result = detect_media_type(url)
         assert result.type == MediaType.IMAGE
-        # Extension-based detection has priority over query params
-        assert result.source == "extension"
+        # anim=false override fires before patterns/extension (prevents transcode=true false positive)
+        assert result.source == "civitai-anim-false"
     
+    def test_civitai_thumbnail_with_transcode_is_image(self):
+        """REGRESSION: Civitai thumbnail with anim=false,transcode=true must be IMAGE.
+
+        Without the anim=false override, the transcode=true pattern incorrectly
+        classifies static thumbnails as video. This was found by Gemini audit.
+        """
+        # Path-based params (Civitai CDN format)
+        url = "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/uuid/width=450,anim=false,transcode=true/name.jpeg"
+        result = detect_media_type(url)
+        assert result.type == MediaType.IMAGE
+        assert result.source == "civitai-anim-false"
+
+        # Query-based params
+        url2 = "https://image.civitai.com/preview.jpeg?anim=false&transcode=true&width=450"
+        result2 = detect_media_type(url2)
+        assert result2.type == MediaType.IMAGE
+
     def test_civitai_fake_jpeg_video(self):
-        """Civitai video disguised as JPEG (with transcode param)."""
+        """Civitai video disguised as JPEG (with transcode param, no anim=false)."""
         # This is detected via the transcode=true pattern
         url = "https://image.civitai.com/fake.jpeg?transcode=true&width=1080"
         result = detect_media_type(url)

@@ -165,6 +165,14 @@ class AdditionalPreview(BaseModel):
     height: Optional[int] = Field(None, ge=1, le=65536)
     meta: Optional[Dict[str, Any]] = Field(None, description="Generation metadata (prompt, seed, model, etc.)")
 
+    @field_validator('url')
+    @classmethod
+    def validate_url_scheme(cls, v: str) -> str:
+        """Only allow https URLs to prevent SSRF via import payload."""
+        if not v.startswith('https://'):
+            raise ValueError('URL must use https:// scheme')
+        return v
+
     @field_validator('meta')
     @classmethod
     def validate_meta_size(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

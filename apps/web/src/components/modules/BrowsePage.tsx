@@ -524,7 +524,7 @@ export function BrowsePage() {
                   download_from_all_versions: options.downloadFromAllVersions,
                   thumbnail_url: thumbnailUrl ? fromProxyUrl(thumbnailUrl) : thumbnailUrl,
                   pack_name: customPackName,
-                  additional_previews: additionalPreviews,
+                  additional_previews: additionalPreviews?.slice(0, 200),
                 }),
               })
               if (!res.ok) {

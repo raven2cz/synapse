@@ -1112,9 +1112,9 @@ class PackService:
 
             except Exception as e:
                 logger.warning(f"[PackService] Failed to download additional preview {url[:60]}: {e}")
-                # Clean up partial download
-                dest_path = previews_dir / f"community_{idx}.tmp"
-                dest_path.unlink(missing_ok=True)
+                # Clean up partial download (dest is set before download attempt)
+                if dest.exists():
+                    dest.unlink(missing_ok=True)
                 continue
 
         return results
