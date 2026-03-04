@@ -515,7 +515,8 @@ async def _is_private_host(hostname: str | None) -> bool:
         return True
     try:
         ip = ipaddress.ip_address(hostname)
-        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+        # is_global excludes private, loopback, link-local, reserved, CGNAT, multicast
+        return not ip.is_global or ip.is_multicast
     except ValueError:
         pass  # Regular hostname — resolve DNS
     try:
@@ -525,11 +526,11 @@ async def _is_private_host(hostname: str | None) -> bool:
         for _family, _type, _proto, _canonname, sockaddr in addrinfo:
             try:
                 ip = ipaddress.ip_address(sockaddr[0])
-                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                if not ip.is_global or ip.is_multicast:
                     return True
             except ValueError:
                 continue
-    except socket.gaierror:
+    except (socket.gaierror, UnicodeError, OSError):
         return True  # Can't resolve — block for safety
     return False
 
@@ -649,6 +650,8 @@ async def proxy_image(url: str, request: Request):
 
     except HTTPException:
         raise
+    except httpx.InvalidURL:
+        raise HTTPException(status_code=400, detail="Invalid upstream URL")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
     except httpx.RequestError as e:
