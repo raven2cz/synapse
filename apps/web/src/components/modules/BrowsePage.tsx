@@ -509,7 +509,7 @@ export function BrowsePage() {
             })),
           }))}
           isLoading={importWizardLoading}
-          onImport={async (selectedVersionIds, options, thumbnailUrl, customPackName, additionalPreviewUrls) => {
+          onImport={async (selectedVersionIds, options, thumbnailUrl, customPackName, additionalPreviews) => {
             setImportWizardLoading(true)
             try {
               const res = await fetch('/api/packs/import', {
@@ -524,7 +524,7 @@ export function BrowsePage() {
                   download_from_all_versions: options.downloadFromAllVersions,
                   thumbnail_url: thumbnailUrl ? fromProxyUrl(thumbnailUrl) : thumbnailUrl,
                   pack_name: customPackName,
-                  additional_preview_urls: additionalPreviewUrls,
+                  additional_previews: additionalPreviews,
                 }),
               })
               if (!res.ok) {

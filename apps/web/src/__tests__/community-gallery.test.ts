@@ -58,20 +58,20 @@ function hasCommunityTabSupport(adapter: { getModelPreviews?: Function }): boole
 }
 
 /**
- * Builds additional_preview_urls for import request.
+ * Builds additional_previews with nsfw flags for import request.
  * All displayed community images are imported — user controls count
  * via CommunityGalleryPanel's Limit dropdown.
  * (Mirrors ImportWizardModal onImport logic)
  */
-function buildAdditionalPreviewUrls(
+function buildAdditionalPreviews(
   communityOpts: CommunityImageOptions | undefined,
   communityImages: ModelPreview[] | undefined,
   fromProxyUrl: (url: string) => string
-): string[] | undefined {
+): { url: string; nsfw: boolean }[] | undefined {
   if (!communityOpts?.include || !communityImages?.length) {
     return undefined
   }
-  return communityImages.map(p => fromProxyUrl(p.url))
+  return communityImages.map(p => ({ url: fromProxyUrl(p.url), nsfw: p.nsfw }))
 }
 
 // ============================================================================
@@ -151,42 +151,52 @@ describe('Community Gallery Tab', () => {
 describe('Community Images Import', () => {
   const identity = (url: string) => url  // Mock fromProxyUrl
 
-  describe('Building additional_preview_urls', () => {
+  describe('Building additional_previews with nsfw flags', () => {
     it('returns undefined when community options not provided', () => {
-      const result = buildAdditionalPreviewUrls(undefined, communityPreviews, identity)
+      const result = buildAdditionalPreviews(undefined, communityPreviews, identity)
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when include is false', () => {
       const opts: CommunityImageOptions = { include: false }
-      const result = buildAdditionalPreviewUrls(opts, communityPreviews, identity)
+      const result = buildAdditionalPreviews(opts, communityPreviews, identity)
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when community images are undefined', () => {
       const opts: CommunityImageOptions = { include: true }
-      const result = buildAdditionalPreviewUrls(opts, undefined, identity)
+      const result = buildAdditionalPreviews(opts, undefined, identity)
       expect(result).toBeUndefined()
     })
 
     it('returns undefined when community images are empty', () => {
       const opts: CommunityImageOptions = { include: true }
-      const result = buildAdditionalPreviewUrls(opts, [], identity)
+      const result = buildAdditionalPreviews(opts, [], identity)
       expect(result).toBeUndefined()
     })
 
-    it('returns all URLs when include is true and images available', () => {
+    it('returns objects with url and nsfw when include is true', () => {
       const opts: CommunityImageOptions = { include: true }
-      const result = buildAdditionalPreviewUrls(opts, communityPreviews, identity)
+      const result = buildAdditionalPreviews(opts, communityPreviews, identity)
       expect(result).toBeDefined()
       expect(result!.length).toBe(50)
-      expect(result![0]).toBe('https://example.com/community_1.jpg')
+      expect(result![0]).toEqual({ url: 'https://example.com/community_1.jpg', nsfw: true })
+      // communityPreviews: nsfw = i % 5 === 0, so index 0 is nsfw
+      expect(result![1]).toEqual({ url: 'https://example.com/community_2.jpg', nsfw: false })
+    })
+
+    it('preserves nsfw flags correctly', () => {
+      const opts: CommunityImageOptions = { include: true }
+      const result = buildAdditionalPreviews(opts, communityPreviews, identity)
+      // Every 5th image (index 0, 5, 10...) is nsfw
+      const nsfwCount = result!.filter(p => p.nsfw).length
+      expect(nsfwCount).toBe(10) // 50 images, every 5th = 10 nsfw
     })
 
     it('returns all images regardless of count', () => {
       const small = communityPreviews.slice(0, 3)
       const opts: CommunityImageOptions = { include: true }
-      const result = buildAdditionalPreviewUrls(opts, small, identity)
+      const result = buildAdditionalPreviews(opts, small, identity)
       expect(result!.length).toBe(3)
     })
 
@@ -194,35 +204,39 @@ describe('Community Images Import', () => {
       const opts: CommunityImageOptions = { include: true }
       const images = communityPreviews.slice(0, 2)
       const transform = (url: string) => url.replace('example.com', 'transformed.com')
-      const result = buildAdditionalPreviewUrls(opts, images, transform)
-      expect(result![0]).toBe('https://transformed.com/community_1.jpg')
-      expect(result![1]).toBe('https://transformed.com/community_2.jpg')
+      const result = buildAdditionalPreviews(opts, images, transform)
+      expect(result![0].url).toBe('https://transformed.com/community_1.jpg')
+      expect(result![1].url).toBe('https://transformed.com/community_2.jpg')
     })
   })
 
   describe('Import Request JSON', () => {
-    it('omits additional_preview_urls when community not included', () => {
+    it('omits additional_previews when community not included', () => {
       const body: Record<string, any> = {
         url: 'https://civitai.com/models/123',
         version_ids: [456],
         download_images: true,
-        additional_preview_urls: undefined,
+        additional_previews: undefined,
       }
       const json = JSON.stringify(body)
       const parsed = JSON.parse(json)
-      expect(parsed.additional_preview_urls).toBeUndefined()
+      expect(parsed.additional_previews).toBeUndefined()
     })
 
-    it('includes additional_preview_urls when community is included', () => {
-      const urls = ['https://example.com/a.jpg', 'https://example.com/b.jpg']
+    it('includes additional_previews with nsfw flags when community is included', () => {
+      const previews = [
+        { url: 'https://example.com/a.jpg', nsfw: false },
+        { url: 'https://example.com/b.jpg', nsfw: true },
+      ]
       const body = {
         url: 'https://civitai.com/models/123',
         version_ids: [456],
-        additional_preview_urls: urls,
+        additional_previews: previews,
       }
       const json = JSON.stringify(body)
       const parsed = JSON.parse(json)
-      expect(parsed.additional_preview_urls).toEqual(urls)
+      expect(parsed.additional_previews).toEqual(previews)
+      expect(parsed.additional_previews[1].nsfw).toBe(true)
     })
   })
 

@@ -171,7 +171,8 @@ class ImportRequest(BaseModel):
     pack_description: Optional[str] = Field(None, description="Custom description")
     max_previews: int = Field(100, description="Max previews to download")
     video_quality: int = Field(1080, description="Video quality width")
-    additional_preview_urls: Optional[List[str]] = Field(None, description="Additional preview URLs (e.g. community gallery)", max_length=100)
+    additional_preview_urls: Optional[List[str]] = Field(None, description="(DEPRECATED) Additional preview URLs without nsfw flags", max_length=100)
+    additional_previews: Optional[List[dict]] = Field(None, description="Additional previews with nsfw flags [{url, nsfw}]", max_length=200)
     # Legacy fields for compatibility
     download_previews: bool = True
     add_to_global: bool = True
@@ -2019,10 +2020,15 @@ def import_pack(
     - Custom pack name and description
     """
     logger.info(f"[import] Starting import from: {request.url}")
+    # Merge new additional_previews with legacy additional_preview_urls
+    additional_previews = request.additional_previews
+    if not additional_previews and request.additional_preview_urls:
+        # Legacy fallback: convert plain URLs to {url, nsfw=False}
+        additional_previews = [{"url": u, "nsfw": False} for u in request.additional_preview_urls]
     logger.info(f"[import] Options: images={request.download_images}, "
                 f"videos={request.download_videos}, nsfw={request.include_nsfw}, "
                 f"all_versions={request.download_from_all_versions}, "
-                f"additional_urls={len(request.additional_preview_urls or [])}")
+                f"additional_previews={len(additional_previews or [])}")
 
     try:
         pack = store.import_civitai(
@@ -2038,7 +2044,7 @@ def import_pack(
             download_from_all_versions=request.download_from_all_versions,
             cover_url=request.thumbnail_url,  # User-selected thumbnail
             selected_version_ids=request.version_ids,  # Multi-version import support
-            additional_preview_urls=request.additional_preview_urls,
+            additional_previews=additional_previews,
         )
 
         # Count downloaded previews

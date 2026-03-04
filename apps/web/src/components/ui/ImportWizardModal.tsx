@@ -129,7 +129,7 @@ export interface ImportWizardModalProps {
         options: ImportOptions,
         thumbnailUrl?: string,
         customPackName?: string,
-        additionalPreviewUrls?: string[]
+        additionalPreviews?: { url: string; nsfw: boolean }[]
     ) => Promise<void>
     /** Model name for display */
     modelName: string
@@ -571,10 +571,10 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
         // Pass custom pack name if it differs from original
         const customName = packName !== modelName ? packName : undefined
 
-        // Build additional preview URLs from community images if opted in
+        // Build additional previews with nsfw flags from community images if opted in
         // All displayed images are imported — user controls count via CommunityGalleryPanel's Limit dropdown
-        const additionalPreviewUrls = communityOpts.include && communityImages.length
-            ? communityImages.map(p => fromProxyUrl(p.url))
+        const additionalPreviews = communityOpts.include && communityImages.length
+            ? communityImages.map(p => ({ url: fromProxyUrl(p.url), nsfw: p.nsfw }))
             : undefined
 
         await onImport(
@@ -582,7 +582,7 @@ export const ImportWizardModal = memo<ImportWizardModalProps>(function ImportWiz
             options,
             selectedThumbnail,
             customName,
-            additionalPreviewUrls
+            additionalPreviews
         )
     }, [selectedVersionIds, options, selectedThumbnail, onImport, packName, modelName, communityImages, communityOpts])
 

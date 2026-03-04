@@ -1,17 +1,17 @@
 """
-Tests for additional preview URL download (community gallery import).
+Tests for additional preview download (community gallery import).
 
 Tests cover:
-- _download_additional_previews handles valid URLs
-- _download_additional_previews handles download failures gracefully
+- _download_additional_previews handles {url, nsfw} dicts
+- nsfw flags are correctly preserved from frontend
+- Download failures are handled gracefully
 - Community previews get `community_` prefix filenames
-- Import without additional_preview_urls works as before (backward compat)
-- Import with additional_preview_urls downloads community images
-- Import with empty additional_preview_urls list = no community downloads
+- Backward compat: plain string URLs default to nsfw=False
+- Import with additional_previews downloads community images with nsfw metadata
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 
 from src.store.pack_service import PackService
@@ -41,39 +41,74 @@ class TestDownloadAdditionalPreviews:
         service._download_service = download_service
         return service
 
-    def test_downloads_image_urls(self, tmp_path):
-        """Test that image URLs are downloaded with community_ prefix."""
+    def test_downloads_image_previews_with_nsfw(self, tmp_path):
+        """Test that image previews are downloaded with nsfw flags preserved."""
         mock_ds = MagicMock()
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = [
-            "https://example.com/image1.jpg",
-            "https://example.com/image2.png",
+        previews = [
+            {"url": "https://example.com/image1.jpg", "nsfw": False},
+            {"url": "https://example.com/image2.png", "nsfw": True},
         ]
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=urls,
+            previews=previews,
             start_index=0,
         )
 
         assert len(results) == 2
         assert results[0].filename == "community_1.jpg"
+        assert results[0].nsfw is False
         assert results[1].filename == "community_2.png"
-        assert results[0].url == urls[0]
-        assert results[1].url == urls[1]
+        assert results[1].nsfw is True
         assert mock_ds.download_to_file.call_count == 2
+
+    def test_nsfw_flag_preserved_from_frontend(self, tmp_path):
+        """CRITICAL: nsfw flags from community gallery must survive the full pipeline."""
+        mock_ds = MagicMock()
+        service = self._make_service(tmp_path, download_service=mock_ds)
+
+        previews = [
+            {"url": "https://example.com/sfw.jpg", "nsfw": False},
+            {"url": "https://example.com/nsfw.jpg", "nsfw": True},
+            {"url": "https://example.com/also_nsfw.jpg", "nsfw": True},
+        ]
+
+        results = service._download_additional_previews(
+            pack_name="test-pack", previews=previews
+        )
+
+        assert results[0].nsfw is False
+        assert results[1].nsfw is True
+        assert results[2].nsfw is True
+
+    def test_backward_compat_plain_string_defaults_nsfw_false(self, tmp_path):
+        """Legacy: plain string URL (not dict) defaults to nsfw=False."""
+        mock_ds = MagicMock()
+        service = self._make_service(tmp_path, download_service=mock_ds)
+
+        # Simulate legacy format: plain strings instead of dicts
+        previews = ["https://example.com/legacy.jpg"]
+
+        results = service._download_additional_previews(
+            pack_name="test-pack", previews=previews
+        )
+
+        assert len(results) == 1
+        assert results[0].nsfw is False
+        assert results[0].url == "https://example.com/legacy.jpg"
 
     def test_community_prefix_with_start_index(self, tmp_path):
         """Test that start_index offsets filenames correctly."""
         mock_ds = MagicMock()
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = ["https://example.com/image.jpg"]
+        previews = [{"url": "https://example.com/image.jpg", "nsfw": False}]
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=urls,
+            previews=previews,
             start_index=5,
         )
 
@@ -90,57 +125,65 @@ class TestDownloadAdditionalPreviews:
         ]
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = [
-            "https://example.com/ok1.jpg",
-            "https://example.com/fail.jpg",
-            "https://example.com/ok2.jpg",
+        previews = [
+            {"url": "https://example.com/ok1.jpg", "nsfw": False},
+            {"url": "https://example.com/fail.jpg", "nsfw": True},
+            {"url": "https://example.com/ok2.jpg", "nsfw": True},
         ]
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=urls,
+            previews=previews,
         )
 
         assert len(results) == 2
         assert results[0].filename == "community_1.jpg"
         assert results[1].filename == "community_3.jpg"
+        # nsfw preserved even with failures in between
+        assert results[0].nsfw is False
+        assert results[1].nsfw is True
 
-    def test_empty_urls_returns_empty(self, tmp_path):
-        """Test that empty URL list returns empty results."""
+    def test_empty_previews_returns_empty(self, tmp_path):
+        """Test that empty preview list returns empty results."""
         service = self._make_service(tmp_path)
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=[],
+            previews=[],
         )
 
         assert results == []
 
     def test_skips_empty_url_strings(self, tmp_path):
-        """Test that empty strings in URL list are skipped."""
+        """Test that empty URLs in preview list are skipped."""
         mock_ds = MagicMock()
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = ["", "https://example.com/image.jpg", ""]
+        previews = [
+            {"url": "", "nsfw": False},
+            {"url": "https://example.com/image.jpg", "nsfw": True},
+            {"url": "", "nsfw": False},
+        ]
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=urls,
+            previews=previews,
         )
 
         assert len(results) == 1
         assert results[0].filename == "community_2.jpg"
+        assert results[0].nsfw is True
 
     def test_video_url_gets_mp4_extension(self, tmp_path):
         """Test that video URLs are saved with .mp4 extension."""
         mock_ds = MagicMock()
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = ["https://image.civitai.com/preview.mp4?transcode=true"]
+        previews = [{"url": "https://image.civitai.com/preview.mp4?transcode=true", "nsfw": False}]
 
         results = service._download_additional_previews(
             pack_name="test-pack",
-            urls=urls,
+            previews=previews,
         )
 
         assert len(results) == 1
@@ -153,29 +196,17 @@ class TestDownloadAdditionalPreviews:
         mock_ds = MagicMock()
         service = self._make_service(tmp_path, download_service=mock_ds)
 
-        urls = ["https://example.com/image.jpg"]
-        service._download_additional_previews(pack_name="new-pack", urls=urls)
+        previews = [{"url": "https://example.com/image.jpg", "nsfw": False}]
+        service._download_additional_previews(pack_name="new-pack", previews=previews)
 
         previews_dir = tmp_path / "state" / "packs" / "new-pack" / "resources" / "previews"
         assert previews_dir.exists()
-
-    def test_nsfw_defaults_to_false(self, tmp_path):
-        """Test that community previews default to nsfw=False."""
-        mock_ds = MagicMock()
-        service = self._make_service(tmp_path, download_service=mock_ds)
-
-        urls = ["https://example.com/image.jpg"]
-        results = service._download_additional_previews(
-            pack_name="test-pack", urls=urls
-        )
-
-        assert results[0].nsfw is False
 
     def test_fallback_to_requests_when_no_download_service(self, tmp_path):
         """Test direct download when DownloadService is not available."""
         service = self._make_service(tmp_path, download_service=None)
 
-        urls = ["https://example.com/image.jpg"]
+        previews = [{"url": "https://example.com/image.jpg", "nsfw": True}]
 
         with patch("src.store.pack_service.requests.get") as mock_get:
             mock_response = MagicMock()
@@ -185,38 +216,51 @@ class TestDownloadAdditionalPreviews:
             mock_get.return_value = mock_response
 
             results = service._download_additional_previews(
-                pack_name="test-pack", urls=urls
+                pack_name="test-pack", previews=previews
             )
 
         assert len(results) == 1
+        assert results[0].nsfw is True
         mock_get.assert_called_once()
 
 
-class TestImportRequestAdditionalUrls:
-    """Tests for ImportRequest model with additional_preview_urls."""
+class TestImportRequestAdditionalPreviews:
+    """Tests for ImportRequest model with additional_previews."""
 
-    def test_import_request_without_additional_urls(self):
-        """Test backward compat: additional_preview_urls defaults to None."""
+    def test_import_request_without_additional_previews(self):
+        """Test backward compat: additional_previews defaults to None."""
         from src.store.api import ImportRequest
         req = ImportRequest(url="https://civitai.com/models/123")
+        assert req.additional_previews is None
         assert req.additional_preview_urls is None
 
-    def test_import_request_with_additional_urls(self):
-        """Test that additional_preview_urls accepts a list of strings."""
+    def test_import_request_with_additional_previews(self):
+        """Test that additional_previews accepts list of {url, nsfw} dicts."""
+        from src.store.api import ImportRequest
+        previews = [
+            {"url": "https://example.com/a.jpg", "nsfw": False},
+            {"url": "https://example.com/b.jpg", "nsfw": True},
+        ]
+        req = ImportRequest(url="https://civitai.com/models/123", additional_previews=previews)
+        assert req.additional_previews == previews
+        assert req.additional_previews[1]["nsfw"] is True
+
+    def test_import_request_legacy_urls_still_accepted(self):
+        """Test backward compat: old additional_preview_urls field still works."""
         from src.store.api import ImportRequest
         urls = ["https://example.com/a.jpg", "https://example.com/b.jpg"]
         req = ImportRequest(url="https://civitai.com/models/123", additional_preview_urls=urls)
         assert req.additional_preview_urls == urls
 
-    def test_import_request_with_empty_additional_urls(self):
+    def test_import_request_with_empty_additional_previews(self):
         """Test that empty list is accepted."""
         from src.store.api import ImportRequest
-        req = ImportRequest(url="https://civitai.com/models/123", additional_preview_urls=[])
-        assert req.additional_preview_urls == []
+        req = ImportRequest(url="https://civitai.com/models/123", additional_previews=[])
+        assert req.additional_previews == []
 
-    def test_import_request_rejects_too_many_urls(self):
-        """Test that more than 100 URLs are rejected."""
+    def test_import_request_rejects_too_many_previews(self):
+        """Test that more than 200 previews are rejected."""
         from src.store.api import ImportRequest
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
-            ImportRequest(url="https://civitai.com/models/123", additional_preview_urls=["x"] * 101)
+            ImportRequest(url="https://civitai.com/models/123", additional_previews=[{"url": "x", "nsfw": False}] * 201)

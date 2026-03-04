@@ -314,7 +314,7 @@ class PackService:
         progress_callback: Optional[ProgressCallback] = None,
         cover_url: Optional[str] = None,
         selected_version_ids: Optional[List[int]] = None,
-        additional_preview_urls: Optional[List[str]] = None,
+        additional_previews: Optional[List[dict]] = None,
     ) -> Pack:
         """
         Import a pack from Civitai URL.
@@ -334,7 +334,7 @@ class PackService:
             progress_callback: Optional progress callback
             cover_url: User-selected thumbnail URL
             selected_version_ids: List of version IDs to import (creates one dependency per version)
-            additional_preview_urls: Extra preview URLs to download (e.g. community gallery)
+            additional_previews: Extra previews with nsfw flags [{url, nsfw}]
 
         Returns:
             Created Pack
@@ -583,11 +583,11 @@ class PackService:
             if previews:
                 pack.previews = previews
 
-            # Download additional preview URLs (e.g. community gallery)
-            if additional_preview_urls:
+            # Download additional previews (e.g. community gallery) with nsfw flags
+            if additional_previews:
                 additional = self._download_additional_previews(
                     pack_name=name,
-                    urls=additional_preview_urls,
+                    previews=additional_previews,
                     start_index=len(pack.previews),
                 )
                 if additional:
@@ -1023,18 +1023,18 @@ class PackService:
     def _download_additional_previews(
         self,
         pack_name: str,
-        urls: List[str],
+        previews: List[dict],
         start_index: int = 0,
     ) -> List[PreviewInfo]:
         """
-        Download additional preview images by URL (e.g. community gallery).
+        Download additional preview images (e.g. community gallery).
 
-        Each URL is downloaded with a `community_N` filename prefix.
+        Each preview is downloaded with a `community_N` filename prefix.
         Failed downloads are skipped gracefully.
 
         Args:
             pack_name: Target pack name
-            urls: List of image/video URLs to download
+            previews: List of {url: str, nsfw: bool} dicts
             start_index: Starting index for numbering (to avoid filename conflicts)
 
         Returns:
@@ -1051,7 +1051,9 @@ class PackService:
 
         results: List[PreviewInfo] = []
 
-        for i, url in enumerate(urls):
+        for i, preview in enumerate(previews):
+            url = preview.get("url", "") if isinstance(preview, dict) else str(preview)
+            nsfw = preview.get("nsfw", False) if isinstance(preview, dict) else False
             if not url:
                 continue
 
@@ -1096,7 +1098,7 @@ class PackService:
                 results.append(PreviewInfo(
                     filename=filename,
                     url=url,
-                    nsfw=False,
+                    nsfw=nsfw,
                     media_type=media_type,
                     thumbnail_url=thumbnail_url,
                 ))
