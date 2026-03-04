@@ -493,78 +493,107 @@ async def proxy_image(url: str, request: Request):
     Proxy images from Civitai CDN to avoid CORS issues.
 
     Only allows requests to known Civitai domains for security.
-    Uses async httpx to avoid blocking the event loop (critical for concurrency).
-    Streams the response to avoid memory issues with large files.
+    Uses streaming to release httpx connection pool slots immediately.
+
+    Civitai CDN redirects to B2/DO storage which rejects custom headers,
+    so we follow one redirect manually with stripped headers.
     """
     from urllib.parse import urlparse
     import httpx
 
-    # Decode URL (may be URL-encoded)
     decoded_url = unquote(url)
 
-    # Parse and validate domain
     parsed = urlparse(decoded_url)
     if parsed.netloc not in ALLOWED_IMAGE_DOMAINS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Domain not allowed: {parsed.netloc}"
-        )
-
-    # Validate scheme
+        raise HTTPException(status_code=400, detail=f"Domain not allowed: {parsed.netloc}")
     if parsed.scheme not in ('http', 'https'):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
 
-    try:
-        # Browser-like headers for initial Civitai CDN request
-        headers = {
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Referer": "https://civitai.com/",
-        }
-        minimal_headers = {"User-Agent": headers["User-Agent"]}
+    # Browser-like headers for Civitai CDN
+    # Accept-Encoding: identity prevents compression mismatch with Content-Length
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        "Accept-Encoding": "identity",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://civitai.com/",
+    }
 
-        client: httpx.AsyncClient = request.app.state.http_client
+    client: httpx.AsyncClient = request.app.state.http_client
 
-        # With anim=true, video URLs serve directly from Cloudflare (no B2 redirect).
-        # Use uniform 30s timeout for both images and videos.
-        is_video = decoded_url.lower().endswith('.mp4')
-        timeout = 30.0
+    async def _stream_with_redirect(target_url: str, req_headers: dict) -> httpx.Response:
+        """Open a stream, following one CDN redirect with stripped headers.
 
-        # Don't auto-follow redirects: Civitai CDN redirects to B2 storage
-        # (image-b2.civitai.com) or DO Spaces which reject custom headers.
-        resp = await client.get(decoded_url, headers=headers, follow_redirects=False, timeout=timeout)
-
-        # Handle redirect manually with minimal headers for external storage
+        Unlike a buffered probe+stream pattern, this streams immediately so
+        non-redirect responses (200) are never downloaded twice.
+        """
+        resp = await client.send(
+            client.build_request("GET", target_url, headers=req_headers),
+            stream=True,
+        )
         if resp.status_code in (301, 302, 307, 308):
             redirect_url = resp.headers.get('location', '')
-            if redirect_url:
-                resp = await client.get(redirect_url, headers={}, timeout=timeout)
+            await resp.aclose()
+            if not redirect_url:
+                raise HTTPException(status_code=502, detail="Empty redirect from upstream")
+            # SSRF protection: validate redirect URL scheme
+            rp = urlparse(redirect_url)
+            if rp.scheme not in ('http', 'https'):
+                raise HTTPException(status_code=502, detail="Invalid redirect URL scheme")
+            # Stream from storage backend without custom headers (B2/DO reject them)
+            resp = await client.send(
+                client.build_request("GET", redirect_url),
+                stream=True,
+            )
+        return resp
 
-        # Retry once on transient server errors (Civitai CDN 500/503)
-        # Skip retry for video URLs (they fail due to B2 auth, not transient)
-        if not is_video and resp.status_code in (500, 502, 503):
+    resp = None
+    try:
+        resp = await _stream_with_redirect(decoded_url, headers)
+
+        # Retry once on transient upstream errors (images only, not videos)
+        if resp.status_code in (500, 502, 503) and not decoded_url.lower().endswith('.mp4'):
+            await resp.aclose()
+            resp = None
             import asyncio
-            await asyncio.sleep(1)
-            resp = await client.get(decoded_url, headers=headers, follow_redirects=False, timeout=timeout)
-            if resp.status_code in (301, 302, 307, 308):
-                redirect_url = resp.headers.get('location', '')
-                if redirect_url:
-                    resp = await client.get(redirect_url, headers={}, timeout=timeout)
+            await asyncio.sleep(0.5)
+            resp = await _stream_with_redirect(decoded_url, headers)
 
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            status_code = resp.status_code
+            await resp.aclose()
+            resp = None
+            raise HTTPException(status_code=502, detail=f"Upstream error {status_code}")
 
         content_type = resp.headers.get('content-type', 'image/jpeg')
+        content_length = resp.headers.get('content-length')
 
-        return Response(
-            content=resp.content,
+        response_headers = {
+            "Cache-Control": "public, max-age=86400",
+            "Access-Control-Allow-Origin": "*",
+        }
+        if content_length:
+            response_headers["Content-Length"] = content_length
+
+        # Transfer resp ownership to stream_body — it handles cleanup via finally
+        streaming_resp = resp
+        resp = None
+
+        async def stream_body():
+            try:
+                async for chunk in streaming_resp.aiter_bytes(chunk_size=65536):
+                    yield chunk
+            finally:
+                await streaming_resp.aclose()
+
+        return StreamingResponse(
+            stream_body(),
             media_type=content_type,
-            headers={
-                "Cache-Control": "public, max-age=86400",
-                "Access-Control-Allow-Origin": "*",
-            }
+            headers=response_headers,
         )
 
+    except HTTPException:
+        raise
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
     except httpx.HTTPStatusError as e:
@@ -573,6 +602,10 @@ async def proxy_image(url: str, request: Request):
     except httpx.HTTPError as e:
         logger.warning(f"Image proxy failed: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")
+    finally:
+        # Clean up resp if it wasn't transferred to stream_body
+        if resp is not None:
+            await resp.aclose()
 
 
 # ============================================================================
