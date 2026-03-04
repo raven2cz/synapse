@@ -488,16 +488,20 @@ ALLOWED_IMAGE_DOMAINS = {
 }
 
 
-def _is_allowed_image_domain(netloc: str) -> bool:
-    """Check if netloc (host or host:port) is in the allowed domains list.
+def _is_allowed_image_domain(parsed_url) -> bool:
+    """Check if parsed URL's hostname is in the allowed domains list.
 
-    Case-insensitive, strips default ports (80/443) before comparison.
+    Uses parsed.hostname (not netloc) to prevent userinfo@host bypass:
+    e.g. https://image.civitai.com:443@evil.com would have
+    netloc="image.civitai.com:443@evil.com" but hostname="evil.com".
     """
-    hostname = netloc.lower().split(':')[0]
-    return hostname in ALLOWED_IMAGE_DOMAINS
+    hostname = parsed_url.hostname
+    if not hostname:
+        return False
+    return hostname.lower() in ALLOWED_IMAGE_DOMAINS
 
 
-def _is_private_host(hostname: str | None) -> bool:
+async def _is_private_host(hostname: str | None) -> bool:
     """Check if hostname resolves to a private/internal address (SSRF protection).
 
     Resolves DNS to catch hostnames that point to private IPs (e.g. DNS rebinding).
@@ -515,7 +519,9 @@ def _is_private_host(hostname: str | None) -> bool:
     except ValueError:
         pass  # Regular hostname — resolve DNS
     try:
-        addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        import asyncio
+        loop = asyncio.get_running_loop()
+        addrinfo = await loop.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM)
         for _family, _type, _proto, _canonname, sockaddr in addrinfo:
             try:
                 ip = ipaddress.ip_address(sockaddr[0])
@@ -545,8 +551,8 @@ async def proxy_image(url: str, request: Request):
     decoded_url = unquote(url)
 
     parsed = urlparse(decoded_url)
-    if not _is_allowed_image_domain(parsed.netloc):
-        raise HTTPException(status_code=400, detail=f"Domain not allowed: {parsed.netloc}")
+    if not _is_allowed_image_domain(parsed):
+        raise HTTPException(status_code=400, detail=f"Domain not allowed: {parsed.hostname}")
     if parsed.scheme not in ('http', 'https'):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
 
@@ -585,7 +591,7 @@ async def proxy_image(url: str, request: Request):
             rp = urlparse(redirect_url)
             if rp.scheme not in ('http', 'https'):
                 raise HTTPException(status_code=502, detail="Invalid redirect URL scheme")
-            if _is_private_host(rp.hostname):
+            if await _is_private_host(rp.hostname):
                 raise HTTPException(status_code=502, detail="Redirect to private address blocked")
             # Stream from storage backend without custom headers (B2/DO reject them)
             resp = await client.send(
@@ -645,9 +651,9 @@ async def proxy_image(url: str, request: Request):
         raise
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image fetch timeout")
-    except httpx.HTTPStatusError as e:
-        logger.warning(f"Image proxy failed (HTTP {e.response.status_code}): {decoded_url[:100]}")
-        raise HTTPException(status_code=502, detail=f"Upstream error {e.response.status_code}")
+    except httpx.RequestError as e:
+        logger.warning(f"Image proxy request failed: {e}")
+        raise HTTPException(status_code=502, detail="Upstream connection error")
     except httpx.HTTPError as e:
         logger.warning(f"Image proxy failed: {e}")
         raise HTTPException(status_code=502, detail="Failed to fetch image")

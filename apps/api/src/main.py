@@ -129,6 +129,8 @@ async def lifespan(app: FastAPI):
                 await avatar_task
             except asyncio.CancelledError:
                 pass
+            except Exception as e:
+                logger.warning("Avatar task exited with error: %s", e)
         if avatar_mgr:
             try:
                 await avatar_mgr.shutdown()
