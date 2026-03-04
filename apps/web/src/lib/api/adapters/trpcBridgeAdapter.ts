@@ -70,6 +70,9 @@ interface SynapseSearchBridge {
       filters?: {
         types?: string | string[]
         baseModel?: string | string[]
+        fileFormats?: string[]
+        category?: string
+        checkpointType?: string
       }
     },
     opts?: { signal?: AbortSignal; noCache?: boolean; forceTrpc?: boolean }
@@ -185,9 +188,11 @@ export class TrpcBridgeAdapter implements SearchAdapter {
         cursor: params.cursor,
         offset: this.meilisearchOffset,
         filters: {
-          // Support multiple types
           types: params.types?.length ? params.types : undefined,
-          baseModel: params.baseModels?.length ? params.baseModels[0] : undefined,
+          baseModel: params.baseModels?.length ? params.baseModels : undefined,
+          fileFormats: params.fileFormat ? [params.fileFormat] : undefined,
+          category: params.category,
+          checkpointType: params.checkpointType,
         },
       },
       { signal }

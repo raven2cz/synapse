@@ -23,11 +23,13 @@ export type SortOption =
   | 'Newest'
   | 'Most Discussed'
   | 'Most Collected'
-  | 'Most Buzz'
+  | 'Most Liked'
+  | 'Most Images'
+  | 'Oldest'
 
 export type PeriodOption = 'AllTime' | 'Year' | 'Month' | 'Week' | 'Day'
 
-// Complete list from Civitai (screenshot: base-model-filter.png)
+// Complete list from Civitai source: civitai/src/shared/constants/base-model.constants.ts
 export const BASE_MODEL_OPTIONS = [
   { value: '', label: 'All Base Models' },
   // Popular
@@ -56,6 +58,9 @@ export const BASE_MODEL_OPTIONS = [
   { value: 'SD 2.1 Unclip', label: 'SD 2.1 Unclip' },
   { value: 'SD 3', label: 'SD 3' },
   { value: 'SD 3.5', label: 'SD 3.5' },
+  { value: 'SD 3.5 Large', label: 'SD 3.5 Large' },
+  { value: 'SD 3.5 Medium', label: 'SD 3.5 Medium' },
+  { value: 'SD 3.5 Large Turbo', label: 'SD 3.5 Large Turbo' },
   // SDXL variants
   { value: 'SDXL 0.9', label: 'SDXL 0.9' },
   { value: 'SDXL 1.0 LCM', label: 'SDXL 1.0 LCM' },
@@ -75,7 +80,12 @@ export const BASE_MODEL_OPTIONS = [
   { value: 'Wan Video 14B I2v 480p', label: 'Wan Video 14B I2v 480p' },
   { value: 'Wan Video 14B I2v 720p', label: 'Wan Video 14B I2v 720p' },
   { value: 'Wan Video 14B T2v', label: 'Wan Video 14B T2v' },
-  // Image models
+  { value: 'Wan Video 2.2 TI2V-5B', label: 'Wan Video 2.2 TI2V-5B' },
+  { value: 'Wan Video 2.2 I2V-A14B', label: 'Wan Video 2.2 I2V-A14B' },
+  { value: 'Wan Video 2.2 T2V-A14B', label: 'Wan Video 2.2 T2V-A14B' },
+  { value: 'Wan Video 2.5 T2V', label: 'Wan Video 2.5 T2V' },
+  { value: 'Wan Video 2.5 I2V', label: 'Wan Video 2.5 I2V' },
+  // Other models
   { value: 'LTXV', label: 'LTXV' },
   { value: 'LTXV2', label: 'LTXV2' },
   { value: 'Lumina', label: 'Lumina' },
@@ -97,6 +107,10 @@ export const BASE_MODEL_OPTIONS = [
   { value: 'Aura Flow', label: 'Aura Flow' },
   { value: 'Chroma', label: 'Chroma' },
   { value: 'Z Image Turbo', label: 'Z Image Turbo' },
+  { value: 'Anima', label: 'Anima' },
+  { value: 'Seedance', label: 'Seedance' },
+  { value: 'Kling', label: 'Kling' },
+  { value: 'Vidu Q1', label: 'Vidu Q1' },
   { value: 'Other', label: 'Other' },
 ] as const
 
@@ -126,54 +140,33 @@ export const MODEL_TYPE_OPTIONS = [
 ] as const
 
 /**
- * File formats from Civitai (screenshot: file-format-filter.png)
- *
- * STATUS: NEEDS VERIFICATION - API values may differ from display labels
- *
- * Public API only documents: SafeTensor, PickleTensor, Other
- * Source: https://github.com/civitai/civitai/wiki/REST-API-Reference
- *
- * The internal tRPC API likely has more formats. Values below are GUESSED
- * based on display labels - need to capture actual API requests to verify.
- *
- * TODO: Capture network requests from Civitai website to get exact enum values
+ * File formats — VERIFIED from Civitai source
+ * Source: civitai/src/server/common/constants.ts:65
  */
 export const FILE_FORMAT_OPTIONS = [
   { value: '', label: 'All Formats' },
-  // VERIFIED in public API:
   { value: 'SafeTensor', label: 'Safe Tensor' },
   { value: 'PickleTensor', label: 'Pickle Tensor' },
-  // UNVERIFIED - guessed from display, may need different API values:
-  { value: 'Diffusers', label: 'Diffusers' },      // TODO: verify API value
-  { value: 'GGUF', label: 'GGUF' },                // TODO: verify API value
-  { value: 'Core ML', label: 'Core ML' },          // TODO: verify API value (might be "CoreML")
-  { value: 'ONNX', label: 'ONNX' },                // TODO: verify API value
-  { value: 'Pt', label: 'Pt' },                    // TODO: verify API value
+  { value: 'GGUF', label: 'GGUF' },
+  { value: 'Diffusers', label: 'Diffusers' },
+  { value: 'Core ML', label: 'Core ML' },
+  { value: 'ONNX', label: 'ONNX' },
   { value: 'Other', label: 'Other' },
 ] as const
 
 /**
- * Categories from Civitai (screenshot: category-filter.png)
- *
- * STATUS: NEEDS VERIFICATION - these are internal tags, not a public API parameter
- *
- * Categories in Civitai are implemented as tags with special handling.
- * The public REST API doesn't have a 'category' parameter - it uses 'tag'.
- *
- * The internal tRPC API likely uses tag IDs or slugs.
- * Values below are GUESSED as lowercase slugs - need verification.
- *
- * TODO: Capture network requests from Civitai website to get exact tag format
+ * Categories — VERIFIED from Civitai source
+ * Categories are tags with isCategory: true. tRPC uses `tagname` param.
+ * Meilisearch uses `category.name` filter. Values must match exact tag names.
  */
 export const CATEGORY_OPTIONS = [
   { value: '', label: 'All Categories' },
-  // Values are guessed as lowercase slugs - may need different format (IDs, etc.)
   { value: 'character', label: 'Character' },
   { value: 'style', label: 'Style' },
   { value: 'celebrity', label: 'Celebrity' },
   { value: 'concept', label: 'Concept' },
   { value: 'clothing', label: 'Clothing' },
-  { value: 'base model', label: 'Base Model' },    // TODO: might be "base-model" or ID
+  { value: 'base model', label: 'Base Model' },
   { value: 'poses', label: 'Poses' },
   { value: 'background', label: 'Background' },
   { value: 'tool', label: 'Tool' },
@@ -185,12 +178,25 @@ export const CATEGORY_OPTIONS = [
   { value: 'assets', label: 'Assets' },
 ] as const
 
+/**
+ * Checkpoint types — VERIFIED from Civitai source
+ * Source: civitai/src/shared/utils/prisma/enums.ts:167-172
+ */
+export const CHECKPOINT_TYPE_OPTIONS = [
+  { value: '', label: 'All Checkpoint Types' },
+  { value: 'Trained', label: 'Trained' },
+  { value: 'Merge', label: 'Merge' },
+] as const
+
 export const SORT_OPTIONS = [
   { value: 'Most Downloaded', label: 'Most Downloaded' },
   { value: 'Highest Rated', label: 'Highest Rated' },
   { value: 'Newest', label: 'Newest' },
   { value: 'Most Discussed', label: 'Most Discussed' },
   { value: 'Most Collected', label: 'Most Collected' },
+  { value: 'Most Liked', label: 'Most Liked' },
+  { value: 'Most Images', label: 'Most Images' },
+  { value: 'Oldest', label: 'Oldest' },
 ] as const
 
 export const PERIOD_OPTIONS = [
@@ -292,9 +298,10 @@ export interface SearchParams {
   nsfw?: boolean
   limit?: number
   cursor?: string
-  // Additional filters (Phase 5)
-  fileFormat?: string     // TODO: Not yet integrated - needs API verification
-  category?: string       // TODO: Not yet integrated - needs API verification (uses tag system)
+  // Additional filters
+  fileFormat?: string
+  category?: string
+  checkpointType?: string
   // CivArchive specific
   page?: number
 }

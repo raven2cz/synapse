@@ -1458,6 +1458,7 @@
     "filterModelType": "Model Type",
     "filterFileFormat": "File Format",
     "filterCategory": "Category",
+    "filterCheckpointType": "Checkpoint Type",
     "defaultSort": "Most Downloaded",
     "defaultPeriod": "All Time"
   },

@@ -97,6 +97,11 @@
   // Meilisearch Request Builder (FAST search with query)
   // ==========================================================================
 
+  // Escape single quotes in Meilisearch filter values to prevent filter injection
+  function escapeFilterValue(val) {
+    return String(val).replace(/'/g, "\\'");
+  }
+
   function buildMeilisearchRequest(params, config) {
     // Build NSFW filter based on config
     // nsfwLevel: 1=None, 2=Soft, 4=Mature, 8=X, 16=Blocked, 32=???
@@ -118,7 +123,7 @@
         ? params.filters.types
         : [params.filters.types];
       if (types.length > 0) {
-        filters.push(`(type IN [${types.map((t) => `'${t}'`).join(', ')}])`);
+        filters.push(`(type IN [${types.map((t) => `'${escapeFilterValue(t)}'`).join(', ')}])`);
       }
     }
 
@@ -129,14 +134,25 @@
         : [params.filters.baseModel];
       if (baseModels.length > 0) {
         filters.push(
-          `(version.baseModel IN [${baseModels.map((b) => `'${b}'`).join(', ')}])`
+          `(version.baseModel IN [${baseModels.map((b) => `'${escapeFilterValue(b)}'`).join(', ')}])`
         );
       }
     }
 
-    // Sort mapping: Meilisearch uses different sort syntax
-    // For now, we'll use default relevance sort when searching
-    // tRPC is better for sorted browsing without query
+    // File format filter
+    if (params.filters?.fileFormats?.length) {
+      filters.push(`(fileFormats IN [${params.filters.fileFormats.map((f) => `'${escapeFilterValue(f)}'`).join(', ')}])`);
+    }
+
+    // Checkpoint type filter
+    if (params.filters?.checkpointType) {
+      filters.push(`checkpointType = '${escapeFilterValue(params.filters.checkpointType)}'`);
+    }
+
+    // Category filter (categories are tags with isCategory: true)
+    if (params.filters?.category) {
+      filters.push(`category.name = '${escapeFilterValue(params.filters.category)}'`);
+    }
 
     return {
       queries: [
@@ -178,10 +194,15 @@
         // browsingLevel: 31 = all content, 1 = SFW only
         browsingLevel: config.nsfw ? 31 : 1,
         // Optional filters
-        types: params.filters?.types ? [params.filters.types] : undefined,
-        baseModels: params.filters?.baseModel
-          ? [params.filters.baseModel]
+        types: params.filters?.types
+          ? (Array.isArray(params.filters.types) ? params.filters.types : [params.filters.types])
           : undefined,
+        baseModels: params.filters?.baseModel
+          ? (Array.isArray(params.filters.baseModel) ? params.filters.baseModel : [params.filters.baseModel])
+          : undefined,
+        checkpointType: params.filters?.checkpointType || undefined,
+        fileFormats: params.filters?.fileFormats || undefined,
+        tagname: params.filters?.category || undefined,
       },
     };
 
@@ -600,15 +621,17 @@
 
         // Transform Meilisearch response to match expected format
         const hits = result.data?.hits || [];
+        const totalHits = result.data?.estimatedTotalHits || hits.length;
+        const currentOffset = params.offset || 0;
         return {
           ok: true,
           data: {
             items: hits,
             // Meilisearch uses offset/limit, not cursor
             nextCursor: undefined,
-            // Estimate if more results
-            hasMore: hits.length >= (params.limit || 20),
-            totalHits: result.data?.estimatedTotalHits || hits.length,
+            // Use estimatedTotalHits for accurate hasMore
+            hasMore: currentOffset + hits.length < totalHits,
+            totalHits,
           },
           meta: {
             ...result.meta,

@@ -101,17 +101,6 @@ interface Toast {
   details?: string
 }
 
-// Labels are translated via t('browse.types.*') in the component
-const MODEL_TYPES = [
-  { value: '', labelKey: 'all' },
-  { value: 'LORA', labelKey: 'lora' },
-  { value: 'Checkpoint', labelKey: 'checkpoint' },
-  { value: 'TextualInversion', labelKey: 'embedding' },
-  { value: 'VAE', labelKey: 'vae' },
-  { value: 'Controlnet', labelKey: 'controlnet' },
-  { value: 'Upscaler', labelKey: 'upscaler' },
-]
-
 // Card widths for zoom - fixed sizes like Civitai
 const CARD_WIDTHS = {
   sm: 220,
@@ -127,8 +116,7 @@ export function BrowsePage() {
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSearch, setActiveSearch] = useState('')
-  const [selectedType, setSelectedType] = useState('')
-  const [modelTypes, setModelTypes] = useState<string[]>([])  // Multi-select model types
+  const [modelTypes, setModelTypes] = useState<string[]>([])
   const [includeNsfw] = useState(true)
 
   // Phase 5: Search provider and filters
@@ -146,7 +134,10 @@ export function BrowsePage() {
   })
   const [sortBy, setSortBy] = useState<SortOption>('Most Downloaded')
   const [period, setPeriod] = useState<PeriodOption>('AllTime')
-  const [baseModel, setBaseModel] = useState<string>('')
+  const [baseModels, setBaseModels] = useState<string[]>([])
+  const [fileFormat, setFileFormat] = useState<string>('')
+  const [category, setCategory] = useState<string>('')
+  const [checkpointType, setCheckpointType] = useState<string>('')
 
   // Persist provider choice
   useEffect(() => {
@@ -189,23 +180,19 @@ export function BrowsePage() {
   // Check if search is a special query
   const isSpecialQuery = activeSearch.startsWith('tag:') || activeSearch.startsWith('url:') || activeSearch.startsWith('https://')
 
-  // Combine selectedType (dropdown) with modelTypes (chips) for search
-  const effectiveModelTypes = [
-    ...(selectedType ? [selectedType] : []),
-    ...modelTypes.filter(t => t !== selectedType), // Avoid duplicates
-  ]
-
   // Phase 5: Search query with adapter pattern
   const { data: searchResults, isLoading, error, isFetching } = useQuery({
     queryKey: [
       'civitai-search',
       activeSearch,
-      selectedType,
       modelTypes,
       searchProvider,
       sortBy,
       period,
-      baseModel,
+      baseModels,
+      fileFormat,
+      category,
+      checkpointType,
       currentCursor,
     ],
     queryFn: async ({ signal }) => {
@@ -231,13 +218,16 @@ export function BrowsePage() {
       const result = await adapter.search(
         {
           query: activeSearch || undefined,
-          types: effectiveModelTypes.length > 0 ? effectiveModelTypes : undefined,
-          baseModels: baseModel ? [baseModel] : undefined,
+          types: modelTypes.length > 0 ? modelTypes : undefined,
+          baseModels: baseModels.length > 0 ? baseModels : undefined,
           sort: sortBy,
           period,
           nsfw: includeNsfw,
           limit: 20,
           cursor: currentCursor,
+          fileFormat: fileFormat || undefined,
+          category: category || undefined,
+          checkpointType: checkpointType || undefined,
         },
         signal
       )
@@ -589,22 +579,6 @@ export function BrowsePage() {
             className="w-full bg-slate-dark border border-slate-mid rounded-xl pl-12 pr-4 py-3 text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-synapse"
           />
         </div>
-        <select
-          value={selectedType}
-          onChange={e => {
-            setSelectedType(e.target.value)
-            // Reset pagination on type change
-            isLoadingMore.current = false
-            setAllModels([])
-            setCurrentCursor(undefined)
-            setNextCursor(undefined)
-          }}
-          className="bg-slate-dark border border-slate-mid rounded-xl px-4 py-3 text-text-primary focus:outline-none focus:ring-2 focus:ring-synapse"
-        >
-          {MODEL_TYPES.map(type => (
-            <option key={type.value} value={type.value}>{t(`browse.types.${type.labelKey}`)}</option>
-          ))}
-        </select>
         <Button type="submit" disabled={isLoading && !isFetching}>
           {isLoading && !isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : t('browse.search')}
         </Button>
@@ -640,10 +614,9 @@ export function BrowsePage() {
             setCurrentCursor(undefined)
             setNextCursor(undefined)
           }}
-          baseModel={baseModel}
-          onBaseModelChange={(model) => {
-            setBaseModel(model)
-            // Reset on base model change
+          baseModels={baseModels}
+          onBaseModelsChange={(models) => {
+            setBaseModels(models)
             isLoadingMore.current = false
             setAllModels([])
             setCurrentCursor(undefined)
@@ -652,7 +625,34 @@ export function BrowsePage() {
           modelTypes={modelTypes}
           onModelTypesChange={(types) => {
             setModelTypes(types)
-            // Reset on model types change
+            // Clear checkpointType if Checkpoint is removed
+            if (!types.includes('Checkpoint') && checkpointType) {
+              setCheckpointType('')
+            }
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          fileFormat={fileFormat}
+          onFileFormatChange={(format) => {
+            setFileFormat(format)
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          category={category}
+          onCategoryChange={(cat) => {
+            setCategory(cat)
+            isLoadingMore.current = false
+            setAllModels([])
+            setCurrentCursor(undefined)
+            setNextCursor(undefined)
+          }}
+          checkpointType={checkpointType}
+          onCheckpointTypeChange={(type) => {
+            setCheckpointType(type)
             isLoadingMore.current = false
             setAllModels([])
             setCurrentCursor(undefined)

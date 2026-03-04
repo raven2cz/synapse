@@ -38,6 +38,7 @@ import {
   MODEL_TYPE_OPTIONS,
   FILE_FORMAT_OPTIONS,
   CATEGORY_OPTIONS,
+  CHECKPOINT_TYPE_OPTIONS,
 } from '@/lib/api/searchTypes'
 import { isProviderAvailable } from '@/lib/api/searchAdapters'
 
@@ -45,7 +46,7 @@ import { isProviderAvailable } from '@/lib/api/searchAdapters'
 // Types
 // =============================================================================
 
-export type FilterType = 'baseModel' | 'modelTypes' | 'fileFormat' | 'category'
+export type FilterType = 'baseModel' | 'modelTypes' | 'fileFormat' | 'category' | 'checkpointType'
 
 interface SearchFiltersProps {
   provider: SearchProvider
@@ -54,19 +55,18 @@ interface SearchFiltersProps {
   onSortChange: (sort: SortOption) => void
   period: PeriodOption
   onPeriodChange: (period: PeriodOption) => void
+  // Multi-select filters
+  baseModels: string[]
+  onBaseModelsChange: (models: string[]) => void
+  modelTypes?: string[]
+  onModelTypesChange?: (types: string[]) => void
   // Single-select filters
-  baseModel: string
-  onBaseModelChange: (model: string) => void
   fileFormat?: string
   onFileFormatChange?: (format: string) => void
   category?: string
   onCategoryChange?: (category: string) => void
-  // Multi-select filter
-  modelTypes?: string[]
-  onModelTypesChange?: (types: string[]) => void
-  // Legacy single-select (backwards compatibility)
-  modelType?: string
-  onModelTypeChange?: (type: string) => void
+  checkpointType?: string
+  onCheckpointTypeChange?: (type: string) => void
   // State
   isLoading?: boolean
   isError?: boolean
@@ -90,7 +90,7 @@ const FILTER_TYPE_CONFIGS: FilterTypeConfig[] = [
     key: 'baseModel',
     labelKey: 'filterBaseModel',
     icon: <Filter className="w-4 h-4" />,
-    multiSelect: false,
+    multiSelect: true,
     options: BASE_MODEL_OPTIONS,
   },
   {
@@ -99,6 +99,13 @@ const FILTER_TYPE_CONFIGS: FilterTypeConfig[] = [
     icon: <Filter className="w-4 h-4" />,
     multiSelect: true,
     options: MODEL_TYPE_OPTIONS,
+  },
+  {
+    key: 'checkpointType',
+    labelKey: 'filterCheckpointType',
+    icon: <Filter className="w-4 h-4" />,
+    multiSelect: false,
+    options: CHECKPOINT_TYPE_OPTIONS,
   },
   {
     key: 'fileFormat',
@@ -663,16 +670,16 @@ export function SearchFilters({
   onSortChange,
   period,
   onPeriodChange,
-  baseModel,
-  onBaseModelChange,
+  baseModels,
+  onBaseModelsChange,
   modelTypes,
   onModelTypesChange,
-  modelType,
-  onModelTypeChange,
   fileFormat,
   onFileFormatChange,
   category,
   onCategoryChange,
+  checkpointType,
+  onCheckpointTypeChange,
   isLoading,
   isError,
   disabled,
@@ -682,18 +689,12 @@ export function SearchFilters({
   const colors = PROVIDER_COLORS[provider]
   const trpcAvailable = isProviderAvailable('trpc')
 
-  // Handle both multi-select and legacy single-select for model type
-  const effectiveModelTypes = modelTypes ?? (modelType ? [modelType] : [])
+  const effectiveModelTypes = modelTypes ?? []
   const handleModelTypesChange = useCallback(
     (types: string[]) => {
-      if (onModelTypesChange) {
-        onModelTypesChange(types)
-      } else if (onModelTypeChange) {
-        // Fallback to legacy single-select (use first value)
-        onModelTypeChange(types[0] || '')
-      }
+      onModelTypesChange?.(types)
     },
-    [onModelTypesChange, onModelTypeChange]
+    [onModelTypesChange]
   )
 
   // Get selected values for a filter type
@@ -701,9 +702,11 @@ export function SearchFilters({
     (filterType: FilterType): string[] => {
       switch (filterType) {
         case 'baseModel':
-          return baseModel ? [baseModel] : []
+          return baseModels
         case 'modelTypes':
           return effectiveModelTypes
+        case 'checkpointType':
+          return checkpointType ? [checkpointType] : []
         case 'fileFormat':
           return fileFormat ? [fileFormat] : []
         case 'category':
@@ -712,7 +715,7 @@ export function SearchFilters({
           return []
       }
     },
-    [baseModel, effectiveModelTypes, fileFormat, category]
+    [baseModels, effectiveModelTypes, checkpointType, fileFormat, category]
   )
 
   // Handle value changes for any filter type
@@ -720,10 +723,13 @@ export function SearchFilters({
     (filterType: FilterType, values: string[]) => {
       switch (filterType) {
         case 'baseModel':
-          onBaseModelChange(values[0] || '')
+          onBaseModelsChange(values)
           break
         case 'modelTypes':
           handleModelTypesChange(values)
+          break
+        case 'checkpointType':
+          onCheckpointTypeChange?.(values[0] || '')
           break
         case 'fileFormat':
           onFileFormatChange?.(values[0] || '')
@@ -733,19 +739,21 @@ export function SearchFilters({
           break
       }
     },
-    [onBaseModelChange, handleModelTypesChange, onFileFormatChange, onCategoryChange]
+    [onBaseModelsChange, handleModelTypesChange, onCheckpointTypeChange, onFileFormatChange, onCategoryChange]
   )
 
   // Determine which filters can be added
-  // Multi-select filters (modelTypes) are always available to add more
+  // Multi-select filters are always available to add more
   // Single-select filters disappear once a value is selected
+  // checkpointType only shows when Checkpoint is in modelTypes
   const availableFilters = FILTER_TYPE_CONFIGS.filter((config) => {
     switch (config.key) {
       case 'baseModel':
-        return !baseModel
+        return true // Always available for multi-select
       case 'modelTypes':
-        // Always show for multi-select - user can add more types
-        return onModelTypesChange || onModelTypeChange
+        return !!onModelTypesChange
+      case 'checkpointType':
+        return onCheckpointTypeChange && effectiveModelTypes.includes('Checkpoint') && !checkpointType
       case 'fileFormat':
         return onFileFormatChange && !fileFormat
       case 'category':
@@ -759,8 +767,9 @@ export function SearchFilters({
   const activeFilterCount = [
     sortBy !== 'Most Downloaded' ? 1 : 0,
     period !== 'AllTime' ? 1 : 0,
-    baseModel ? 1 : 0,
+    baseModels.length,
     effectiveModelTypes.length > 0 ? effectiveModelTypes.length : 0,
+    checkpointType ? 1 : 0,
     fileFormat ? 1 : 0,
     category ? 1 : 0,
   ].reduce((a, b) => a + b, 0)
@@ -768,8 +777,9 @@ export function SearchFilters({
   const handleClearAll = () => {
     onSortChange('Most Downloaded')
     onPeriodChange('AllTime')
-    onBaseModelChange('')
+    onBaseModelsChange([])
     handleModelTypesChange([])
+    onCheckpointTypeChange?.('')
     onFileFormatChange?.('')
     onCategoryChange?.('')
   }
@@ -883,12 +893,17 @@ export function SearchFilters({
       )}
 
       {/* Active filter chips */}
-      {baseModel && (
-        <Chip variant="active" onClick={() => onBaseModelChange('')}>
-          <span>{BASE_MODEL_OPTIONS.find((m) => m.value === baseModel)?.label || baseModel}</span>
+      {/* Base Models - show each as separate chip */}
+      {baseModels.map((model) => (
+        <Chip
+          key={`bm-${model}`}
+          variant="active"
+          onClick={() => onBaseModelsChange(baseModels.filter((m) => m !== model))}
+        >
+          <span>{BASE_MODEL_OPTIONS.find((m) => m.value === model)?.label || model}</span>
           <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
         </Chip>
-      )}
+      ))}
 
       {/* Model Types - show each as separate chip */}
       {effectiveModelTypes.map((type) => (
@@ -901,6 +916,13 @@ export function SearchFilters({
           <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
         </Chip>
       ))}
+
+      {checkpointType && onCheckpointTypeChange && (
+        <Chip variant="active" onClick={() => onCheckpointTypeChange('')}>
+          <span>{CHECKPOINT_TYPE_OPTIONS.find((c) => c.value === checkpointType)?.label || checkpointType}</span>
+          <X className="w-4 h-4 opacity-60 group-hover:opacity-100 transition-opacity" />
+        </Chip>
+      )}
 
       {fileFormat && onFileFormatChange && (
         <Chip variant="active" onClick={() => onFileFormatChange('')}>
