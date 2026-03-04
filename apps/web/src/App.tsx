@@ -7,6 +7,7 @@ import { BrowsePage } from './components/modules/BrowsePage'
 import { SettingsPage } from './components/modules/SettingsPage'
 import { ProfilesPage } from './components/modules/ProfilesPage'
 import { InventoryPage } from './components/modules/InventoryPage'
+import { CommunityGalleryDebug } from './components/modules/CommunityGalleryDebug'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/browse" element={<BrowsePage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/debug/community-gallery" element={<CommunityGalleryDebug />} />
       </Routes>
     </Layout>
   )

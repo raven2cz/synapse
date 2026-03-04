@@ -314,6 +314,7 @@ class PackService:
         progress_callback: Optional[ProgressCallback] = None,
         cover_url: Optional[str] = None,
         selected_version_ids: Optional[List[int]] = None,
+        additional_previews: Optional[List[dict]] = None,
     ) -> Pack:
         """
         Import a pack from Civitai URL.
@@ -333,6 +334,7 @@ class PackService:
             progress_callback: Optional progress callback
             cover_url: User-selected thumbnail URL
             selected_version_ids: List of version IDs to import (creates one dependency per version)
+            additional_previews: Extra previews with nsfw flags [{url, nsfw}]
 
         Returns:
             Created Pack
@@ -580,6 +582,19 @@ class PackService:
             )
             if previews:
                 pack.previews = previews
+
+            # Download additional previews (e.g. community gallery) with nsfw flags
+            if additional_previews:
+                additional = self._download_additional_previews(
+                    pack_name=name,
+                    previews=additional_previews,
+                    start_index=len(pack.previews),
+                )
+                if additional:
+                    pack.previews.extend(additional)
+                    logger.info(f"[PackService] Downloaded {len(additional)} additional previews")
+
+            if pack.previews:
                 self.layout.save_pack(pack)
 
         logger.info(f"[PackService] Import complete: {name}")
@@ -1004,6 +1019,111 @@ class PackService:
         )
 
         return preview_infos
+
+    def _download_additional_previews(
+        self,
+        pack_name: str,
+        previews: List[dict],
+        start_index: int = 0,
+    ) -> List[PreviewInfo]:
+        """
+        Download additional preview images (e.g. community gallery).
+
+        Each preview is downloaded with a `community_N` filename prefix.
+        Failed downloads are skipped gracefully.
+
+        Args:
+            pack_name: Target pack name
+            previews: List of {url: str, nsfw: bool} dicts
+            start_index: Starting index for numbering (to avoid filename conflicts)
+
+        Returns:
+            List of successfully downloaded PreviewInfo objects
+        """
+        from ..utils.media_detection import (
+            detect_media_type,
+            get_video_thumbnail_url,
+            get_optimized_video_url,
+        )
+
+        previews_dir = self.layout.pack_previews_path(pack_name)
+        previews_dir.mkdir(parents=True, exist_ok=True)
+
+        results: List[PreviewInfo] = []
+
+        for i, preview in enumerate(previews):
+            is_dict = isinstance(preview, dict)
+            url = preview.get("url", "") if is_dict else str(preview)
+            nsfw = preview.get("nsfw", False) if is_dict else False
+            width = preview.get("width") if is_dict else None
+            height = preview.get("height") if is_dict else None
+            meta = preview.get("meta") if is_dict else None
+            if not url:
+                continue
+
+            idx = start_index + i + 1
+            dest = None  # Initialize before try to prevent leakage from previous iteration
+            try:
+                media_info = detect_media_type(url, use_head_request=False)
+                media_type = media_info.type.value
+
+                if media_type == 'video':
+                    filename = f"community_{idx}.mp4"
+                    download_url = get_optimized_video_url(url, width=1080)
+                    timeout = 120
+                else:
+                    url_path = url.split("/")[-1].split("?")[0]
+                    ext = Path(url_path).suffix or ".jpg"
+                    filename = f"community_{idx}{ext}"
+                    download_url = url
+                    timeout = 60
+
+                dest = previews_dir / filename
+
+                thumbnail_url = None
+                if media_type == 'video':
+                    thumbnail_url = get_video_thumbnail_url(url, width=450)
+
+                if self._download_service:
+                    self._download_service.download_to_file(
+                        download_url,
+                        dest,
+                        timeout=(15, timeout),
+                        progress_callback=None,
+                        resume=False,
+                    )
+                else:
+                    response = requests.get(
+                        download_url, timeout=timeout, stream=True,
+                        allow_redirects=False,
+                    )
+                    response.raise_for_status()
+                    try:
+                        with open(dest, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                if chunk:
+                                    f.write(chunk)
+                    finally:
+                        response.close()
+
+                results.append(PreviewInfo(
+                    filename=filename,
+                    url=url,
+                    nsfw=nsfw,
+                    width=width,
+                    height=height,
+                    meta=meta,
+                    media_type=media_type,
+                    thumbnail_url=thumbnail_url,
+                ))
+
+            except Exception as e:
+                logger.warning(f"[PackService] Failed to download additional preview {url[:60]}: {e}")
+                if dest is not None and dest.exists():
+                    dest.unlink(missing_ok=True)
+                continue
+
+        return results
 
     # =========================================================================
     # Resolution

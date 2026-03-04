@@ -140,6 +140,12 @@ def detect_media_type(
     path = parsed.path.lower()
     query = parsed.query.lower()
     
+    # Strategy 1b: Civitai anim=false override (BEFORE video patterns!)
+    # Thumbnails use anim=false,transcode=true in URL path — without this check,
+    # the transcode=true pattern below would incorrectly detect them as video.
+    if 'anim=false' in url.lower():
+        return MediaInfo(type=MediaType.IMAGE, source="civitai-anim-false")
+
     # Strategy 2: Check URL patterns (before extension for Civitai quirks)
     for pattern in VIDEO_URL_PATTERNS:
         if re.search(pattern, url, re.IGNORECASE):

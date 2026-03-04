@@ -26,6 +26,7 @@ type VideoQuality = 'sd' | 'hd' | 'fhd'
 type VideoFit = 'fit' | 'fill' | 'original'
 
 const QUALITY_WIDTHS: Record<VideoQuality, number> = { sd: 450, hd: 720, fhd: 1080 }
+const IMAGE_QUALITY_WIDTHS: Record<VideoQuality, number> = { sd: 450, hd: 1024, fhd: 4096 }
 const FIT_LABELS: Record<VideoFit, string> = { fit: 'FIT', fill: 'FILL', original: 'ORIG' }
 
 export const QUALITY_LABELS: Record<VideoQuality, string> = {
@@ -100,6 +101,20 @@ function getCivitaiThumbnailUrl(url: string, width = 450): string {
   } catch { return url }
 }
 
+function getCivitaiImageUrl(url: string, quality: VideoQuality = 'sd'): string {
+  if (!url || !isCivitaiDirectUrl(url)) return url
+  try {
+    const urlObj = new URL(url)
+    const parts = urlObj.pathname.split('/')
+    const idx = parts.findIndex(p => p.includes('=') || p.startsWith('width'))
+    const params = `width=${IMAGE_QUALITY_WIDTHS[quality]}`
+    if (idx >= 0) parts[idx] = params
+    else if (parts.length >= 3) parts.splice(-1, 0, params)
+    urlObj.pathname = parts.join('/')
+    return urlObj.toString()
+  } catch { return url }
+}
+
 function isLikelyVideo(url: string): boolean {
   if (!url) return false
   const lower = url.toLowerCase()
@@ -141,9 +156,15 @@ export function FullscreenMediaViewer({
   const [imagePosition, setImagePosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [imageFit, setImageFit] = useState<VideoFit>('fit')
+  const [imageQuality, setImageQuality] = useState<VideoQuality>('sd')
 
   const [showControls, setShowControls] = useState(true)
   const [showQualityMenu, setShowQualityMenu] = useState(false)
+
+  // Download state
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0) // 0-100
 
   // Metadata panel state
   const [showMetadata, setShowMetadata] = useState(false)
@@ -171,9 +192,12 @@ export function FullscreenMediaViewer({
     return isCivitaiDirectUrl(currentItem.url) ? getCivitaiVideoUrl(currentItem.url, videoQuality) : currentItem.url
   }, [currentItem?.url, isVideo, videoQuality])
 
+  const isCivitaiImage = !isVideo && isCivitaiDirectUrl(currentItem?.url || '')
+
   const downloadUrl = useMemo(() => {
     if (!currentItem?.url) return ''
-    return isCivitaiDirectUrl(currentItem.url) && isVideo ? getCivitaiVideoUrl(currentItem.url, 'fhd') : currentItem.url
+    if (isVideo) return isCivitaiDirectUrl(currentItem.url) ? getCivitaiVideoUrl(currentItem.url, 'fhd') : currentItem.url
+    return isCivitaiDirectUrl(currentItem.url) ? getCivitaiImageUrl(currentItem.url, 'fhd') : currentItem.url
   }, [currentItem?.url, isVideo])
 
   // Check if current item has metadata
@@ -218,6 +242,8 @@ export function FullscreenMediaViewer({
       setShowControls(true)
       setVideoQuality('sd')
       setVideoFit('fit')
+      setImageFit('fit')
+      setImageQuality('sd')
       setShowMetadata(false)
       setTimeout(() => scrollToThumb(initialIndex), 100)
     }
@@ -334,6 +360,20 @@ export function FullscreenMediaViewer({
   const cycleVideoFit = useCallback(() => setVideoFit(c => c === 'fit' ? 'fill' : c === 'fill' ? 'original' : 'fit'), [])
 
   // Image controls
+  const getImageClass = useCallback(() => {
+    switch (imageFit) {
+      case 'fill': return 'w-full h-full object-cover'
+      case 'original': return 'max-w-none max-h-none object-none'
+      default: return 'w-full h-full object-contain'
+    }
+  }, [imageFit])
+
+  const cycleImageFit = useCallback(() => {
+    setImageFit(c => c === 'fit' ? 'fill' : c === 'fill' ? 'original' : 'fit')
+    setImageZoom(1)
+    setImagePosition({ x: 0, y: 0 })
+  }, [])
+
   const zoomIn = useCallback(() => setImageZoom(z => Math.min(5, z + 0.5)), [])
   const zoomOut = useCallback(() => setImageZoom(z => Math.max(0.25, z - 0.5)), [])
   const resetZoom = useCallback(() => { setImageZoom(1); setImagePosition({ x: 0, y: 0 }) }, [])
@@ -387,19 +427,52 @@ export function FullscreenMediaViewer({
     if (thumbnailsRef.current) thumbnailsRef.current.scrollLeft += (e.deltaY * 3.0)
   }, [])
 
-  // Download
+  // Download with progress tracking
   const handleDownload = useCallback(async () => {
+    if (isDownloading) return
+    setIsDownloading(true)
+    setDownloadProgress(0)
     try {
       const res = await fetch(downloadUrl)
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch { window.open(downloadUrl, '_blank') }
-  }, [downloadUrl, isVideo, currentIndex])
+      const contentLength = res.headers.get('Content-Length')
+      const total = contentLength ? parseInt(contentLength, 10) : 0
+
+      if (!res.body || !total) {
+        // No streaming support or unknown size — fall back to blob
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
+        a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        // Stream with progress
+        const reader = res.body.getReader()
+        const chunks: Uint8Array[] = []
+        let received = 0
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          chunks.push(value)
+          received += value.length
+          setDownloadProgress(Math.round((received / total) * 100))
+        }
+        const blob = new Blob(chunks as BlobPart[], { type: res.headers.get('Content-Type') || undefined })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `synapse_${currentIndex + 1}.${isVideo ? 'mp4' : 'jpg'}`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch {
+      window.open(downloadUrl, '_blank')
+    } finally {
+      setIsDownloading(false)
+      setDownloadProgress(0)
+    }
+  }, [downloadUrl, isVideo, currentIndex, isDownloading])
 
   const handleOpenExternal = useCallback(() => { if (currentItem?.url) window.open(currentItem.url, '_blank') }, [currentItem])
 
@@ -416,7 +489,7 @@ export function FullscreenMediaViewer({
         case 'm': case 'M': if (isVideo) toggleMute(); break
         case 'l': case 'L': if (isVideo) toggleLoop(); break
         case 'f': case 'F': toggleFullscreen(); break
-        case 'v': case 'V': if (isVideo) cycleVideoFit(); break
+        case 'v': case 'V': if (isVideo) cycleVideoFit(); else cycleImageFit(); break
         case '+': case '=': if (!isVideo) zoomIn(); break
         case '-': if (!isVideo) zoomOut(); break
         case '0': if (!isVideo) resetZoom(); break
@@ -430,7 +503,7 @@ export function FullscreenMediaViewer({
     }
     window.addEventListener('keydown', handle)
     return () => window.removeEventListener('keydown', handle)
-  }, [isOpen, isVideo, goToPrevious, goToNext, togglePlay, toggleMute, toggleLoop, toggleFullscreen, cycleVideoFit, zoomIn, zoomOut, resetZoom, volume, skip, onClose, currentHasMeta])
+  }, [isOpen, isVideo, goToPrevious, goToNext, togglePlay, toggleMute, toggleLoop, toggleFullscreen, cycleVideoFit, cycleImageFit, zoomIn, zoomOut, resetZoom, volume, skip, onClose, currentHasMeta])
 
   const formatTime = (s: number) => !isFinite(s) ? '0:00' : `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`
 
@@ -502,20 +575,27 @@ export function FullscreenMediaViewer({
     }
 
     // Image
-    // Only apply zoom transforms if active
+    const imgSrc = isActive && isCivitaiDirectUrl(item.url)
+      ? getCivitaiImageUrl(item.url, imageQuality)
+      : item.url
+
+    // Apply zoom/pan transforms when active (all fit modes — original/fill need panning for large images)
     const style = isActive ? {
       transform: `scale(${imageZoom}) translate(${imagePosition.x / imageZoom}px, ${imagePosition.y / imageZoom}px)`,
       cursor: isDragging ? 'grabbing' : 'grab'
     } : undefined
 
-    // Only apply transition if NOT dragging (for smooth zoom/reset) and is active
+    // Use current imageFit class for ALL slides (active + inactive) so that
+    // the next/prev slide is already at the correct size during the slide animation.
+    // Only zoom/pan transforms are restricted to the active slide.
     const classes = clsx(
-      'max-w-full max-h-full object-contain select-none',
+      'select-none',
+      getImageClass(),
       isActive && !isDragging && 'transition-transform duration-150 ease-out'
     )
 
     return (
-      <img src={item.url} alt=""
+      <img src={imgSrc} alt=""
         className={classes}
         style={style}
         draggable={false}
@@ -526,7 +606,7 @@ export function FullscreenMediaViewer({
         }}
       />
     )
-  }, [nsfwBlurEnabled, isRevealed, videoQuality, isLooping, isMuted, getThumbUrl, getVideoClass, togglePlay, isBuffering, imageZoom, imagePosition, isDragging, t])
+  }, [nsfwBlurEnabled, isRevealed, videoQuality, imageQuality, imageFit, isLooping, isMuted, getThumbUrl, getVideoClass, getImageClass, togglePlay, isBuffering, imageZoom, imagePosition, isDragging, t])
 
 
   if (!isOpen || !currentItem) return null
@@ -541,7 +621,7 @@ export function FullscreenMediaViewer({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-white/80 font-medium px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm">{currentIndex + 1} / {items.length}</span>
-              {isVideo && <span className="text-white/60 text-sm px-2 py-1 rounded bg-indigo-500/30 text-indigo-300">{FIT_LABELS[videoFit]}</span>}
+              <span className="text-white/60 text-sm px-2 py-1 rounded bg-indigo-500/30 text-indigo-300">{FIT_LABELS[isVideo ? videoFit : imageFit]}</span>
             </div>
             <div className="flex items-center gap-2">
               {currentItem.nsfw && nsfwBlurEnabled && (
@@ -558,6 +638,50 @@ export function FullscreenMediaViewer({
               )}
               {!isVideo && (
                 <>
+                  {/* Image quality selector (Civitai images only) */}
+                  {isCivitaiImage && (
+                    <div className="relative">
+                      <button
+                        onClick={e => { e.stopPropagation(); setShowQualityMenu(!showQualityMenu) }}
+                        className={clsx(
+                          'px-2 py-1.5 rounded-xl text-xs font-bold transition-all uppercase backdrop-blur-sm',
+                          imageQuality !== 'sd'
+                            ? 'bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40'
+                            : 'bg-white/10 text-white/80 hover:bg-white/20'
+                        )}
+                        title={t('viewer.videoQuality')}
+                      >
+                        {QUALITY_LABELS[imageQuality]}
+                      </button>
+                      {showQualityMenu && (
+                        <div className="absolute top-full right-0 mt-2 p-1 bg-black/90 backdrop-blur-xl rounded-xl min-w-[120px] shadow-xl border border-white/10">
+                          {(['sd', 'hd', 'fhd'] as const).map((q) => (
+                            <button
+                              key={q}
+                              onClick={e => {
+                                e.stopPropagation()
+                                setImageQuality(q)
+                                setShowQualityMenu(false)
+                              }}
+                              className={clsx(
+                                'w-full px-3 py-2 text-left text-sm rounded-lg transition-colors flex items-center justify-between',
+                                imageQuality === q
+                                  ? 'bg-indigo-500/30 text-indigo-300'
+                                  : 'text-white/80 hover:bg-white/10'
+                              )}
+                            >
+                              <span>{QUALITY_LABELS[q]}</span>
+                              <span className="text-xs text-white/40">{q === 'sd' ? t('viewer.qualityFast') : q === 'hd' ? t('viewer.qualityStandard') : t('viewer.qualityBest')}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* FIT button */}
+                  <button onClick={e => { e.stopPropagation(); cycleImageFit() }} className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-indigo-500/30 text-indigo-300 hover:bg-indigo-500/40 backdrop-blur-sm" title={imageFit === 'fit' ? t('viewer.fitToScreen') : imageFit === 'fill' ? t('viewer.fillScreen') : t('viewer.originalSize')}>{FIT_LABELS[imageFit]}</button>
+                  <div className="w-px h-5 bg-white/20" />
+                  {/* Zoom controls */}
                   <button onClick={e => { e.stopPropagation(); zoomOut() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ZoomOut className="w-5 h-5" /></button>
                   <span className="text-white/80 text-sm min-w-[4rem] text-center font-medium">{Math.round(imageZoom * 100)}%</span>
                   <button onClick={e => { e.stopPropagation(); zoomIn() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ZoomIn className="w-5 h-5" /></button>
@@ -578,7 +702,25 @@ export function FullscreenMediaViewer({
                 <Info className="w-5 h-5" />
               </button>
               <div className="w-px h-6 bg-white/20 mx-1" />
-              <button onClick={e => { e.stopPropagation(); handleDownload() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><Download className="w-5 h-5" /></button>
+              <button
+                onClick={e => { e.stopPropagation(); handleDownload() }}
+                disabled={isDownloading}
+                className={clsx(
+                  'rounded-xl backdrop-blur-sm text-white transition-all',
+                  isDownloading
+                    ? 'bg-indigo-500/30 px-3 py-1.5 flex items-center gap-2'
+                    : 'p-2.5 bg-white/10 hover:bg-white/20'
+                )}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-xs font-medium text-indigo-300">{downloadProgress > 0 ? `${downloadProgress}%` : '...'}</span>
+                  </>
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
+              </button>
               <button onClick={e => { e.stopPropagation(); handleOpenExternal() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><ExternalLink className="w-5 h-5" /></button>
               <button onClick={e => { e.stopPropagation(); toggleFullscreen() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white"><Maximize className="w-5 h-5" /></button>
               <button onClick={e => { e.stopPropagation(); onClose() }} className="p-2.5 rounded-xl bg-white/10 backdrop-blur-sm hover:bg-red-500/50 text-white ml-2"><X className="w-5 h-5" /></button>
@@ -726,7 +868,8 @@ export function FullscreenMediaViewer({
                 const itemIsVideo = item.type === 'video' || isLikelyVideo(item.url)
                 const thumb = getThumbUrl(item)
                 // Local video files (.mp4) can't be rendered as <img> — use <video> to show first frame
-                const thumbIsVideoFile = /\.(mp4|webm|mov|avi|mkv)/i.test(thumb)
+                // Civitai CDN with anim=false serves JPEG regardless of file extension — always use <img>
+                const thumbIsVideoFile = /\.(mp4|webm|mov|avi|mkv)/i.test(thumb) && !isCivitaiDirectUrl(thumb)
                 return (
                   <button key={idx} ref={el => { if (el) thumbRefs.current.set(idx, el); else thumbRefs.current.delete(idx) }}
                     onClick={() => navigateTo(idx)} disabled={isAnimating}

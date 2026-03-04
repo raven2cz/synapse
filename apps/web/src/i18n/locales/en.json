@@ -760,7 +760,11 @@
     "selectVersionWarning": "Select at least one version to import",
     "cancel": "Cancel",
     "importing": "Importing...",
-    "importPack": "Import Pack"
+    "importPack": "Import Pack",
+    "includeCommunity": "Include community gallery images",
+    "includeCommunityDesc": "Download {{count}} community-generated images with this model",
+    "includeMetadata": "Include generation metadata",
+    "includeMetadataDesc": "Save prompt, seed, model and other generation parameters"
   },
   "browse": {
     "title": "Browse Civitai",
@@ -801,7 +805,10 @@
       "downloads": "{{num}} downloads",
       "ratings": "{{rating}} ({{num}} ratings)",
       "viewOnCivitai": "View on Civitai",
-      "latest": "Latest"
+      "latest": "Latest",
+      "coverTab": "Cover ({{count}})",
+      "communityTab": "Community ({{count}})",
+      "noCommunityImages": "No community images found"
     },
     "params": {
       "clipSkip": "Clip Skip",
@@ -810,6 +817,41 @@
       "steps": "Steps",
       "sampler": "Sampler"
     }
+  },
+  "community": {
+    "sort": {
+      "label": "Sort",
+      "mostReactions": "Most Reactions",
+      "mostComments": "Most Comments",
+      "mostCollected": "Most Collected",
+      "newest": "Newest",
+      "oldest": "Oldest"
+    },
+    "period": {
+      "label": "Period",
+      "allTime": "All Time",
+      "year": "Year",
+      "month": "Month",
+      "week": "Week",
+      "day": "Day"
+    },
+    "limit": {
+      "label": "Limit",
+      "posts": "{{count}} posts"
+    },
+    "browsingLevel": {
+      "label": "NSFW Level",
+      "auto": "Auto (Settings)",
+      "pg": "PG (SFW only)",
+      "pg13": "PG + PG13",
+      "r": "PG..R (Mature)",
+      "x": "PG..X (no XXX)",
+      "all": "All"
+    },
+    "noImages": "No community images found",
+    "imageCount": "{{count}} images",
+    "expand": "Expand",
+    "collapse": "Collapse"
   },
   "settings": {
     "title": "Settings",

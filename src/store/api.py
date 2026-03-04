@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, UploadFile, Form, BackgroundTasks
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -157,6 +157,34 @@ class BulkUpdateCheckResponse(BaseModel):
     plans: Dict[str, Dict[str, Any]]
 
 
+class AdditionalPreview(BaseModel):
+    """A community preview image/video with nsfw flag and optional metadata."""
+    url: str = Field(..., min_length=1, max_length=2048)
+    nsfw: bool = False
+    width: Optional[int] = Field(None, ge=1, le=65536)
+    height: Optional[int] = Field(None, ge=1, le=65536)
+    meta: Optional[Dict[str, Any]] = Field(None, description="Generation metadata (prompt, seed, model, etc.)")
+
+    @field_validator('url')
+    @classmethod
+    def validate_url_scheme(cls, v: str) -> str:
+        """Only allow https URLs to prevent SSRF via import payload."""
+        if not v.startswith('https://'):
+            raise ValueError('URL must use https:// scheme')
+        return v
+
+    @field_validator('meta')
+    @classmethod
+    def validate_meta_size(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Limit meta dict to prevent abuse (max ~64KB serialized)."""
+        if v is not None:
+            import json
+            serialized = json.dumps(v, default=str)
+            if len(serialized) > 65536:
+                raise ValueError('meta field too large (max 64KB serialized)')
+        return v
+
+
 class ImportRequest(BaseModel):
     """Request for import command with wizard options."""
     url: str
@@ -171,6 +199,18 @@ class ImportRequest(BaseModel):
     pack_description: Optional[str] = Field(None, description="Custom description")
     max_previews: int = Field(100, description="Max previews to download")
     video_quality: int = Field(1080, description="Video quality width")
+    additional_preview_urls: Optional[List[str]] = Field(None, description="(DEPRECATED) Additional preview URLs without nsfw flags", max_length=100)
+
+    @field_validator('additional_preview_urls')
+    @classmethod
+    def validate_legacy_urls(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        """Validate legacy URL list: only allow https to prevent SSRF."""
+        if v is not None:
+            for url in v:
+                if not url.startswith('https://'):
+                    raise ValueError('All URLs must use https:// scheme')
+        return v
+    additional_previews: Optional[List[AdditionalPreview]] = Field(None, description="Additional previews with nsfw flags", max_length=200)
     # Legacy fields for compatibility
     download_previews: bool = True
     add_to_global: bool = True
@@ -2018,9 +2058,18 @@ def import_pack(
     - Custom pack name and description
     """
     logger.info(f"[import] Starting import from: {request.url}")
+    # Merge new additional_previews with legacy additional_preview_urls
+    # Convert validated AdditionalPreview models to dicts for pack_service
+    additional_previews: Optional[List[dict]] = None
+    if request.additional_previews:
+        additional_previews = [p.model_dump(exclude_none=True) for p in request.additional_previews]
+    elif request.additional_preview_urls:
+        # Legacy fallback: convert plain URLs to {url, nsfw=False}
+        additional_previews = [{"url": u, "nsfw": False} for u in request.additional_preview_urls]
     logger.info(f"[import] Options: images={request.download_images}, "
                 f"videos={request.download_videos}, nsfw={request.include_nsfw}, "
-                f"all_versions={request.download_from_all_versions}")
+                f"all_versions={request.download_from_all_versions}, "
+                f"additional_previews={len(additional_previews or [])}")
 
     try:
         pack = store.import_civitai(
@@ -2036,6 +2085,7 @@ def import_pack(
             download_from_all_versions=request.download_from_all_versions,
             cover_url=request.thumbnail_url,  # User-selected thumbnail
             selected_version_ids=request.version_ids,  # Multi-version import support
+            additional_previews=additional_previews,
         )
 
         # Count downloaded previews

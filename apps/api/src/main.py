@@ -95,37 +95,49 @@ async def lifespan(app: FastAPI):
         follow_redirects=True,
         limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
     )
-    logger.info("=" * 50)
-    logger.info("  SYNAPSE API v2.1.8")
-    logger.info("  V2 Store Architecture - No v1 Code")
-    logger.info("=" * 50)
-    logger.info(f"  ComfyUI path: {settings.comfyui_path}")
-    logger.info(f"  Data path: {settings.synapse_data_path}")
-    logger.info("=" * 50)
+    # Dedicated client for image proxy — isolated pool prevents proxy traffic
+    # from starving other API calls; follow_redirects=False for manual redirect
+    # handling (Civitai CDN → B2/DO requires header stripping on redirect).
+    app.state.image_proxy_client = httpx.AsyncClient(
+        timeout=30,
+        follow_redirects=False,
+        limits=httpx.Limits(max_connections=30, max_keepalive_connections=10),
+    )
+    try:
+        logger.info("=" * 50)
+        logger.info("  SYNAPSE API v2.1.8")
+        logger.info("  V2 Store Architecture - No v1 Code")
+        logger.info("=" * 50)
+        logger.info(f"  ComfyUI path: {settings.comfyui_path}")
+        logger.info(f"  Data path: {settings.synapse_data_path}")
+        logger.info("=" * 50)
 
-    # Initialize avatar engine if mounted (sub-app lifespan not auto-triggered)
-    avatar_mgr = getattr(app.state, "avatar_manager", None)
-    avatar_task = None
-    if avatar_mgr:
-        await avatar_mgr.prepare()
-        if avatar_mgr.ws_bridge:
-            avatar_mgr.ws_bridge.set_loop(asyncio.get_running_loop())
-        avatar_task = asyncio.create_task(_start_avatar_engine(avatar_mgr))
+        # Initialize avatar engine if mounted (sub-app lifespan not auto-triggered)
+        avatar_mgr = getattr(app.state, "avatar_manager", None)
+        avatar_task = None
+        if avatar_mgr:
+            await avatar_mgr.prepare()
+            if avatar_mgr.ws_bridge:
+                avatar_mgr.ws_bridge.set_loop(asyncio.get_running_loop())
+            avatar_task = asyncio.create_task(_start_avatar_engine(avatar_mgr))
 
-    yield
-
-    if avatar_task:
-        avatar_task.cancel()
-        try:
-            await avatar_task
-        except asyncio.CancelledError:
-            pass
-    if avatar_mgr:
-        try:
-            await avatar_mgr.shutdown()
-        except Exception as exc:
-            logger.warning("Avatar Engine shutdown error: %s", exc)
-    await app.state.http_client.aclose()
+        yield
+    finally:
+        if avatar_task:
+            avatar_task.cancel()
+            try:
+                await avatar_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.warning("Avatar task exited with error: %s", e)
+        if avatar_mgr:
+            try:
+                await avatar_mgr.shutdown()
+            except Exception as exc:
+                logger.warning("Avatar Engine shutdown error: %s", exc)
+        await app.state.image_proxy_client.aclose()
+        await app.state.http_client.aclose()
 
 
 # Create FastAPI app

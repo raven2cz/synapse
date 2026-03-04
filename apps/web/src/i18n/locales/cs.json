@@ -764,7 +764,11 @@
     "selectVersionWarning": "Vyberte alespoň jednu verzi k importu",
     "cancel": "Zrušit",
     "importing": "Importování...",
-    "importPack": "Importovat pack"
+    "importPack": "Importovat pack",
+    "includeCommunity": "Zahrnout komunitní galerii",
+    "includeCommunityDesc": "Stáhnout {{count}} komunitních obrázků vytvořených s tímto modelem",
+    "includeMetadata": "Zahrnout generační metadata",
+    "includeMetadataDesc": "Uložit prompt, seed, model a další generační parametry"
   },
   "browse": {
     "title": "Procházet Civitai",
@@ -805,7 +809,10 @@
       "downloads": "{{num}} stažení",
       "ratings": "{{rating}} ({{num}} hodnocení)",
       "viewOnCivitai": "Zobrazit na Civitai",
-      "latest": "Nejnovější"
+      "latest": "Nejnovější",
+      "coverTab": "Náhled ({{count}})",
+      "communityTab": "Komunita ({{count}})",
+      "noCommunityImages": "Žádné komunitní obrázky nenalezeny"
     },
     "params": {
       "clipSkip": "Clip Skip",
@@ -814,6 +821,41 @@
       "steps": "Kroky",
       "sampler": "Sampler"
     }
+  },
+  "community": {
+    "sort": {
+      "label": "Řazení",
+      "mostReactions": "Nejvíce reakcí",
+      "mostComments": "Nejvíce komentářů",
+      "mostCollected": "Nejvíce sbíráno",
+      "newest": "Nejnovější",
+      "oldest": "Nejstarší"
+    },
+    "period": {
+      "label": "Období",
+      "allTime": "Celé období",
+      "year": "Rok",
+      "month": "Měsíc",
+      "week": "Týden",
+      "day": "Den"
+    },
+    "limit": {
+      "label": "Limit",
+      "posts": "{{count}} příspěvků"
+    },
+    "browsingLevel": {
+      "label": "NSFW úroveň",
+      "auto": "Auto (Nastavení)",
+      "pg": "PG (pouze SFW)",
+      "pg13": "PG + PG13",
+      "r": "PG..R (Dospělé)",
+      "x": "PG..X (bez XXX)",
+      "all": "Vše"
+    },
+    "noImages": "Žádné komunitní obrázky nenalezeny",
+    "imageCount": "{{count}} obrázků",
+    "expand": "Rozbalit",
+    "collapse": "Sbalit"
   },
   "settings": {
     "title": "Nastavení",
