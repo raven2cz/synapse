@@ -1,119 +1,307 @@
-# PLAN: Global NSFW Filter System
+# PLAN: Globalni NSFW Filtr
 
-**Status:** 🚧 Phase 1 COMPLETE, Phases 2-6 PENDING
-**Created:** 2026-03-04
-**Version:** 2.0.0
+**Stav:** Faze 1 HOTOVA, Faze 1B-6 CEKAJI
+**Vytvoreno:** 2026-03-04
+**Verze:** 4.0.0
+**Posledni aktualizace:** 2026-03-05
 
 ---
 
-## Overview
+## Prehled
 
-Multi-level NSFW filtering system replacing the simple boolean `nsfwBlurEnabled`.
+Viceurobnovy NSFW filtracni system, ktery nahradi jednoduchy boolean `nsfwBlurEnabled`.
 
-**Components:**
+**Komponenty:**
 - `NsfwFilterMode`: `show` | `blur` | `hide`
-- `NsfwMaxLevel`: `pg` | `pg13` | `r` | `x` | `all` (maps to Civitai browsing level bitmask)
+- `NsfwMaxLevel`: `pg` | `pg13` | `r` | `x` | `all` (mapuje se na Civitai browsing level bitmasku)
 
-**Civitai nsfwLevel bitmask:**
+**Civitai nsfwLevel bitmaska:**
 ```
 PG=1, PG-13=2, R=4, X=8, Blocked=16
-Combos: pg=1, pg13=3, r=7, x=15, all=31
+Kumulativni kombinace: pg=1, pg13=3, r=7, x=15, all=31
 ```
 
 ---
 
-## Aktuální stav (audit)
+## Audit: Soucasny stav
 
-### Co existuje (Phase 1) ✅
+### Co existuje (Faze 1)
 - `nsfwStore.ts` — Zustand store s `filterMode`, `maxLevel`, `shouldBlur()`, `shouldHide()`, `getBrowsingLevel()`
-- `settingsStore.ts` — deleguje na nsfwStore, sync subscription
+- `settingsStore.ts` — deleguje na nsfwStore, synchronizacni subscribe
 - Persistence + auto-migrace z legacy `nsfwBlurEnabled`
 
-### Co chybí (Gaps)
-1. **Komponenty nepoužívají store metody** — počítají blur inline: `nsfw && nsfwBlurEnabled && !isRevealed`
-2. **`shouldHide()` nikde implementován** — žádná komponenta nic neschová
-3. **`getBrowsingLevel()` se nepředává** — bridge má hardcoded `config.nsfw ? 31 : 1`
-4. **Settings UI je binární** — jen on/off toggle, žádný 3-way nebo maxLevel
-5. **Header toggle je binární** — jen show/blur, žádný hide
-6. **`useNsfwStore` importován ale nepoužit** v CommunityGalleryPanel
+### Co chybi (mezery)
+1. **Metody store prijimaji jen `boolean`** — `shouldBlur(nsfw: boolean)` nemuze vynucovat `maxLevel` per-item
+2. **`nsfwLevel` se nepropaguje** — datove typy pouzivaji `nsfw: boolean`, numericka uroven se ztraci na API hranici
+3. **Komponenty pouzivaji inline blur logiku** — `nsfw && nsfwBlurEnabled && !isRevealed`
+4. **`shouldHide()` se nikde nepouziva** — zadna komponenta neskryva NSFW obsah
+5. **`getBrowsingLevel()` se nepouziva v BrowsePage** — bridge ma hardcoded `config.nsfw ? 31 : 1`
+6. **Settings UI je binarni** — jen on/off prepinac, zadny 3-rezimovy ani maxLevel
+7. **Header prepinac je binarni** — jen show/blur, bez hide
+8. **Zadna cross-tab synchronizace** — Zustand persist standardne nebroadcastuje
+9. **`useNsfwStore` importovany ale nepouzity** v CommunityGalleryPanel (pouziva lokalni stav)
 
-### Dotčené soubory (16)
-| Soubor | Aktuální NSFW logika |
+### Dotcene soubory (16)
+| Soubor | Soucasna NSFW logika |
 |--------|---------------------|
 | `MediaPreview.tsx` | `nsfw && nsfwBlurEnabled && !isRevealed` inline, blur overlay, reveal button |
-| `FullscreenMediaViewer.tsx` | Stejné inline pattern, blur overlay, reveal v thumbnailech |
+| `FullscreenMediaViewer.tsx` | Stejna inline logika, blur overlay, reveal v thumbnailech |
 | `ModelCard.tsx` | `nsfw && nsfwBlurEnabled && !isRevealed` inline |
-| `ImagePreview.tsx` | Stejné inline pattern |
+| `ImagePreview.tsx` | Stejna inline logika |
 | `BrowsePage.tsx` | `includeNsfw=true` hardcoded, `nsfw` prop na MediaPreview |
 | `PacksPage.tsx` | `nsfwBlurEnabled` + `is_nsfw_hidden` tag check |
-| `CommunityGalleryPanel.tsx` | Import `useNsfwStore` ale nepoužit |
-| `Header.tsx` | 2-state toggle (show/blur) |
-| `SettingsPage.tsx` | Simple on/off toggle |
+| `CommunityGalleryPanel.tsx` | Lokalni `communityBrowsingLevel` stav, predava do adapteru |
+| `Header.tsx` | 2-stavovy prepinac (show/blur) |
+| `SettingsPage.tsx` | Jednoduchy on/off prepinac |
 | `settingsStore.ts` | Legacy delegace |
-| `nsfwStore.ts` | Store (hotový) |
+| `nsfwStore.ts` | Store (metody prijimaji jen boolean) |
+| `searchTypes.ts` | `nsfw: boolean` v ModelPreview a CivitaiModel |
+| `trpcBridgeAdapter.ts` | Predava browsingLevel jen pro community galerii |
 
 ---
 
-## Phase 1: Store + Backward Compat ✅ IMPL+INTEG
+## Faze 1: Store + Zpetna kompatibilita (HOTOVO)
 
-**Files:**
-- `apps/web/src/stores/nsfwStore.ts` — Zustand store with persist
-- `apps/web/src/stores/settingsStore.ts` — delegates to nsfwStore
+**Soubory:**
+- `apps/web/src/stores/nsfwStore.ts` — Zustand store s persist
+- `apps/web/src/stores/settingsStore.ts` — deleguje na nsfwStore
 
-**Implementation:**
-- `useNsfwStore` with `filterMode`, `maxLevel`, `getBrowsingLevel()`, `shouldBlur()`, `shouldHide()`
-- Persistence key: `synapse-nsfw-settings`
-- Auto-migration from legacy `synapse-settings.nsfwBlurEnabled`
-- `settingsStore.nsfwBlurEnabled` getter/setter delegates to `nsfwStore`
-- Subscribe sync: nsfwStore changes propagate to settingsStore
+**Implementace:**
+- `useNsfwStore` s `filterMode`, `maxLevel`, `getBrowsingLevel()`, `shouldBlur()`, `shouldHide()`
+- Persistence klic: `synapse-nsfw-settings`
+- Auto-migrace z legacy `synapse-settings.nsfwBlurEnabled`
+- `settingsStore.nsfwBlurEnabled` getter/setter deleguje na `nsfwStore`
+- Subscribe sync: zmeny v nsfwStore se propaguji do settingsStore
+
+**Stav:** IMPL+INTEG
 
 ---
 
-## Phase 2: Settings UI ❌ PENDING
+## Faze 1B: Upgrade Store — Granularita urovni + Cross-Tab Sync (CEKA)
 
-### Cíl
-Nahradit binární toggle v SettingsPage za 3-way toggle + maxLevel dropdown.
+### Cil
+Upgradovat metody store aby prijimaly numericke `nsfwLevel` (ne jen boolean). Pridat cross-tab synchronizaci.
 
-### Aktuální stav
-`SettingsPage.tsx:241-256` — simple on/off switch (`setNsfwBlur(!nsfwBlurEnabled)`).
+### Proc
+Soucasne `shouldBlur(nsfw: boolean)` nemuze vynucovat `maxLevel`. Kdyz uzivatel nastavi maxLevel na `r`, obrazek PG-13 i obrazek X oba predaji `nsfw=true` — store je nerozezna.
 
-### Změny
+### Zmeny
+
+**Soubor:** `apps/web/src/stores/nsfwStore.ts`
+
+1. **Upgrade signatur `shouldBlur` a `shouldHide`:**
+   ```typescript
+   // Prijima numericku uroven (Civitai konvence) nebo boolean fallback
+   shouldBlur: (nsfwLevel: number | boolean) => boolean
+   shouldHide: (nsfwLevel: number | boolean) => boolean
+   ```
+
+2. **Logika s urovnemi:**
+   ```typescript
+   // Sentinel pro legacy boolean nsfw=true (numericka uroven neni k dispozici)
+   const UNKNOWN_NSFW_LEVEL = -1
+
+   // Helper: zjisti jestli uroven polozky presahuje uzivateluv maxLevel
+   function exceedsMaxLevel(itemLevel: number, maxBitmask: number): boolean {
+     // Legacy obsah s neznamou urovni (-1) se NIKDY neskryva podle maxLevel
+     // (nezname jeho uroven, takze nemuzeme rozhodovat o stropu)
+     if (itemLevel === UNKNOWN_NSFW_LEVEL) return false
+     // Uroven polozky je jediny bit (1, 2, 4, 8, 16)
+     // maxBitmask je kumulativni (1, 3, 7, 15, 31)
+     // Polozka presahuje pokud jeji bit NENI nastaveny v masce
+     return (itemLevel & maxBitmask) === 0
+   }
+
+   // Helper: normalizuje boolean/number vstup
+   function normalizeLevel(nsfwLevel: number | boolean): { isNsfw: boolean; level: number } {
+     if (typeof nsfwLevel === 'boolean') {
+       // Boolean fallback: true = neznama NSFW uroven (nepredpokladame X!)
+       // false = bezpecny obsah (PG=1)
+       return { isNsfw: nsfwLevel, level: nsfwLevel ? UNKNOWN_NSFW_LEVEL : 1 }
+     }
+     return { isNsfw: nsfwLevel > 1, level: nsfwLevel }
+   }
+
+   shouldBlur: (nsfwLevel: number | boolean) => {
+     const { isNsfw } = normalizeLevel(nsfwLevel)
+     const state = get()
+     // Rozmazat JAKYKOLI nsfw obsah v blur rezimu.
+     // (shouldHide uz resi polozky presahujici maxLevel — ty se
+     //  vubec nevykresli, takze shouldBlur se pro ne nevola)
+     return state.filterMode === 'blur' && isNsfw
+   }
+
+   shouldHide: (nsfwLevel: number | boolean) => {
+     const { isNsfw, level } = normalizeLevel(nsfwLevel)
+     const state = get()
+     if (!isNsfw) return false
+     if (state.filterMode === 'hide') return true
+     // V show I blur rezimu: polozky presahujici maxLevel jsou skryte.
+     // Show rezim = "bez rozmazani" NE "ignoruj strop".
+     // Uzivatel nastavil strop — respektujeme ho bez ohledu na blur/show.
+     // Legacy boolean obsah (UNKNOWN_NSFW_LEVEL) se nikdy neskryva podle stropu.
+     return exceedsMaxLevel(level, LEVEL_BITMASK[state.maxLevel])
+   }
+   ```
+
+   **Semantika:**
+   | Rezim | NSFW v ramci maxLevel | Presahuje maxLevel | Legacy boolean (neznama uroven) |
+   |-------|----------------------|--------------------|---------------------------------|
+   | `show` | viditelne + badge | skryte | viditelne + badge |
+   | `blur` | rozmazane | skryte | rozmazane |
+   | `hide` | skryte | skryte | skryte |
+
+3. **`getBrowsingLevel()` respektuje hide rezim:**
+   ```typescript
+   getBrowsingLevel: () => {
+     const state = get()
+     // V hide rezimu pozadovat pouze bezpecny obsah ze serveru
+     if (state.filterMode === 'hide') return 1
+     return LEVEL_BITMASK[state.maxLevel]
+   }
+   ```
+
+4. **Cross-tab synchronizace:**
+   ```typescript
+   // Vychozi hodnoty pro reset
+   const NSFW_DEFAULTS = { filterMode: 'blur' as const, maxLevel: 'all' as const }
+
+   // Idempotentni listener — bezpecny pro HMR
+   let _storageListenerAttached = false
+   if (typeof window !== 'undefined' && !_storageListenerAttached) {
+     _storageListenerAttached = true
+     window.addEventListener('storage', (e) => {
+       if (e.key !== 'synapse-nsfw-settings') return
+
+       if (e.newValue === null) {
+         // Storage byl vycisten (napr. uzivatel smazal data prohlizece v jinem tabu)
+         // Reset na vychozi hodnoty
+         useNsfwStore.setState({
+           filterMode: NSFW_DEFAULTS.filterMode,
+           maxLevel: NSFW_DEFAULTS.maxLevel,
+           nsfwBlurEnabled: true,
+         })
+         return
+       }
+
+       try {
+         const { state } = JSON.parse(e.newValue)
+         useNsfwStore.setState({
+           filterMode: state.filterMode,
+           maxLevel: state.maxLevel,
+           nsfwBlurEnabled: state.filterMode !== 'show',
+         })
+       } catch { /* ignorovat chyby parsovani */ }
+     })
+   }
+   ```
+
+### Zmeny datovych typu
+
+**Soubor:** `apps/web/src/lib/api/searchTypes.ts`
+
+Pridat `nsfwLevel` vedle stavajiciho `nsfw` boolean (zpetna kompatibilita):
+
+```typescript
+interface ModelPreview {
+  // ... stavajici
+  nsfw: boolean
+  nsfwLevel?: number  // NOVE: Civitai numericka uroven (1=PG, 2=PG-13, 4=R, 8=X)
+}
+
+interface CivitaiModel {
+  // ... stavajici
+  nsfw: boolean
+  nsfwLevel?: number  // NOVE
+}
+```
+
+**Soubor:** `apps/web/src/components/ui/FullscreenMediaViewer.tsx` (MediaItem typ)
+
+```typescript
+export interface MediaItem {
+  // ... stavajici
+  nsfw?: boolean
+  nsfwLevel?: number  // NOVE: numericka uroven pro granularni filtrovani
+}
+```
+
+### Zpetna kompatibilita
+- Vsechna stavajici volani `shouldBlur(true/false)` fungují dale
+- `boolean true` = neznama NSFW uroven (-1) — rozmazane v blur rezimu, nikdy skryte podle maxLevel stropu
+- `boolean false` = bezpecny obsah (PG=1) — nikdy rozmazane ani skryte
+- Komponenty mohou postupne adoptovat `nsfwLevel` jakmile budou numericka data k dispozici
+
+### Testy
+- Unit: `shouldBlur(true)` vraci true v blur rezimu (zpetna kompatibilita)
+- Unit: `shouldBlur(false)` vraci false v jakemkoli rezimu
+- Unit: `shouldBlur(2)` (PG-13) vraci true v blur rezimu s maxLevel=`r` (v ramci limitu = rozmazane)
+- Unit: `shouldBlur(8)` (X) vraci true v blur rezimu s maxLevel=`r` (ale shouldHide ho skryje driv)
+- Unit: `shouldHide(true)` vraci false v blur rezimu (legacy = neznama uroven, nikdy skryte podle stropu)
+- Unit: `shouldHide(true)` vraci false v show rezimu (legacy = neznama uroven, nikdy skryte podle stropu)
+- Unit: `shouldHide(true)` vraci true v hide rezimu (hide rezim skryva VSECHNO nsfw)
+- Unit: `shouldHide(8)` (X) vraci true v show rezimu s maxLevel=`r` (presahuje strop i v show rezimu!)
+- Unit: `shouldHide(8)` (X) vraci true v blur rezimu s maxLevel=`r` (presahuje strop)
+- Unit: `shouldHide(2)` (PG-13) vraci false v blur rezimu s maxLevel=`r` (v ramci stropu)
+- Unit: `shouldHide(4)` (R) vraci true v blur rezimu s maxLevel=`pg13` (presahuje strop)
+- Unit: `shouldHide(8)` vraci true v hide rezimu bez ohledu na maxLevel
+- Unit: `getBrowsingLevel()` vraci 1 kdyz filterMode=hide
+- Unit: `getBrowsingLevel()` vraci 7 kdyz filterMode=blur, maxLevel=r
+- Unit: Cross-tab sync aktualizuje stav ze storage eventu
+- Unit: `normalizeLevel(true)` vraci `{ isNsfw: true, level: -1 }` (UNKNOWN)
+- Unit: `normalizeLevel(false)` vraci `{ isNsfw: false, level: 1 }`
+- Unit: `normalizeLevel(4)` vraci `{ isNsfw: true, level: 4 }`
+- Unit: `exceedsMaxLevel(-1, 7)` vraci false (neznama uroven nikdy nepresahuje)
+
+---
+
+## Faze 2: Settings UI (CEKA)
+
+### Cil
+Nahradit binarni prepinac v SettingsPage 3-rezimovym prepinacam + maxLevel dropdown.
+
+### Soucasny stav
+`SettingsPage.tsx:237-257` — jednoduchy on/off switch (`setNsfwBlur(!nsfwBlurEnabled)`).
+
+### Zmeny
 
 **Soubor:** `apps/web/src/components/modules/SettingsPage.tsx`
 
-1. **Import `useNsfwStore`** místo `useSettingsStore` pro NSFW sekci
-2. **3-way SegmentedControl** pro `filterMode`:
+1. **Importovat `useNsfwStore`** misto `useSettingsStore` pro NSFW sekci
+2. **3-rezimovy SegmentedControl** pro `filterMode`:
    ```
-   ┌──────────┬──────────┬──────────┐
-   │  👁 Show  │  🔳 Blur  │  🚫 Hide │
-   └──────────┴──────────┴──────────┘
+   +----------+----------+----------+
+   | Zobrazit | Rozmazat |  Skryt   |
+   +----------+----------+----------+
    ```
-   - `show` — vše viditelné, NSFW badge na obsahu
-   - `blur` — rozmazání s click-to-reveal (současné chování)
-   - `hide` — NSFW obsah se vůbec nerenderuje
-   - Použít existující button group pattern z UI
+   - `show` — NSFW viditelne s badge (v ramci maxLevel stropu; presahujici = skryte)
+   - `blur` — rozmazane s kliknutim pro odkryti (soucasne chovani)
+   - `hide` — NSFW obsah se vubec nevykresluje
+   - Pouzit stavajici button group vzor z UI
 
 3. **maxLevel dropdown** pod segmented control:
    ```
-   NSFW Level: [PG ▾]
+   NSFW uroven: [PG v]
    ```
-   Options: PG (safest) → PG-13 → R → X → All (vše)
-   - Popisek: "Maximum NSFW content level to display"
-   - Zobrazovat POUZE když `filterMode !== 'hide'` (pokud je hide, level je irrelevantní)
+   Moznosti: PG (nejbezpecnejsi) -> PG-13 -> R -> X -> Vse
+   - Label: "Maximalni uroven NSFW obsahu k zobrazeni"
+   - Zobrazit POUZE kdyz `filterMode !== 'hide'` (hide rezim = nic se neukazuje, uroven je irelevantni)
 
-4. **Popis** aktualizovat:
-   - Show: "All content visible with NSFW badges"
-   - Blur: "NSFW content is blurred until clicked"
-   - Hide: "NSFW content is completely hidden"
+4. **Popisy** pro kazdy rezim:
+   - Show: "Obsah do nastavene urovne viditelny se stitky NSFW"
+   - Blur: "NSFW obsah je rozmazany, kliknutim se odkryje"
+   - Hide: "NSFW obsah je zcela skryty"
 
-### i18n klíče (nové)
+### i18n klice (nove)
+
+**en.json:**
 ```json
 "settings.display.nsfwMode": "NSFW Filter Mode",
 "settings.display.nsfwModeDesc": "How to handle NSFW content",
 "settings.display.nsfwMode.show": "Show",
 "settings.display.nsfwMode.blur": "Blur",
 "settings.display.nsfwMode.hide": "Hide",
-"settings.display.nsfwMode.showDesc": "All content visible with NSFW badges",
+"settings.display.nsfwMode.showDesc": "Content within max level visible with NSFW badges",
 "settings.display.nsfwMode.blurDesc": "NSFW content is blurred until clicked",
 "settings.display.nsfwMode.hideDesc": "NSFW content is completely hidden",
 "settings.display.nsfwMaxLevel": "Maximum NSFW Level",
@@ -125,208 +313,288 @@ Nahradit binární toggle v SettingsPage za 3-way toggle + maxLevel dropdown.
 "settings.display.nsfwLevel.all": "All"
 ```
 
+**cs.json:**
+```json
+"settings.display.nsfwMode": "Rezim NSFW filtru",
+"settings.display.nsfwModeDesc": "Jak zachazet s NSFW obsahem",
+"settings.display.nsfwMode.show": "Zobrazit",
+"settings.display.nsfwMode.blur": "Rozmazat",
+"settings.display.nsfwMode.hide": "Skryt",
+"settings.display.nsfwMode.showDesc": "Obsah do nastavene urovne viditelny se stitky NSFW",
+"settings.display.nsfwMode.blurDesc": "NSFW obsah je rozmazany, kliknutim se odkryje",
+"settings.display.nsfwMode.hideDesc": "NSFW obsah je zcela skryty",
+"settings.display.nsfwMaxLevel": "Maximalni uroven NSFW",
+"settings.display.nsfwMaxLevelDesc": "Maximalni hodnoceni obsahu k zobrazeni",
+"settings.display.nsfwLevel.pg": "PG (Bezpecne)",
+"settings.display.nsfwLevel.pg13": "PG-13",
+"settings.display.nsfwLevel.r": "R (Pro dospele)",
+"settings.display.nsfwLevel.x": "X (Explicitni)",
+"settings.display.nsfwLevel.all": "Vse"
+```
+
 ### Testy
-- Unit: SettingsPage renderuje 3 režimy, maxLevel dropdown, ukazuje/skrývá level dle mode
-- Stav: kliknutí na segment změní `filterMode` v nsfwStore
+- Unit: SettingsPage vykresluje 3 segmenty rezimu, maxLevel dropdown
+- Unit: maxLevel dropdown je skryty kdyz mode=hide
+- Unit: kliknuti na segment meni `filterMode` v nsfwStore
+- Unit: vyber maxLevel meni `maxLevel` v nsfwStore
 
 ---
 
-## Phase 3: Komponenty — shouldBlur/shouldHide ❌ PENDING
+## Faze 3: Komponenty — useNsfwFilter Hook + Filtrovani podle urovni (CEKA)
 
-### Cíl
-Nahradit všechny inline `nsfw && nsfwBlurEnabled && !isRevealed` patterny voláním store metod. Přidat `shouldHide()` logiku.
+### Cil
+Nahradit vsechny inline `nsfw && nsfwBlurEnabled && !isRevealed` vzory centralizovanym hookem.
+Pridat `shouldHide()` logiku. Propagovat numericke `nsfwLevel` kde je k dispozici.
 
 ### Strategie
 
-Zavést **helper hook** aby se neopakoval boilerplate:
+Zavest **helper hook** pro eliminaci boilerplate:
 
 ```typescript
 // apps/web/src/hooks/useNsfwFilter.ts
-export function useNsfwFilter(nsfw: boolean) {
-  const { shouldBlur, shouldHide } = useNsfwStore()
+export function useNsfwFilter(nsfwLevel: number | boolean) {
+  // Pouzit individualni selektory pro spravnou reaktivitu
+  const shouldBlur = useNsfwStore((s) => s.shouldBlur)
+  const shouldHide = useNsfwStore((s) => s.shouldHide)
+  const filterMode = useNsfwStore((s) => s.filterMode)
+  // Subscribe na maxLevel aby se odvozone hodnoty prepocitaly pri zmene stropu
+  const _maxLevel = useNsfwStore((s) => s.maxLevel) // spousti re-render
   const [isRevealed, setIsRevealed] = useState(false)
 
-  // Reset revealed when mode changes to blur
-  const filterMode = useNsfwStore((s) => s.filterMode)
+  // Reset reveal stavu pri zmene rezimu
   useEffect(() => {
-    if (filterMode === 'blur') setIsRevealed(false)
+    setIsRevealed(false)
   }, [filterMode])
 
+  const isHidden = shouldHide(nsfwLevel)
+  // Vzajemne se vylucujici: skryte polozky se nikdy nerozmazavaji
+  const isBlurred = !isHidden && shouldBlur(nsfwLevel) && !isRevealed
+  const isNsfw = typeof nsfwLevel === 'boolean' ? nsfwLevel : nsfwLevel > 1
+
   return {
-    isBlurred: shouldBlur(nsfw) && !isRevealed,
-    isHidden: shouldHide(nsfw),
+    isBlurred,
+    isHidden,
     isRevealed,
     reveal: () => setIsRevealed(true),
     hide: () => setIsRevealed(false),
     toggle: () => setIsRevealed(prev => !prev),
-    showBadge: nsfw && filterMode === 'show',
+    // Badge viditelny v show rezimu NEBO po manualnim odkryti
+    showBadge: isNsfw && (filterMode === 'show' || isRevealed),
   }
 }
 ```
 
-### Změny po souborech
+### Zmeny podle souboru
 
 #### 3.1 MediaPreview.tsx
-- Import `useNsfwFilter` místo `useSettingsStore`
-- Odstranit `nsfwBlurEnabled` prop (BREAKING — ale je optional, fallback na store)
-- `const { isBlurred, isHidden, isRevealed, toggle, showBadge } = useNsfwFilter(nsfw)`
-- `if (isHidden) return null` — nerender vůbec
-- Nahradit `shouldBlur` → `isBlurred`
-- Nahradit `nsfw && !nsfwBlurEnabled` badge → `showBadge`
-- Odstranit interní `isRevealed` state (přesun do hooku)
-- Zachovat `nsfwBlurEnabled` prop pro zpětnou kompatibilitu (override store)
+- Importovat `useNsfwFilter` misto `useSettingsStore`
+- Prijmout `nsfwLevel?: number` prop vedle stavajiciho `nsfw` propu
+- `const nsfwInput = nsfwLevel ?? nsfw ?? false` (preferovat numericke, fallback na boolean)
+- `const { isBlurred, isHidden, isRevealed, toggle, showBadge } = useNsfwFilter(nsfwInput)`
+- `if (isHidden) return null` — vubec nevykreslovat
+- Nahradit `shouldBlur` -> `isBlurred`
+- Nahradit NSFW badge logiku -> `showBadge`
+- Odebrat interni `isRevealed` stav (presunut do hooku)
+- Ponechat `nsfwBlurEnabled` prop pro zpetnou kompatibilitu (override store)
 
 #### 3.2 FullscreenMediaViewer.tsx
-- Import `useNsfwFilter`
-- `const { isBlurred, isHidden, toggle } = useNsfwFilter(currentItem?.nsfw ?? false)`
-- `if (isHidden)` → ukázat placeholder "NSFW content hidden" místo média
-- Thumbnail strip: skrýt hidden items nebo ukázat placeholder icon
+- Importovat `useNsfwStore`
+- **Filtrovat polozky PRED navigaci** (zadne placeholdery):
+  ```typescript
+  const shouldHide = useNsfwStore((s) => s.shouldHide)
+  const filterMode = useNsfwStore((s) => s.filterMode)
+  const maxLevel = useNsfwStore((s) => s.maxLevel)
+  const visibleItems = useMemo(
+    () => items.filter(item => !shouldHide(item.nsfwLevel ?? item.nsfw ?? false)),
+    // shouldHide je stabilni ref ale interene cte stav pres get() —
+    // musi obsahovat filterMode + maxLevel aby se spustil prepocet
+    [items, shouldHide, filterMode, maxLevel]
+  )
+  ```
+- **Mapovani indexu** (prevence padu):
+  ```typescript
+  // Mapovat puvodní initialIndex na visibleItems index pres identitu polozky
+  const mappedInitialIndex = useMemo(() => {
+    if (visibleItems.length === 0) return -1
+    const targetItem = items[initialIndex]
+    if (!targetItem) return 0
+    // Referencni rovnost — visibleItems jsou stejne objekty z items pole
+    const idx = visibleItems.indexOf(targetItem)
+    return idx >= 0 ? idx : 0  // Fallback na prvni viditelnou pokud originalni byla skryta
+  }, [items, visibleItems, initialIndex])
+  ```
+- **Osetreni prazdneho stavu** (useEffect, ne v tele renderovani):
+  ```typescript
+  // Zavrit viewer kdyz vsechny polozky budou skryte (napr. uzivatel zmeni maxLevel)
+  // Musi byt v useEffect — volani onClose v renderu je React anti-pattern
+  useEffect(() => {
+    if (visibleItems.length === 0) onClose?.()
+  }, [visibleItems.length, onClose])
+
+  // Guard render
+  if (visibleItems.length === 0) return null
+  ```
+- Pouzit `visibleItems` pro vsechnu navigaci, mapovani indexu, thumbnail strip
+- Per-item blur: pouzit `useNsfwFilter` pro aktualni viditelnou polozku
 - Blur overlay: nahradit inline logiku za `isBlurred`
 
 #### 3.3 ModelCard.tsx
-- Import `useNsfwFilter`
-- `const { isBlurred, isHidden, toggle, showBadge } = useNsfwFilter(nsfw)`
+- Importovat `useNsfwFilter`
+- Prijmout `nsfwLevel?: number` prop
+- `const { isBlurred, isHidden, toggle, showBadge } = useNsfwFilter(nsfwLevel ?? nsfw)`
 - `if (isHidden) return null`
-- Nahradit inline blur pattern
+- Nahradit inline blur vzor
 
 #### 3.4 ImagePreview.tsx
-- Import `useNsfwFilter`
-- Stejný pattern jako ModelCard
+- Importovat `useNsfwFilter`
+- Stejny vzor jako ModelCard
 - `if (isHidden) return null`
 
 #### 3.5 CommunityGalleryPanel.tsx
-- Již importuje `useNsfwStore` — použít `shouldHide` pro filtrování preview items
-- `const previews = allPreviews.filter(p => !shouldHide(p.nsfw))`
+- Uz pouziva `nsfwStore.getBrowsingLevel()` pro API volani (dobre!)
+- **Vynucovat globalni strop na lokalnim browsingLevel selektoru**:
+  ```typescript
+  const globalMaxLevel = useNsfwStore((s) => s.getBrowsingLevel())
 
-### Zpětná kompatibilita
-- `nsfwBlurEnabled` prop na MediaPreview zachovat ale označit `@deprecated`
-- Pokud je prop explicitně předán, použít ho (override store)
-- Pokud ne, použít hook
+  // Efektivni uroven = prunik lokalni volby a globalniho stropu
+  // Uzivatel muze zuzit (vybrat PG kdyz globalni je R) ale nikdy rozsirit (vybrat Vse kdyz globalni je PG)
+  const effectiveBrowsingLevel = communityBrowsingLevel === 'auto'
+    ? globalMaxLevel
+    : Math.min(communityBrowsingLevel, globalMaxLevel)
+  ```
+  Poznamka: `Math.min` zde funguje protoze bitmasky jsou kumulativni (1 < 3 < 7 < 15 < 31).
+- Pridat `shouldHide` pro filtrovani preview polozek (client-side bezpecnostni sit):
+  ```typescript
+  const shouldHide = useNsfwStore((s) => s.shouldHide)
+  const filterMode = useNsfwStore((s) => s.filterMode)
+  const maxLevel = useNsfwStore((s) => s.maxLevel)
+  const visiblePreviews = useMemo(
+    () => allPreviews.filter(p => !shouldHide(p.nsfwLevel ?? p.nsfw ?? false)),
+    // Musi obsahovat filterMode + maxLevel — shouldHide je stabilni ref
+    [allPreviews, shouldHide, filterMode, maxLevel]
+  )
+  ```
 
-### Testy
-- Unit: `useNsfwFilter` hook — isBlurred/isHidden/reveal/toggle pro každý filterMode
-- Unit: MediaPreview s mode=hide vrátí null
-- Unit: ModelCard s mode=hide vrátí null
-- Unit: CommunityGalleryPanel filtruje hidden previews
-- Integration: přepnutí mode → všechny komponenty reagují
+### Zpetna kompatibilita
+- `nsfw: boolean` prop ponechan na vsech komponentach (zpetna kompatibilita)
+- Novy `nsfwLevel?: number` prop pridan vedle
+- Hook prijima `number | boolean` — funguje s obojim
+- `nsfwBlurEnabled` prop na MediaPreview ponechan ale oznacen `@deprecated`
 
----
+### i18n klice (nove)
 
-## Phase 4: PacksPage ❌ PENDING
-
-### Cíl
-Nahradit manuální `is_nsfw_hidden` tag check za `shouldHide()` ze store.
-
-### Aktuální stav
-`PacksPage.tsx:136-139`:
-```typescript
-if (nsfwBlurEnabled && (pack.is_nsfw_hidden || pack.user_tags?.includes('nsfw-pack-hide'))) {
-  return false
-}
+**en.json:**
+```json
+"viewer.nsfwHiddenPlaceholder": "NSFW content hidden",
+"viewer.nsfwItemsFiltered": "{{count}} items hidden by NSFW filter"
 ```
-Problém: Filtruje pouze v blur mode, ne v hide mode. A logika je invertovaná — `nsfw-pack-hide` tag by měl fungovat nezávisle.
 
-### Změny
-
-**Soubor:** `apps/web/src/components/modules/PacksPage.tsx`
-
-1. Import `useNsfwStore` místo `useSettingsStore`
-2. Filtrování:
-   ```typescript
-   const { shouldHide, shouldBlur } = useNsfwStore()
-
-   // Pack filtering
-   const filteredPacks = packs.filter(pack => {
-     const isNsfw = pack.is_nsfw || pack.user_tags?.includes('nsfw-pack') || pack.nsfw_previews_count > 0
-
-     // Hide mode: skip NSFW packs entirely
-     if (shouldHide(isNsfw)) return false
-
-     // User-tagged packs to hide (always respect, independent of mode)
-     if (pack.is_nsfw_hidden || pack.user_tags?.includes('nsfw-pack-hide')) return false
-
-     return true
-   })
-   ```
-3. Pack card thumbnails: použít `useNsfwFilter(isNsfwPack)` pro blur/badge
+**cs.json:**
+```json
+"viewer.nsfwHiddenPlaceholder": "NSFW obsah skryt",
+"viewer.nsfwItemsFiltered": "{{count}} polozek skryto NSFW filtrem"
+```
 
 ### Testy
-- Unit: mode=hide filtruje NSFW packy
-- Unit: mode=blur zobrazuje packy s blur
-- Unit: mode=show zobrazuje vše
-- Unit: `nsfw-pack-hide` tag funguje ve všech režimech
+- Unit: `useNsfwFilter(true)` v blur rezimu -> isBlurred=true, isHidden=false
+- Unit: `useNsfwFilter(true)` v hide rezimu -> isBlurred=false, isHidden=true
+- Unit: `useNsfwFilter(8)` s maxLevel=r, blur rezim -> isHidden=true, isBlurred=false (vzajemne se vylucuji)
+- Unit: `useNsfwFilter(2)` s maxLevel=r, blur rezim -> isBlurred=true, isHidden=false
+- Unit: reveal() nastavi isRevealed=true, toggle() prepina
+- Unit: showBadge=true kdyz filterMode=show A nsfw
+- Unit: showBadge=true kdyz isRevealed=true A nsfw
+- Unit: MediaPreview s mode=hide vraci null
+- Unit: ModelCard s mode=hide vraci null
+- Unit: FullscreenViewer filtruje skryte polozky z navigace
+- Unit: CommunityGalleryPanel filtruje skryte nahledy
+- Integracni: prepnuti rezimu -> vsechny komponenty reagují
 
 ---
 
-## Phase 5: BrowsePage + Bridge browsingLevel ❌ PENDING
+## ~~Faze 4: PacksPage~~ — VYRAZENO
 
-### Cíl
-Předávat `browsingLevel` z nsfwStore do bridge/adapter, filtrovat výsledky na klientu.
+Packy pouzivaji user-driven system (flagy `is_nsfw`, `nsfw-pack-hide` tag).
+Uzivatel sam rozhoduje co je NSFW a co skryt — globalni `shouldHide()` s `maxLevel` stropem
+nedava smysl (pack nema numerickou uroven). Soucasny system zustava beze zmen.
 
-### Aktuální stav
+---
+
+## Faze 4: BrowsePage + Bridge browsingLevel (CEKA)
+
+### Cil
+Predat `browsingLevel` z nsfwStore do bridge/adapteru. Server-side filtrovani misto client-side.
+
+### Soucasny stav
 - `BrowsePage.tsx:120`: `const [includeNsfw] = useState(true)` — hardcoded true
-- Bridge: `browsingLevel: config.nsfw ? 31 : 1` — bridge-level config, nezávislé na frontendu
-- Adapter `search()` interface nemá `browsingLevel` param
+- Bridge: `browsingLevel: config.nsfw ? 31 : 1` — bridge-level config, nezavisle na frontendu
+- CommunityGalleryPanel uz predava browsingLevel spravne
 
-### Změny
+### Klicove rozhodnuti — bez client-side filtrovani v hide rezimu
 
-#### 5.1 SearchParams rozšíření
+**ZADNE client-side filtrovani v hide rezimu.** Misto toho:
+- `getBrowsingLevel()` uz vraci `1` kdyz `filterMode === 'hide'` (z Faze 1B)
+- To znamena ze API/bridge vraci pouze bezpecny obsah — zadne prazdne stranky
+- Velikost stranky je zachovana, nekonecny scroll funguje spravne
+- Uspora bandwidthu (NSFW obsah se nikdy nestahuje)
+
+### Zmeny
+
+#### 4.1 Rozsireni SearchParams
 **Soubor:** `apps/web/src/lib/api/searchTypes.ts`
 
 ```typescript
 interface SearchParams {
-  // ... existing
-  browsingLevel?: number  // Civitai browsing level bitmask (1-31)
+  // ... stavajici
+  browsingLevel?: number  // Civitai browsing level bitmaska (1-31)
 }
 ```
 
-#### 5.2 BrowsePage
+#### 4.2 BrowsePage
 **Soubor:** `apps/web/src/components/modules/BrowsePage.tsx`
 
-1. Odstranit `const [includeNsfw] = useState(true)`
-2. Import `useNsfwStore`
-3. Použít store:
+1. Odebrat `const [includeNsfw] = useState(true)`
+2. Importovat `useNsfwStore`
+3. Pouzit store:
    ```typescript
-   const { getBrowsingLevel, shouldHide, filterMode } = useNsfwStore()
+   // Pouzit individualni selektory pro optimalni re-rendery
+   const getBrowsingLevel = useNsfwStore((s) => s.getBrowsingLevel)
+   const filterMode = useNsfwStore((s) => s.filterMode)
+   const maxLevel = useNsfwStore((s) => s.maxLevel)
+   const browsingLevel = getBrowsingLevel()  // Vraci 1 v hide rezimu!
    ```
 4. V adapter.search():
    ```typescript
    await adapter.search({
-     // ...existing
-     browsingLevel: getBrowsingLevel(),
-     // odstranit: nsfw: includeNsfw,
+     // ...stavajici
+     browsingLevel,
+     // odebrat: nsfw: includeNsfw,
    })
    ```
-5. Filtrování výsledků na klientu (hide mode):
-   ```typescript
-   const visibleModels = filterMode === 'hide'
-     ? allModels.filter(m => !m.nsfw)
-     : allModels
-   ```
-6. QueryKey: přidat `browsingLevel` místo statického `includeNsfw`
+5. QueryKey: pridat `browsingLevel` misto statickeho `includeNsfw`
+6. **ZADNE client-side filtrovani** — server to resi pres browsingLevel
 
-#### 5.3 trpcBridgeAdapter
+#### 4.3 trpcBridgeAdapter
 **Soubor:** `apps/web/src/lib/api/adapters/trpcBridgeAdapter.ts`
 
-1. Předat `browsingLevel` do bridge:
+1. Predat `browsingLevel` do bridge searche:
    ```typescript
    bridge.search({
-     // ...existing
+     // ...stavajici
      browsingLevel: params.browsingLevel,
    })
    ```
-2. Aktualizovat bridge interface — přidat `browsingLevel?: number` do search request
+2. Aktualizovat bridge interface — pridat `browsingLevel?: number` do search requestu
 
-#### 5.4 Bridge script
+#### 4.4 Bridge skript
 **Soubor:** `scripts/tampermonkey/synapse-civitai-bridge.user.js`
 
-1. `buildSearchUrl` — použít `params.browsingLevel` pokud existuje, jinak fallback na config:
+1. `buildSearchUrl` — pouzit `params.browsingLevel` pokud je k dispozici, jinak fallback na config:
    ```javascript
    browsingLevel: params.browsingLevel ?? (config.nsfw ? 31 : 1),
    ```
-2. `buildMeilisearchRequest` — přidat nsfwLevel filtr dle browsingLevel:
+2. `buildMeilisearchRequest` — pridat nsfwLevel filtr z browsingLevel:
    ```javascript
-   // Translate browsingLevel bitmask to nsfwLevel filter
+   // Prelozit browsingLevel bitmasku na nsfwLevel filtr
    const allowedLevels = []
    if (browsingLevel & 1) allowedLevels.push(1)   // PG
    if (browsingLevel & 2) allowedLevels.push(2)   // PG-13
@@ -335,40 +603,52 @@ interface SearchParams {
    if (browsingLevel & 16) allowedLevels.push(16) // Blocked
    nsfwFilter = `(${allowedLevels.map(l => `nsfwLevel=${l}`).join(' OR ')})`
    ```
-3. Všechny image endpointy (`buildModelImagesUrl`, `buildModelImagesAsPostsUrl`) — akceptovat a předat `browsingLevel`
+3. Vsechny image endpointy (`buildModelImagesUrl`, `buildModelImagesAsPostsUrl`) — prijmout a predat `browsingLevel`
 
-#### 5.5 REST adapter fallback
-**Soubor:** `apps/web/src/lib/api/adapters/restAdapter.ts` (pokud existuje)
-- Předat `browsingLevel` jako query param do `/api/browse/search`
+#### 4.5 Propagace nsfwLevel z API odpovedi
+**Soubor:** Bridge skript + `trpcBridgeAdapter.ts`
+
+Zajistit ze `nsfwLevel` numericka hodnota z Civitai API se propaguje do frontendovych datovych typu:
+```javascript
+// V bridge response mappingu:
+previews: images.map(img => ({
+  url: img.url,
+  nsfw: img.nsfwLevel > 1,           // boolean pro zpetnou kompatibilitu
+  nsfwLevel: img.nsfwLevel,           // NOVE: numericka uroven
+  // ...
+}))
+```
 
 ### Testy
-- Unit: `getBrowsingLevel()` vrací správný bitmask pro každý maxLevel
-- Unit: BrowsePage předává browsingLevel do adapteru
-- Integration: adapter → bridge — browsingLevel se propaguje
-- Unit: Meilisearch filter builder generuje správný nsfwLevel filter
-- Unit: Hide mode filtruje NSFW výsledky na klientu
+- Unit: `getBrowsingLevel()` vraci spravnou bitmasku pro kazdy maxLevel
+- Unit: `getBrowsingLevel()` vraci 1 kdyz filterMode=hide
+- Unit: BrowsePage predava browsingLevel do adapteru
+- Unit: QueryKey se meni kdyz se zmeni browsingLevel (spousti refetch)
+- Integracni: adapter -> bridge — browsingLevel se propaguje
+- Unit: Meilisearch filter builder generuje spravny nsfwLevel filtr
+- Unit: Bridge mapuje nsfwLevel numericke hodnoty do preview dat
 
 ---
 
-## Phase 6: Header Toggle Upgrade ❌ PENDING
+## Faze 6: Upgrade Header prepinace (CEKA)
 
-### Cíl
-Upgradovat header button z 2-state na 3-state cycle.
+### Cil
+Upgradovat header tlacitko z 2-stavoveho na 3-stavovy cyklus.
 
-### Aktuální stav
-`Header.tsx:46-65` — toggle mezi show/blur s Eye/EyeOff ikonami.
+### Soucasny stav
+`Header.tsx:46-65` — prepinani mezi show/blur s Eye/EyeOff ikonami.
 
-### Změny
+### Zmeny
 
 **Soubor:** `apps/web/src/components/layout/Header.tsx`
 
-1. Import `useNsfwStore` místo `useSettingsStore`
-2. 3-state cycle: `show → blur → hide → show`
-3. Vizuální stavy:
+1. Importovat `useNsfwStore` misto `useSettingsStore`
+2. 3-stavovy cyklus: `show -> blur -> hide -> show`
+3. Vizualni stavy:
    ```
-   Show:  🟢 zelená border, Eye icon,    "NSFW: Show"
-   Blur:  🟡 indigo border, EyeOff icon, "NSFW: Blur"
-   Hide:  🔴 red border,    Ban icon,     "NSFW: Hide"
+   Show:  zeleny okraj,  Eye ikona,    "NSFW: Zobrazit"
+   Blur:  indigo okraj,  EyeOff ikona, "NSFW: Rozmazat"
+   Hide:  cerveny okraj, Ban ikona,    "NSFW: Skryt"
    ```
 4. Click handler:
    ```typescript
@@ -377,69 +657,112 @@ Upgradovat header button z 2-state na 3-state cycle.
      setFilterMode(next[filterMode])
    }
    ```
-5. Tooltip: aktuální režim + "Click to cycle"
+5. Tooltip: aktualni rezim + "Kliknutim prepnete"
+6. **Pristupnost:**
+   ```typescript
+   <button
+     onClick={cycleMode}
+     aria-label={t(`header.nsfwAria.${filterMode}`)}
+     // Bez role="switch" — 3-stavovy cyklus NENI binarni prepinac
+     // Vychozi button role + dynamicky aria-label je spravny vzor
+   >
+     {/* ikona + label */}
+   </button>
+   {/* Live region pro oznameni cteckam obrazovky */}
+   <span className="sr-only" aria-live="polite" aria-atomic="true">
+     {t(`header.nsfwAnnounce.${filterMode}`)}
+   </span>
+   ```
 
-### i18n klíče (nové)
+### i18n klice (nove)
+
+**en.json:**
 ```json
 "header.nsfwShow": "NSFW: Show",
 "header.nsfwBlur": "NSFW: Blur",
-"header.nsfwHide": "NSFW: Hide"
+"header.nsfwHide": "NSFW: Hide",
+"header.nsfwCycleTooltip": "Current: {{mode}}. Click to cycle.",
+"header.nsfwAria.show": "NSFW filter: showing all content. Click to blur.",
+"header.nsfwAria.blur": "NSFW filter: blurring content. Click to hide.",
+"header.nsfwAria.hide": "NSFW filter: hiding content. Click to show.",
+"header.nsfwAnnounce.show": "NSFW filter changed to: Show all",
+"header.nsfwAnnounce.blur": "NSFW filter changed to: Blur",
+"header.nsfwAnnounce.hide": "NSFW filter changed to: Hide"
+```
+
+**cs.json:**
+```json
+"header.nsfwShow": "NSFW: Zobrazit",
+"header.nsfwBlur": "NSFW: Rozmazat",
+"header.nsfwHide": "NSFW: Skryt",
+"header.nsfwCycleTooltip": "Aktualne: {{mode}}. Kliknutim prepnete.",
+"header.nsfwAria.show": "NSFW filtr: zobrazuji veskerý obsah. Kliknutim rozmazete.",
+"header.nsfwAria.blur": "NSFW filtr: rozmazany obsah. Kliknutim skryjete.",
+"header.nsfwAria.hide": "NSFW filtr: skryty obsah. Kliknutim zobrazite.",
+"header.nsfwAnnounce.show": "NSFW filtr zmenen na: Zobrazit vse",
+"header.nsfwAnnounce.blur": "NSFW filtr zmenen na: Rozmazat",
+"header.nsfwAnnounce.hide": "NSFW filtr zmenen na: Skryt"
 ```
 
 ### Testy
-- Unit: 3 stavy renderují správnou ikonu, barvu, text
-- Unit: click cykluje show→blur→hide→show
+- Unit: 3 stavy vykresluji spravnou ikonu, barvu, text
+- Unit: kliknuti cykluje show->blur->hide->show
 - Unit: stav se synchronizuje s nsfwStore
+- Unit: aria-label se aktualizuje podle stavu
+- Unit: aria-live region oznamuje zmeny
 
 ---
 
-## Pořadí implementace
+## Poradi implementace
 
 ```
-Phase 2 (Settings UI)          — základ, uživatel může nastavit režim
-    ↓
-Phase 3 (Komponenty)           — shouldBlur/shouldHide hook, hide mode
-    ↓
-Phase 4 (PacksPage)            — filtrace packů
-    ↓
-Phase 5 (BrowsePage + Bridge)  — browsingLevel propagace, server-side filtr
-    ↓
-Phase 6 (Header Toggle)        — quick access, 3-state cycle
+Faze 1B (Upgrade Store)        -- granularita urovni, cross-tab sync, getBrowsingLevel fix
+    |
+Faze 2 (Settings UI)          -- uzivatel muze konfigurovat rezim + maxLevel
+    |
+Faze 3 (Komponenty)           -- useNsfwFilter hook, hide rezim, badge fix
+    |
+Faze 4 (BrowsePage + Bridge)  -- server-side browsingLevel, propagace nsfwLevel
+    |
+Faze 5 (Header prepinac)      -- rychly pristup, 3-stavovy cyklus, pristupnost
 ```
 
-Phase 2 a 3 jsou nezávislé a mohou jít paralelně (ale 3 závisí na tom, že store API je stabilní z Phase 1).
+Faze 1B musi byt prvni (zmena kontraktu store).
+Faze 2 a 3 mohou bezet paralelne po 1B.
+Faze 4 zavisi na 1B (chovani getBrowsingLevel).
+Faze 5 je nezavisla po 1B.
 
 ---
 
-## Soubory ke změně (souhrn)
+## Soubory ke zmene (souhrn)
 
-| Soubor | Phase | Změny |
-|--------|-------|-------|
-| `SettingsPage.tsx` | 2 | 3-way toggle, maxLevel dropdown |
-| `useNsfwFilter.ts` | 3 | NEW — shared hook |
-| `MediaPreview.tsx` | 3 | useNsfwFilter, isHidden→null, deprecate nsfwBlurEnabled prop |
-| `FullscreenMediaViewer.tsx` | 3 | useNsfwFilter, hidden placeholder |
-| `ModelCard.tsx` | 3 | useNsfwFilter, isHidden→null |
-| `ImagePreview.tsx` | 3 | useNsfwFilter, isHidden→null |
-| `CommunityGalleryPanel.tsx` | 3 | shouldHide filter na previews |
-| `PacksPage.tsx` | 4 | shouldHide pro pack filtering |
-| `searchTypes.ts` | 5 | +browsingLevel do SearchParams |
-| `BrowsePage.tsx` | 5 | getBrowsingLevel(), odstranit includeNsfw |
-| `trpcBridgeAdapter.ts` | 5 | Předat browsingLevel do bridge |
-| `synapse-civitai-bridge.user.js` | 5 | browsingLevel param, Meilisearch nsfwLevel filter |
-| `Header.tsx` | 6 | 3-state cycle toggle |
-| `en.json` | 2,6 | Nové i18n klíče |
-| `cs.json` | 2,6 | České překlady |
+| Soubor | Faze | Zmeny |
+|--------|------|-------|
+| `nsfwStore.ts` | 1B | Level-aware shouldBlur/shouldHide, getBrowsingLevel hide fix, cross-tab sync |
+| `searchTypes.ts` | 1B, 5 | +nsfwLevel do ModelPreview/CivitaiModel, +browsingLevel do SearchParams |
+| `SettingsPage.tsx` | 2 | 3-rezimovy prepinac, maxLevel dropdown |
+| `useNsfwFilter.ts` | 3 | NOVY — sdileny hook |
+| `MediaPreview.tsx` | 3 | useNsfwFilter, isHidden->null, +nsfwLevel prop |
+| `FullscreenMediaViewer.tsx` | 3 | Filtrovani skrytych polozek z navigace, useNsfwFilter |
+| `ModelCard.tsx` | 3 | useNsfwFilter, isHidden->null, +nsfwLevel prop |
+| `ImagePreview.tsx` | 3 | useNsfwFilter, isHidden->null |
+| `CommunityGalleryPanel.tsx` | 3 | shouldHide filtr na nahledech |
+| `BrowsePage.tsx` | 4 | getBrowsingLevel(), odebrat includeNsfw, bez client-side filtru |
+| `trpcBridgeAdapter.ts` | 4 | Predat browsingLevel do bridge searche, propagovat nsfwLevel |
+| `synapse-civitai-bridge.user.js` | 4 | browsingLevel param, Meilisearch nsfwLevel filtr |
+| `Header.tsx` | 5 | 3-stavovy cyklus, aria-label, aria-live |
+| `en.json` | 2, 3, 5 | Nove i18n klice |
+| `cs.json` | 2, 3, 5 | Ceske preklady |
 
 ---
 
-## Verifikace (po každé fázi)
+## Verifikace (po kazde fazi)
 
 1. `cd apps/web && npx tsc --noEmit` — 0 chyb
-2. `cd apps/web && npx vitest run` — všechny testy
-3. `./scripts/verify.sh --quick` — plná verifikace
-4. Manual: přepínat režimy, ověřit vizuální chování
+2. `cd apps/web && npx vitest run` — vsechny testy prochazi
+3. `./scripts/verify.sh --quick` — plna verifikace
+4. Manualne: prepnout rezimy, overit vizualni chovani
 
 ---
 
-*Last updated: 2026-03-04*
+*Posledni aktualizace: 2026-03-05 (v4.0.0 — cestina, vycisteno od review balastu)*
