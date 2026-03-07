@@ -371,6 +371,23 @@ class SelectorConstraints(BaseModel):
     base_model_hint: Optional[str] = None
 
 
+class CanonicalSource(BaseModel):
+    """Remote identity for update tracking — independent of install strategy.
+
+    Allows a locally-installed file to track its canonical remote source
+    for update checking and re-downloading.
+    """
+    provider: Literal["civitai", "huggingface"]
+    model_id: Optional[int] = None       # Civitai
+    version_id: Optional[int] = None     # Civitai
+    file_id: Optional[int] = None        # Civitai
+    repo_id: Optional[str] = None        # HuggingFace
+    filename: Optional[str] = None
+    subfolder: Optional[str] = None      # HF repos with multiple subfolders
+    revision: Optional[str] = None       # HF commit/tag
+    sha256: Optional[str] = None
+
+
 class DependencySelector(BaseModel):
     """Selector for resolving a dependency."""
     strategy: SelectorStrategy
@@ -380,6 +397,7 @@ class DependencySelector(BaseModel):
     url: Optional[str] = None  # For url_download strategy
     local_path: Optional[str] = None  # For local_file strategy
     constraints: Optional[SelectorConstraints] = None
+    canonical_source: Optional[CanonicalSource] = None
 
 
 class UpdatePolicy(BaseModel):

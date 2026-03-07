@@ -565,66 +565,81 @@ INLINE RESOLVE (progressive disclosure):
 
 **Deliverables:**
 
-**Data model:**
-1. CanonicalSource model — models.py (s subfolder polem)
-2. ResolutionCandidate + EvidenceGroup + EvidenceItem modely
-3. PreviewModelHint model
-4. Cross-kind compatibility rules config
+**Data model:** ✅ IMPL
+1. ✅ CanonicalSource model — models.py (s subfolder polem)
+2. ✅ ResolutionCandidate + EvidenceGroup + EvidenceItem modely — `resolve_models.py`
+3. ✅ PreviewModelHint model — `resolve_models.py`
+4. ✅ Cross-kind compatibility rules config — `resolve_config.py`
 
-**Konfigurace:**
-5. Compatibility matrix — `src/store/resolve_config.py`
-   - AssetKind -> { local_dirs, civitai_filter, hf_eligible, extensions }
-   - Provider eligibility per kind
-6. Validation matrix — `src/store/resolve_validation.py`
-   - Per-strategy min fields
-   - `validate_candidate()`, `validate_before_apply()`
-   - Cross-kind compatibility check (2h)
-7. base_model_aliases rozsireni — HF repo jako cil
-   ```yaml
-   "Illustrious":
-     civitai: { model_id: 795765 }
-     huggingface: { repo_id: "OnomaAIResearch/Illustrious-xl-early-release-v0" }
-   ```
+**Konfigurace:** ✅ IMPL
+5. ✅ Compatibility matrix — `src/store/resolve_config.py` (AssetKindConfig, TIER_CONFIGS, COMPATIBILITY_RULES)
+6. ✅ Validation matrix — `src/store/resolve_validation.py` (STRATEGY_REQUIREMENTS, validate_candidate, validate_before_apply)
+7. ⚠️ base_model_aliases — AliasEvidenceProvider cteni z store.yaml IMPL, config yaml vzor zatim ne
 
-**Preview metadata extractor:**
-8. `src/utils/preview_meta_extractor.py`
-   - Cteni sidecar .json → meta.Model, meta.resources[] (s kind-aware filtrovanim)
-   - PNG tEXt chunk parser (PIL) → A1111 params, ComfyUI workflow JSON
-   - Target specificky ComfyUI nody: CheckpointLoaderSimple, LoraLoader, VAELoader
-   - Vraci List[PreviewModelHint] s provenance tagy
+**Scoring:** ✅ IMPL
+- ✅ `src/store/resolve_scoring.py` — Noisy-OR, provenance grouping, tier ceiling
 
-**Calibration (C5):**
-9. **CDN metadata test** — overit zda Civitai CDN zachovava PNG tEXt chunks
-   - Stahnout 5-10 PNG z Civitai, zkontrolovat metadata
-   - Pokud stripuje: E2 (PNG embedded) degradovat na "best effort", E3 (API meta) primarne
-   - Zaznamenat vysledek do planu
-10. **Confidence calibration** — na 20+ realnych packach zmapovat:
-    - Jak casto E1 hash match funguje
-    - Jak casto meta.Model obsahuje uzitecna data
-    - Jak casto baseModel odpovida skutecnemu modelu
-    - Upravit tier boundaries dle reality
+**Evidence Providers:** ✅ IMPL
+- ✅ `src/store/evidence_providers.py` — 6 provideru (Hash, Preview, File, Alias, Source, AI)
+- ✅ EvidenceProvider Protocol s @runtime_checkable
 
-**Hash cache zaklady (G1):**
-11. Hash cache modul — `src/store/hash_cache.py`
-    - Cache structure: `{ path: { sha256, mtime, size, computed_at } }`
-    - Persistence: `data/registry/local_model_hashes.json`
-    - Invalidace: mtime+size change → rehash
-    - Async hash computation (ne blokujici)
-    - POZN: plny background scan service az Phase 3, tady jen cache a async hash
+**ResolveService:** ✅ IMPL
+- ✅ `src/store/resolve_service.py` — suggest/apply orchestrace, candidate cache, lazy providers
 
-**API:**
-12. Suggest/Apply endpointy s candidate_id (UUID) a request cache (TTL 5min)
-13. Apply pres pack_service write path
+**Hash cache:** ✅ IMPL
+- ✅ `src/store/hash_cache.py` — persistent cache, mtime+size invalidace, compute_sha256
 
-**Gates:**
-14. `can_use_ai()` gate
-15. Fix BUG 5: TS union + incompatible
-16. Fix BUG 6: AI gate available, useAvatarAvailable() hook
+**Preview metadata extractor:** ✅ IMPL
+8. ✅ `src/utils/preview_meta_extractor.py`
+   - ✅ Cteni sidecar .json → meta.Model, meta.resources[] (s kind-aware filtrovanim)
+   - ✅ PNG tEXt chunk parser (PIL) → A1111 params, ComfyUI workflow JSON
+   - ✅ Target specificky ComfyUI nody: CheckpointLoaderSimple, LoraLoader, VAELoader
+   - ✅ Vraci List[PreviewModelHint] s provenance tagy
 
-**Testy:**
-- Unit: modely, validation matrix, preview extractor, hash cache, scoring/provenance grouping
-- Integration: suggest API (bez AI), apply pres pack_service, cross-kind warnings
-- Smoke: import flow s novym suggest/apply (bez AI)
+**Calibration (C5):** ✅ PROVEDENO
+9. ✅ **CDN metadata test** — `tests/calibration/test_cdn_png_metadata.py`
+   - ✅ VYSLEDEK: CDN servíruje JPEG/WebP, NE originální PNG
+   - ✅ E2 (PNG embedded) degradováno na "best effort"
+   - ✅ E3 (API meta ze sidecar .json) je PRIMARY zdroj preview evidence
+10. ⚠️ **Confidence calibration** — odlozeno na Phase 1 (vyzaduje import flow s realnymi daty)
+
+**Hash cache zaklady (G1):** ✅ IMPL
+11. ✅ Hash cache modul — `src/store/hash_cache.py`
+    - ✅ Cache structure: `{ path: { sha256, mtime, size, computed_at } }`
+    - ✅ Persistence: `data/registry/local_model_hashes.json`
+    - ✅ Invalidace: mtime+size change → rehash
+    - ⚠️ Async hash computation — zatim sync, async az Phase 3
+
+**API:** ⚠️ SCHEMA READY (endpointy az po Store integraci v Phase 1)
+12. ⚠️ Suggest/Apply endpointy — ResolveService ready, API routing az Phase 1
+13. ⚠️ Apply pres pack_service write path — ResolveService.apply() ready, PackService metoda az Phase 1
+
+**Gates:** ❌ Phase 1
+14. ❌ `can_use_ai()` gate — Phase 1
+15. ❌ Fix BUG 5: TS union + incompatible — Phase 1
+16. ❌ Fix BUG 6: AI gate available — Phase 1
+
+**Testy:** ✅ 251 TESTU (+ 2 calibration external)
+- ✅ Unit: modely (22), config (37), validation (26), scoring (23), hash_cache (15), evidence_providers (34), resolve_service (19), preview_extractor (27)
+- ✅ Review fix testy (46): tier boundary gaps, zero-value validation, fingerprint stale warning, atomic cache write, scoring spec examples, suggest→apply round-trip, real Pydantic models
+- ✅ Calibration: CDN PNG metadata (2, external)
+- ⚠️ Integration testy (suggest API, apply pres pack_service) — az Phase 1 po Store integraci
+- ⚠️ Smoke testy (import flow s novym suggest/apply) — az Phase 1 po import pipeline
+
+**Review cyklus:** ✅ DOKONCEN
+- ✅ Claude review: 7 issues nalezeno a opraveno (unused imports, import inside loop, cache abstraction leak)
+- ✅ Gemini 3.1 review: 8 issues — 5 opraveno (tier gaps, FD leak, atomic write, broad except, validation), 3 odlozeno (thread safety=CLI app, search phase=Phase 1, TODO candidate_base_model=Phase 1)
+- ✅ Codex 5.4 review: 6 issues — 3 opraveno (model_id=0, fingerprint stale, ensure_providers truthiness), 3 odlozeno (apply no-op=Phase 1, provider field access=Phase 1 adapter, key unification=Phase 1 search)
+- ✅ Verified s realnymi Pydantic modely (Pack, PackDependency) — NE jen MagicMock
+
+**Review fixy aplikovane:**
+- Fix: tier boundary gaps — `>=` comparison misto range matching (Gemini 1.1)
+- Fix: PIL Image.open() s context managerem — FD leak (Gemini 1.3)
+- Fix: atomic cache write — temp file + replace() (Gemini 3.1)
+- Fix: model_id=0 rejected validaci (Codex 3)
+- Fix: fingerprint stale check v apply() (Codex 6)
+- Fix: exc_info=True v provider error logu (Gemini 4.2)
+- Fix: _ensure_providers truthiness bug — `is not None` misto `if self._providers:` (nalezeno testy)
 
 ### Phase 1: Import pipeline + bug fixy
 
@@ -1758,8 +1773,8 @@ class TestResolveRoundtrip:
 | ~~Dual provider vzdy?~~ | UZAVRENO — provider eligibility per AssetKind |
 | ~~Preview metadata overcounting~~ | UZAVRENO — provenance grouping |
 | ~~candidate_index stabilita~~ | UZAVRENO — UUID candidate_id |
-| Civitai CDN stripuje PNG metadata? | OPEN → Phase 0 calibration overeni |
-| Confidence thresholds (0.85 auto-apply?) | OPEN → Phase 0 calibration na realnych datech |
+| ~~Civitai CDN stripuje PNG metadata?~~ | UZAVRENO — CDN servíruje JPEG/WebP, NE originální PNG. E2 (png_embedded) je best-effort only. E3 (api_meta ze sidecar .json) je PRIMARY zdroj. Kalibrace 2026-03-07. |
+| Confidence thresholds (0.85 auto-apply?) | OPEN → Phase 1 calibration na realnych datech (import flow) |
 | Timeout pro MCP-enabled tasky | OPEN — merit pri implementaci |
 | HUGGINGFACE_LATEST strategie? | OPEN — zatim neni v update_service |
 
