@@ -51,7 +51,8 @@ interface TagChipProps {
 }
 
 function TagChip({ tag, index }: TagChipProps) {
-  const isNsfw = tag === 'nsfw-pack'
+  const isNsfwPack = tag === 'nsfw-pack'
+  const isNsfwHide = tag === 'nsfw-pack-hide'
 
   return (
     <span
@@ -59,9 +60,11 @@ function TagChip({ tag, index }: TagChipProps) {
         "px-3 py-1.5 rounded-lg text-sm font-medium",
         "transition-all duration-200",
         "hover:scale-105",
-        isNsfw
+        isNsfwPack
           ? "bg-red-500/20 text-red-400 border border-red-500/30 hover:border-red-500/50"
-          : "bg-pulse/20 text-pulse border border-pulse/30 hover:border-pulse/50"
+          : isNsfwHide
+            ? "bg-purple-500/20 text-purple-400 border border-purple-500/30 hover:border-purple-500/50"
+            : "bg-pulse/20 text-pulse border border-pulse/30 hover:border-pulse/50"
       )}
       style={{
         animationDelay: `${index * 50}ms`,

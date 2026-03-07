@@ -126,8 +126,11 @@ export function EditableTags({
 
   // Get tag style based on tag name
   const getTagStyle = (tag: string) => {
-    if (tag === 'nsfw-pack' || tag === 'nsfw-pack-hide') {
+    if (tag === 'nsfw-pack') {
       return 'bg-red-500/20 text-red-400 border-red-500/30'
+    }
+    if (tag === 'nsfw-pack-hide') {
+      return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
     }
     if (tag.startsWith('style:')) {
       return 'bg-purple-500/20 text-purple-400 border-purple-500/30'

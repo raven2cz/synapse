@@ -20,6 +20,7 @@ import type { MediaType } from '@/lib/media'
 import type { SearchProvider, SortOption, PeriodOption } from '@/lib/api/searchTypes'
 import { getAdapter, isProviderAvailable, getDefaultProvider } from '@/lib/api/searchAdapters'
 import { fromProxyUrl } from '@/lib/utils/civitaiTransformers'
+import { useNsfwStore } from '@/stores/nsfwStore'
 
 interface ModelPreview {
   url: string
@@ -167,6 +168,13 @@ export function BrowsePage() {
   const [currentCursor, setCurrentCursor] = useState<string | undefined>()
   const [nextCursor, setNextCursor] = useState<string | undefined>()
   const isLoadingMore = useRef(false)
+
+  // Client-side NSFW filter — shouldHide handles BOTH hide mode AND maxLevel cutoff
+  const shouldHide = useNsfwStore((s) => s.shouldHide)
+  const visibleModels = useMemo(
+    () => allModels.filter((m) => !shouldHide(m.nsfw) && !shouldHide(m.previews[0]?.nsfw ?? false)),
+    [allModels, shouldHide]
+  )
 
   // Toast functions
   const addToast = useCallback((type: Toast['type'], message: string, details?: string) => {
@@ -445,10 +453,11 @@ export function BrowsePage() {
         ))}
       </div>
 
-      {/* Fullscreen media viewer */}
+      {/* Fullscreen media viewer — uses filtered previews/community images */}
       {modelDetail && (() => {
+        const visiblePreviews = modelDetail.previews.filter(p => !shouldHide(p.nsfw))
         const activeGalleryItems = galleryTab === 'community' && communityImages?.length
-          ? communityImages : modelDetail.previews
+          ? communityImages : visiblePreviews
         return (
           <FullscreenMediaViewer
             items={activeGalleryItems.map(p => ({
@@ -686,7 +695,7 @@ export function BrowsePage() {
         className="flex flex-wrap gap-4"
         style={{ '--card-width': `${cardWidth}px` } as React.CSSProperties}
       >
-        {allModels.map(model => (
+        {visibleModels.map(model => (
           <div
             key={model.id}
             onClick={() => { setSelectedModel(model.id); setSelectedModelPreviews(model.previews) }}
@@ -756,7 +765,7 @@ export function BrowsePage() {
             variant="secondary"
             className="px-8 py-3"
           >
-            {t('browse.loadMore', { count: allModels.length })}
+            {t('browse.loadMore', { count: visibleModels.length })}
           </Button>
         </div>
       )}
@@ -884,7 +893,7 @@ export function BrowsePage() {
                                 <div key={i} className="aspect-[3/4] rounded-xl bg-slate-mid/30 animate-pulse" />
                               ))
                             ) : (
-                              modelDetail.previews.map((preview, idx) => (
+                              modelDetail.previews.filter(p => !shouldHide(p.nsfw)).map((preview, idx) => (
                                 <MediaPreview
                                   key={idx}
                                   src={preview.url}

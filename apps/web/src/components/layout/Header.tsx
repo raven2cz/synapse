@@ -1,14 +1,19 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Eye, EyeOff } from 'lucide-react'
-import { useSettingsStore } from '../../stores/settingsStore'
+import { useNsfwStore } from '../../stores/nsfwStore'
 import { ProfileDropdown } from './ProfileDropdown'
 import { Logo } from '../ui/Logo'
 import { APP_VERSION } from '../../config'
 
 export function Header() {
   const { t } = useTranslation()
-  const { nsfwBlurEnabled, toggleNsfwBlur } = useSettingsStore()
+  const filterMode = useNsfwStore((s) => s.filterMode)
+  const setFilterMode = useNsfwStore((s) => s.setFilterMode)
+
+  // Toggle between show ↔ blur (hide mode hides the button entirely)
+  const isBlurring = filterMode === 'blur'
+  const toggleBlur = () => setFilterMode(isBlurring ? 'show' : 'blur')
 
   return (
     <header className="h-14 px-6 flex items-center justify-between border-b border-slate-700/50 bg-slate-900/95 backdrop-blur-2xl backdrop-saturate-150 sticky top-0 z-50">
@@ -42,34 +47,36 @@ export function Header() {
         {/* Profile Dropdown */}
         <ProfileDropdown />
 
-        {/* NSFW Toggle - Compact Design */}
-        <button
-          onClick={toggleNsfwBlur}
-          className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-all duration-200 ${
-            nsfwBlurEnabled
-              ? 'bg-indigo-500/10 border-indigo-500/30 hover:bg-indigo-500/20'
-              : 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20'
-          }`}
-        >
-          {nsfwBlurEnabled ? (
-            <EyeOff className="w-4 h-4 text-indigo-400" />
-          ) : (
-            <Eye className="w-4 h-4 text-red-400" />
-          )}
-          <span className={`text-xs font-medium ${nsfwBlurEnabled ? 'text-indigo-300' : 'text-red-300'}`}>
-            {t('header.nsfw')}
-          </span>
-          {/* Compact toggle indicator */}
-          <div className={`w-8 h-4 rounded-full relative transition-colors duration-200 ${
-            nsfwBlurEnabled ? 'bg-indigo-500/30' : 'bg-red-500/30'
-          }`}>
-            <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all duration-200 ${
-              nsfwBlurEnabled
-                ? 'left-[1.125rem] bg-indigo-400 shadow-lg shadow-indigo-400/50'
-                : 'left-0.5 bg-red-400 shadow-lg shadow-red-400/50'
-            }`} />
-          </div>
-        </button>
+        {/* NSFW Toggle — hidden when filterMode=hide (configured in Settings) */}
+        {filterMode !== 'hide' && (
+          <button
+            onClick={toggleBlur}
+            className={`group flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-all duration-200 ${
+              isBlurring
+                ? 'bg-indigo-500/10 border-indigo-500/30 hover:bg-indigo-500/20'
+                : 'bg-red-500/10 border-red-500/30 hover:bg-red-500/20'
+            }`}
+          >
+            {isBlurring ? (
+              <EyeOff className="w-4 h-4 text-indigo-400" />
+            ) : (
+              <Eye className="w-4 h-4 text-red-400" />
+            )}
+            <span className={`text-xs font-medium ${isBlurring ? 'text-indigo-300' : 'text-red-300'}`}>
+              {t('header.nsfw')}
+            </span>
+            {/* Compact toggle indicator */}
+            <div className={`w-8 h-4 rounded-full relative transition-colors duration-200 ${
+              isBlurring ? 'bg-indigo-500/30' : 'bg-red-500/30'
+            }`}>
+              <div className={`absolute top-0.5 w-3 h-3 rounded-full transition-all duration-200 ${
+                isBlurring
+                  ? 'left-[1.125rem] bg-indigo-400 shadow-lg shadow-indigo-400/50'
+                  : 'left-0.5 bg-red-400 shadow-lg shadow-red-400/50'
+              }`} />
+            </div>
+          </button>
+        )}
 
       </div>
     </header>
