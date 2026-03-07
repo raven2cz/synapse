@@ -42,6 +42,7 @@ from .models import (
     AssetKind,
     BlobManifest,
     BlobOrigin,
+    CanonicalSource,
     CivitaiSelector,
     DependencySelector,
     ExposeConfig,
@@ -559,6 +560,29 @@ class PackService:
 
             except Exception as e:
                 logger.warning(f"[parameter-extraction] AI extraction failed, skipping: {e}")
+
+        # BUG 2 fix: Run model_tagging at import (rule-based fallback, no MCP)
+        if pack.description:
+            try:
+                from src.avatar.tasks.model_tagging import ModelTaggingTask
+                task = ModelTaggingTask()
+                fallback = task.get_fallback()
+                if fallback:
+                    tag_result = fallback(pack.description)
+                    if tag_result.success and tag_result.output:
+                        output = tag_result.output
+                        # Merge tags (don't overwrite existing Civitai tags)
+                        all_tags = list(output.get("tags", []))
+                        if output.get("category"):
+                            all_tags.append(output["category"])
+                        if all_tags:
+                            existing_tags = set(pack.tags or [])
+                            new_tags = [t for t in all_tags if t not in existing_tags]
+                            if new_tags:
+                                pack.tags = list(existing_tags) + new_tags
+                                logger.info(f"[model-tagging] Added {len(new_tags)} tags: {new_tags}")
+            except Exception as e:
+                logger.warning(f"[model-tagging] Tagging failed, skipping: {e}")
 
         # Save pack
         self.layout.save_pack(pack)
@@ -1189,6 +1213,56 @@ class PackService:
 
         self.layout.save_pack_lock(lock)
         return lock
+
+    def apply_dependency_resolution(
+        self,
+        pack_name: str,
+        dep_id: str,
+        selector: DependencySelector,
+        canonical_source: Optional[CanonicalSource] = None,
+        lock_entry: Optional[ResolvedDependency] = None,
+        display_name: Optional[str] = None,
+    ) -> None:
+        """Apply a resolved dependency selector to a pack.
+
+        This is the SINGLE write path for ResolveService — it updates
+        pack.json with the new selector and optionally canonical_source.
+        Does NOT touch pack.lock.json (that's resolve_pack's job).
+
+        Args:
+            pack_name: Pack to update.
+            dep_id: Dependency ID to update.
+            selector: New DependencySelector to apply.
+            canonical_source: Optional canonical source for update tracking.
+            lock_entry: Optional pre-resolved lock entry (not used yet).
+            display_name: Optional display name (logged, not stored).
+        """
+        pack = self.layout.load_pack(pack_name)
+
+        # Find dependency
+        dep = None
+        for d in pack.dependencies:
+            if d.id == dep_id:
+                dep = d
+                break
+
+        if dep is None:
+            raise ValueError(f"Dependency '{dep_id}' not found in pack '{pack_name}'")
+
+        # Update selector
+        dep.selector = selector
+
+        # Set canonical_source if provided
+        if canonical_source:
+            dep.selector.canonical_source = canonical_source
+
+        logger.info(
+            "[apply_dependency_resolution] %s/%s → strategy=%s%s",
+            pack_name, dep_id, selector.strategy.value,
+            f" ({display_name})" if display_name else "",
+        )
+
+        self.layout.save_pack(pack)
 
     def _ensure_resolvers(self) -> None:
         """Lazily initialize default resolvers if none were provided."""

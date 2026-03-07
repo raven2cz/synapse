@@ -99,6 +99,8 @@ from .backup_service import BackupService, BackupError, BackupNotConnectedError,
 from .civitai_update_provider import CivitaiUpdateProvider
 from .inventory_service import InventoryService
 from .pack_service import PackService
+from .resolve_models import ApplyResult, SuggestOptions, SuggestResult
+from .resolve_service import ResolveService
 from .profile_service import ProfileService
 from .update_provider import UpdateCheckResult, UpdateProvider
 from .update_service import UpdateService
@@ -262,6 +264,11 @@ class Store:
             self.layout,
             self.blob_store,
             self.backup_service,
+        )
+        # ResolveService — 9th service, suggest/apply dependency resolution
+        self.resolve_service = ResolveService(
+            layout=self.layout,
+            pack_service=self.pack_service,
         )
         # Set backup service on profile service for auto-restore
         self.profile_service.set_backup_service(self.backup_service)
@@ -571,8 +578,73 @@ class Store:
         if add_to_global:
             self.profile_service.add_pack_to_global(pack.name)
 
+        # Post-import: resolve dependencies via evidence ladder
+        self._post_import_resolve(pack)
+
         return pack
-    
+
+    def _post_import_resolve(self, pack: Pack) -> None:
+        """Run suggest/auto-apply for pack dependencies after import.
+
+        Extracts preview hints, runs suggest (E1-E6, no AI),
+        and auto-applies if a dominant TIER-1/2 candidate exists.
+        """
+        if not pack.dependencies:
+            return
+
+        try:
+            from src.utils.preview_meta_extractor import extract_preview_hints
+
+            # Collect preview filenames from pack
+            preview_filenames = []
+            for p in getattr(pack, "previews", []) or []:
+                fname = getattr(p, "filename", None) or getattr(p, "local_path", None)
+                if fname:
+                    preview_filenames.append(fname)
+
+            pack_path = self.layout.pack_path(pack.name)
+            hints = extract_preview_hints(pack_path, preview_filenames) if preview_filenames else []
+
+            for dep in pack.dependencies:
+                # Skip deps that already have a concrete pinned selector
+                if dep.selector.strategy != SelectorStrategy.BASE_MODEL_HINT:
+                    continue
+
+                try:
+                    result = self.resolve_service.suggest(
+                        pack, dep.id,
+                        SuggestOptions(
+                            include_ai=False,
+                            preview_hints_override=hints,
+                        ),
+                    )
+
+                    if not result.candidates:
+                        continue
+
+                    top = result.candidates[0]
+                    if top.tier > 2:
+                        continue
+
+                    # Check margin: no other candidate within 0.15
+                    if len(result.candidates) > 1:
+                        margin = top.confidence - result.candidates[1].confidence
+                    else:
+                        margin = 1.0
+
+                    if margin >= 0.15:
+                        self.resolve_service.apply(pack.name, dep.id, top.candidate_id)
+                        logger.info(
+                            "[post-import] Auto-applied %s for dep '%s' (tier=%d, confidence=%.2f)",
+                            top.display_name, dep.id, top.tier, top.confidence,
+                        )
+
+                except Exception as e:
+                    logger.warning("[post-import] Resolve failed for dep '%s': %s", dep.id, e)
+
+        except Exception as e:
+            logger.warning("[post-import] Preview hint extraction failed: %s", e)
+
     def resolve(
         self,
         pack_name: str,
@@ -606,7 +678,102 @@ class Store:
             List of installed SHA256 hashes
         """
         return self.pack_service.install_pack(pack_name, progress_callback)
-    
+
+    def suggest_resolution(
+        self,
+        pack_name: str,
+        dep_id: str,
+        options: Optional["SuggestOptions"] = None,
+    ) -> "SuggestResult":
+        """Suggest resolution candidates for a dependency."""
+        pack = self.get_pack(pack_name)
+        return self.resolve_service.suggest(pack, dep_id, options or SuggestOptions())
+
+    def apply_resolution(
+        self,
+        pack_name: str,
+        dep_id: str,
+        candidate_id: str,
+        request_id: Optional[str] = None,
+    ) -> "ApplyResult":
+        """Apply a resolution candidate."""
+        return self.resolve_service.apply(pack_name, dep_id, candidate_id, request_id)
+
+    def migrate_resolve_deps(
+        self,
+        dry_run: bool = True,
+    ) -> List[dict]:
+        """Migration helper: suggest resolution for deps without canonical_source.
+
+        Iterates all packs, finds deps with BASE_MODEL_HINT strategy
+        (not yet resolved), runs suggest, and optionally auto-applies.
+
+        Args:
+            dry_run: If True, only report what would change. If False, apply.
+
+        Returns:
+            List of dicts with migration results per pack/dep.
+        """
+        results = []
+        for pack_name in self.list_packs():
+            try:
+                pack = self.get_pack(pack_name)
+            except Exception:
+                continue
+
+            for dep in pack.dependencies:
+                # Only migrate deps that still use BASE_MODEL_HINT
+                if dep.selector.strategy != SelectorStrategy.BASE_MODEL_HINT:
+                    continue
+
+                entry = {
+                    "pack": pack_name,
+                    "dep_id": dep.id,
+                    "current_strategy": dep.selector.strategy.value,
+                    "action": "skip",
+                    "candidates": [],
+                }
+
+                try:
+                    result = self.resolve_service.suggest(
+                        pack, dep.id,
+                        SuggestOptions(include_ai=False),
+                    )
+                    if result.candidates:
+                        top = result.candidates[0]
+                        entry["candidates"] = [
+                            {"name": c.display_name, "confidence": c.confidence, "tier": c.tier}
+                            for c in result.candidates[:3]
+                        ]
+
+                        if top.tier <= 2:
+                            margin = 1.0
+                            if len(result.candidates) > 1:
+                                margin = top.confidence - result.candidates[1].confidence
+
+                            if margin >= 0.15:
+                                if dry_run:
+                                    entry["action"] = "would_apply"
+                                    entry["would_apply"] = top.display_name
+                                else:
+                                    self.resolve_service.apply(
+                                        pack_name, dep.id, top.candidate_id,
+                                        request_id=result.request_id,
+                                    )
+                                    entry["action"] = "applied"
+                                    entry["applied"] = top.display_name
+                            else:
+                                entry["action"] = "ambiguous"
+                        else:
+                            entry["action"] = "low_confidence"
+                except Exception as e:
+                    entry["action"] = "error"
+                    entry["error"] = str(e)
+
+                results.append(entry)
+
+        return results
+
     # =========================================================================
     # Profile Operations
     # =========================================================================

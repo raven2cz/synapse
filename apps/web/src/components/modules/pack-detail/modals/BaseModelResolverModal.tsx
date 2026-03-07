@@ -58,8 +58,14 @@ export interface BaseModelResolverModalProps {
 
   /**
    * Pack description for base model hint extraction
+   * @deprecated Use baseModel prop instead
    */
   packDescription?: string
+
+  /**
+   * Pack base_model from pack.json (e.g. "SDXL", "SD 1.5")
+   */
+  baseModel?: string
 
   /**
    * Local models from ComfyUI
@@ -117,27 +123,7 @@ export interface BaseModelResolverModalProps {
 // Helper Functions
 // =============================================================================
 
-/**
- * Extract base model hint from description
- */
-function extractBaseModelHint(description?: string): string | null {
-  if (!description) return null
-
-  const patterns = [
-    /trained on\s+([A-Za-z0-9\s\-_.]+)/i,
-    /base model[:\s]+([A-Za-z0-9\s\-_.]+)/i,
-    /requires?\s+([A-Za-z0-9\s\-_.]+)\s+(?:checkpoint|model)/i,
-    /for\s+([A-Za-z0-9\s\-_.]+)\s+(?:checkpoint|model)/i,
-    /(Illustrious|Pony|SDXL|SD\s*1\.5|SD\s*2\.1|Flux|AuraFlow)/i,
-  ]
-
-  for (const pattern of patterns) {
-    const match = description.match(pattern)
-    if (match) return match[1].trim()
-  }
-
-  return null
-}
+// extractBaseModelHint() removed — BUG 1 fix: use pack.base_model directly
 
 // =============================================================================
 // Sub-components
@@ -374,7 +360,8 @@ function HuggingFaceModelCard({
 
 export function BaseModelResolverModal({
   isOpen,
-  packDescription,
+  packDescription: _packDescription,
+  baseModel,
   localModels,
   isLoadingLocalModels = false,
   searchResponse,
@@ -404,11 +391,8 @@ export function BaseModelResolverModal({
   const [isLoadingHfFiles, setIsLoadingHfFiles] = useState(false)
   const [selectedHfFile, setSelectedHfFile] = useState<HuggingFaceFile | null>(null)
 
-  // Extract base model hint
-  const baseModelHint = useMemo(
-    () => extractBaseModelHint(packDescription),
-    [packDescription]
-  )
+  // Use pack.base_model directly instead of regex extraction from description (BUG 1 fix)
+  const baseModelHint = baseModel || null
 
   // Filter local models
   const filteredLocalModels = useMemo(() => {

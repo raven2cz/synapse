@@ -196,8 +196,11 @@ class ResolveService:
             except ValueError:
                 kind = AssetKind.UNKNOWN
 
-        # Get preview hints
-        preview_hints = getattr(dep, "_preview_hints", [])
+        # Get preview hints — prefer override from import pipeline
+        if options.preview_hints_override is not None:
+            preview_hints = options.preview_hints_override
+        else:
+            preview_hints = getattr(dep, "_preview_hints", [])
 
         ctx = ResolveContext(
             pack=pack,

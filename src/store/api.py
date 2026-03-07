@@ -2250,16 +2250,24 @@ class ResolveBaseModelRequest(BaseModel):
     source: Optional[str] = None  # "civitai" or "huggingface"
     file_name: Optional[str] = None
     size_kb: Optional[int] = None
+    # BUG 4 fix: typed IDs instead of regex-parsing from URL
+    model_id: Optional[int] = None  # Civitai model ID
+    version_id: Optional[int] = None  # Civitai version ID
+    repo_id: Optional[str] = None  # HuggingFace repo ID
 
 
-@v2_packs_router.post("/{pack_name}/resolve-base-model", response_model=Dict[str, Any])
+@v2_packs_router.post("/{pack_name}/resolve-base-model", response_model=Dict[str, Any],
+                       deprecated=True)
 def resolve_base_model(
-    pack_name: str, 
+    pack_name: str,
     request: ResolveBaseModelRequest,
     store=Depends(require_initialized)
 ):
     """Resolve base model dependency for a pack.
-    
+
+    DEPRECATED: Use POST /{pack_name}/suggest-resolution + apply-resolution instead.
+    This endpoint will be removed in a future version.
+
     Updates both pack.json and pack.lock.json with the model info.
     Can either:
     1. Link to existing local model (model_path)
@@ -2319,8 +2327,13 @@ def resolve_base_model(
             pack.dependencies.append(base_dep)
             base_dep_idx = len(pack.dependencies) - 1
         
-        # Update pack base_model field  
-        pack.base_model = model_name_clean
+        # BUG 3 fix: NEVER overwrite pack.base_model with filename stem.
+        # base_model is the Civitai baseModel category (e.g. "SDXL", "SD 1.5"),
+        # NOT the checkpoint filename. Only set if pack has no base_model yet.
+        if not pack.base_model:
+            # Use Civitai baseModel from the resolved model if available,
+            # otherwise leave unset — do NOT use filename stem.
+            pass
         
         # Update or create lock file
         lock = store.get_pack_lock(pack_name)
@@ -2395,37 +2408,44 @@ def resolve_base_model(
             from .models import DependencySelector, SelectorStrategy
             
             if request.source == "civitai":
-                # Parse model_id and version_id from URL if possible
-                import re
-                match = re.search(r'models/(\d+)', request.download_url)
-                model_id = int(match.group(1)) if match else 0
-                match = re.search(r'modelVersionId=(\d+)', request.download_url)
-                version_id = int(match.group(1)) if match else 0
-                
+                # BUG 4 fix: use typed IDs from request, regex as fallback only
+                model_id = request.model_id or 0
+                version_id = request.version_id or 0
+                if not model_id and request.download_url:
+                    import re
+                    match = re.search(r'models/(\d+)', request.download_url)
+                    model_id = int(match.group(1)) if match else 0
+                if not version_id and request.download_url:
+                    import re
+                    match = re.search(r'modelVersionId=(\d+)', request.download_url)
+                    version_id = int(match.group(1)) if match else 0
+
                 base_dep.selector.strategy = SelectorStrategy.CIVITAI_FILE
                 base_dep.selector.civitai = CivitaiSelector(
                     model_id=model_id,
                     version_id=version_id,
                 )
                 base_dep.selector.url = request.download_url
-                
+
                 # Also update provider with IDs
                 resolved.artifact.provider.model_id = model_id
                 resolved.artifact.provider.version_id = version_id
-                
+
             elif request.source == "huggingface":
-                # Parse repo_id from URL
-                import re
-                match = re.search(r'huggingface\.co/([^/]+/[^/]+)', request.download_url)
-                repo_id = match.group(1) if match else ""
-                
+                # BUG 4 fix: use typed repo_id from request, regex as fallback only
+                repo_id = request.repo_id or ""
+                if not repo_id and request.download_url:
+                    import re
+                    match = re.search(r'huggingface\.co/([^/]+/[^/]+)', request.download_url)
+                    repo_id = match.group(1) if match else ""
+
                 base_dep.selector.strategy = SelectorStrategy.HUGGINGFACE_FILE
                 base_dep.selector.huggingface = HuggingFaceSelector(
                     repo_id=repo_id,
                     filename=file_name,
                 )
                 base_dep.selector.url = request.download_url
-                
+
                 # Also update provider
                 resolved.artifact.provider.repo_id = repo_id
             else:
@@ -2469,6 +2489,142 @@ def resolve_base_model(
         logger.error(f"[resolve-base-model] Error: {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# =============================================================================
+# Resolve Endpoints — suggest/apply dependency resolution (Phase 1)
+# =============================================================================
+
+
+class SuggestRequest(BaseModel):
+    """Request for resolution suggestions."""
+    dep_id: str
+    include_ai: bool = False
+    max_candidates: int = 10
+
+
+class ApplyRequest(BaseModel):
+    """Request to apply a resolution candidate."""
+    dep_id: str
+    candidate_id: str
+    request_id: Optional[str] = None
+
+
+class ManualApplyRequest(BaseModel):
+    """Request to apply a manual resolution."""
+    dep_id: str
+    strategy: str
+    civitai_model_id: Optional[int] = None
+    civitai_version_id: Optional[int] = None
+    civitai_file_id: Optional[int] = None
+    hf_repo_id: Optional[str] = None
+    hf_filename: Optional[str] = None
+    local_path: Optional[str] = None
+    url: Optional[str] = None
+    display_name: Optional[str] = None
+
+
+@v2_packs_router.post("/{pack_name}/suggest-resolution")
+def suggest_resolution(
+    pack_name: str,
+    request: SuggestRequest,
+    store=Depends(require_initialized),
+):
+    """Suggest resolution candidates for a dependency."""
+    try:
+        pack = store.get_pack(pack_name)
+        if not pack:
+            raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
+        from .resolve_models import SuggestOptions
+        options = SuggestOptions(
+            include_ai=request.include_ai,
+            max_candidates=request.max_candidates,
+        )
+        result = store.resolve_service.suggest(pack, request.dep_id, options)
+        return {
+            "request_id": result.request_id,
+            "candidates": [c.model_dump() for c in result.candidates],
+            "pack_fingerprint": result.pack_fingerprint,
+            "warnings": result.warnings,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[suggest-resolution] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.post("/{pack_name}/apply-resolution")
+def apply_resolution(
+    pack_name: str,
+    request: ApplyRequest,
+    store=Depends(require_initialized),
+):
+    """Apply a previously suggested resolution candidate."""
+    try:
+        result = store.resolve_service.apply(
+            pack_name=pack_name,
+            dep_id=request.dep_id,
+            candidate_id=request.candidate_id,
+            request_id=request.request_id,
+        )
+        if not result.success:
+            raise HTTPException(status_code=400, detail=result.message)
+        return result.model_dump()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[apply-resolution] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@v2_packs_router.post("/{pack_name}/apply-manual-resolution")
+def apply_manual_resolution(
+    pack_name: str,
+    request: ManualApplyRequest,
+    store=Depends(require_initialized),
+):
+    """Apply a manual resolution (from Civitai/HF/Local tab)."""
+    try:
+        from .models import CivitaiSelector, HuggingFaceSelector, SelectorStrategy
+        from .resolve_models import ManualResolveData
+
+        strategy = SelectorStrategy(request.strategy)
+
+        civitai = None
+        if request.civitai_model_id:
+            civitai = CivitaiSelector(
+                model_id=request.civitai_model_id,
+                version_id=request.civitai_version_id or 0,
+                file_id=request.civitai_file_id,
+            )
+
+        huggingface = None
+        if request.hf_repo_id:
+            huggingface = HuggingFaceSelector(
+                repo_id=request.hf_repo_id,
+                filename=request.hf_filename or "",
+            )
+
+        manual = ManualResolveData(
+            strategy=strategy,
+            civitai=civitai,
+            huggingface=huggingface,
+            local_path=request.local_path,
+            url=request.url,
+            display_name=request.display_name,
+        )
+
+        result = store.resolve_service.apply_manual(pack_name, request.dep_id, manual)
+        if not result.success:
+            raise HTTPException(status_code=400, detail=result.message)
+        return result.model_dump()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[apply-manual-resolution] Error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 

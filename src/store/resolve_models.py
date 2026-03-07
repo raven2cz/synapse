@@ -117,6 +117,7 @@ class SuggestOptions(BaseModel):
     include_ai: bool = False       # Default OFF for import (R5)
     analyze_previews: bool = True
     max_candidates: int = 10
+    preview_hints_override: Optional[List[PreviewModelHint]] = None  # External hints (import pipeline)
 
 
 class SuggestResult(BaseModel):

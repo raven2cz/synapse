@@ -610,21 +610,47 @@ INLINE RESOLVE (progressive disclosure):
     - ✅ Invalidace: mtime+size change → rehash
     - ⚠️ Async hash computation — zatim sync, async az Phase 3
 
-**API:** ⚠️ SCHEMA READY (endpointy az po Store integraci v Phase 1)
-12. ⚠️ Suggest/Apply endpointy — ResolveService ready, API routing az Phase 1
-13. ⚠️ Apply pres pack_service write path — ResolveService.apply() ready, PackService metoda az Phase 1
+**API:** ✅ IMPL+INTEG (Phase 1)
+12. ✅ Suggest/Apply endpointy — 3 API endpointy v `api.py`: suggest-resolution, apply-resolution, apply-manual-resolution
+13. ✅ Apply pres pack_service write path — `PackService.apply_dependency_resolution()` implementovano
+    - ✅ `/resolve-base-model` oznaceno jako deprecated (OpenAPI `deprecated=True`)
 
-**Gates:** ❌ Phase 1
-14. ❌ `can_use_ai()` gate — Phase 1
-15. ❌ Fix BUG 5: TS union + incompatible — Phase 1
-16. ❌ Fix BUG 6: AI gate available — Phase 1
+**Phase 1 BUG fixy:** ✅ IMPL+INTEG
+- ✅ BUG 1: `extractBaseModelHint()` smazano z `BaseModelResolverModal.tsx`, nahrazeno `pack.base_model` prop
+- ✅ BUG 2: `model_tagging()` rule-based fallback bezi pri importu (merges tags, no MCP)
+- ✅ BUG 3: `pack.base_model` NEVER overwritten with filename stem
+- ✅ BUG 4: typed API IDs (model_id, version_id, repo_id) na `ResolveBaseModelRequest`
 
-**Testy:** ✅ 251 TESTU (+ 2 calibration external)
+**Phase 1 Import pipeline:** ✅ IMPL+INTEG
+- ✅ `SuggestOptions.preview_hints_override` — external hints z import pipeline
+- ✅ `Store._post_import_resolve()` — post-import orchestrace (suggest E1-E6, auto-apply TIER-1/2 s margin 0.15)
+- ✅ `Store.suggest_resolution()` / `apply_resolution()` — delegate metody na Store facade
+- ✅ `Store.migrate_resolve_deps(dry_run=True/False)` — migration helper pro stare packy
+
+**Gates:** ❌ Phase 2
+14. ❌ `can_use_ai()` gate — Phase 2
+15. ❌ Fix BUG 5: TS union + incompatible — Phase 2
+16. ❌ Fix BUG 6: AI gate available — Phase 2
+
+**Testy:** ✅ 291 TESTU (+ 2 calibration external)
 - ✅ Unit: modely (22), config (37), validation (26), scoring (23), hash_cache (15), evidence_providers (34), resolve_service (19), preview_extractor (27)
 - ✅ Review fix testy (46): tier boundary gaps, zero-value validation, fingerprint stale warning, atomic cache write, scoring spec examples, suggest→apply round-trip, real Pydantic models
+- ✅ Phase 1 Block A+B (13): BUG 3, BUG 4, PackService.apply_dependency_resolution, Store facade, API schemas
+- ✅ Phase 1 Block C (16): SuggestOptions hints override, ResolveService suggest s override, post-import resolve orchestrace, Store delegate metody, auto-apply logika
+- ✅ Phase 1 Block D (11): model_tagging rule-based, migration helper dry-run/apply/skip/error
 - ✅ Calibration: CDN PNG metadata (2, external)
-- ⚠️ Integration testy (suggest API, apply pres pack_service) — az Phase 1 po Store integraci
-- ⚠️ Smoke testy (import flow s novym suggest/apply) — az Phase 1 po import pipeline
+- ⚠️ Integration testy (import s evidence ladder) — az po Phase 1 review
+- ⚠️ Smoke testy (kompletni import z Civitai s resolve) — az po Phase 1 review
+
+**Phase 1 Review cyklus:** ✅ DOKONCEN
+- ✅ Claude review: overeni vsech zmen, konzistence s planem
+- ✅ Gemini 3.1 review: 8 issues — 1 opraven (missing request_id v migrate), 7 odlozeno/by-design
+- ✅ Codex 5.4 review: 6 issues — 2 opraveny (post-import skip pinned deps, apply 4xx na failure), 4 odlozeno (SSRF=Phase 3, UI typed IDs=Phase 2, cache binding=Phase 2, HF race=pre-existing)
+
+**Phase 1 Review fixy aplikovane:**
+- Fix: `_post_import_resolve` preskakuje deps s jinou strategii nez BASE_MODEL_HINT (Codex 4)
+- Fix: Apply endpointy vracejí 4xx při neúspěchu místo 200 (Codex 6)
+- Fix: `migrate_resolve_deps` předává request_id do apply (Gemini 1)
 
 **Review cyklus:** ✅ DOKONCEN
 - ✅ Claude review: 7 issues nalezeno a opraveno (unused imports, import inside loop, cache abstraction leak)
@@ -647,31 +673,34 @@ INLINE RESOLVE (progressive disclosure):
 
 **Deliverables:**
 
-1. Fix BUG 1: smazat extractBaseModelHint(), pouzit pack.base_model + preview meta
-2. Fix BUG 3: apply nikdy neprepise base_model filename stemem
-3. Fix BUG 4: typed API misto regex parsing
+1. ✅ Fix BUG 1: `extractBaseModelHint()` smazano, nahrazeno `pack.base_model` prop
+2. ✅ Fix BUG 3: apply nikdy neprepise base_model filename stemem
+3. ✅ Fix BUG 4: typed API misto regex parsing (model_id, version_id, repo_id)
 
-4. **Import pipeline integrace:**
-   - Krok 3: analyze preview metadata (sidecar .json, dle calibration PNG tez)
-   - Krok 4: suggest_resolution() s evidence ladder E1-E6
-   - Krok 5: auto-apply dle tier pravidel (TIER-1/2, margin 0.15)
-   - Konfigurovatelny threshold v store.yaml (default dle calibration)
+4. ✅ **Import pipeline integrace:**
+   - ✅ Krok 3: analyze preview metadata (sidecar .json, dle calibration PNG tez)
+   - ✅ Krok 4: suggest_resolution() s evidence ladder E1-E6
+   - ✅ Krok 5: auto-apply dle tier pravidel (TIER-1/2, margin 0.15)
+   - ⚠️ Konfigurovatelny threshold v store.yaml — az Phase 2 (hard-coded 0.15 margin)
 
-5. Enriched AI context pro extract_parameters()
+5. ⚠️ Enriched AI context pro extract_parameters() — odlozeno (vyzaduje zmenu AvatarTaskService API)
 
-6. Deprecate /resolve-base-model (internal redirect na suggest/apply)
+6. ✅ Deprecate /resolve-base-model (OpenAPI deprecated=True, docstring warning)
 
-7. Fix BUG 2: model_tagging() pri importu (bez MCP, jen text analysis)
+7. ✅ Fix BUG 2: model_tagging() rule-based fallback bezi pri importu
 
-8. **Migration helper** (C8): command/endpoint pro enrichment starych packu
-   - Projde existujici packy, spusti suggest pro deps bez canonical_source
-   - Dry-run mode → zobrazit co by se zmenilo
-   - Apply mode → aktualizovat s uzivatelskym potvrzenim
+8. ✅ **Migration helper** (C8): `Store.migrate_resolve_deps(dry_run=True/False)`
+   - ✅ Projde packy s BASE_MODEL_HINT deps, spusti suggest
+   - ✅ Dry-run mode → reportuje co by se zmenilo
+   - ✅ Apply mode → auto-apply s tier/margin pravidly
+   - ✅ Error handling, ambiguous/low_confidence detection
 
-**Testy:**
-- Unit: import pipeline, BUG fixy, preview meta v import, auto-apply logic, migration
-- Integration: import s evidence ladder, deprecated endpoint redirect
-- Smoke: kompletni import z Civitai s resolve, migrace starych packu
+**Testy:** ✅ 40 NOVYCH TESTU
+- ✅ Unit Block A+B (13): BUG 3, BUG 4, PackService integration, Store facade, API schemas
+- ✅ Unit Block C (16): hints override, suggest s override, post-import resolve, delegates, auto-apply
+- ✅ Unit Block D (11): model_tagging, migration helper
+- ⚠️ Integration: import s evidence ladder — az po review
+- ⚠️ Smoke: kompletni import z Civitai s resolve — az po review
 
 ### Phase 2: AI-enhanced resolution + UI
 
@@ -706,6 +735,7 @@ INLINE RESOLVE (progressive disclosure):
    - 5 tabu: AI, Preview Analysis, Local, Civitai, HF (dle eligibility)
    - useAvatarAvailable() pro AI tab visibility
    - HF tab jen pokud kind je HF eligible
+   - UI posila typed IDs (model_id, version_id) — ne jen download_url (Codex P1 #2)
 
 6. **Preview Analysis tab:**
    - Preview image grid
@@ -717,14 +747,27 @@ INLINE RESOLVE (progressive disclosure):
    - Ne jen diffusers filter
    - Single-file repo support
 
+8. **Gates (z Phase 1 odlozene):**
+   - `can_use_ai()` gate
+   - Fix BUG 5: TS union + incompatible
+   - Fix BUG 6: AI gate available
+
+9. **Konfigurovatelny auto-apply threshold** v store.yaml (hard-coded 0.15 z Phase 1)
+
+10. **Enriched AI context** pro extract_parameters() — structured metadata (base_model, trigger_words)
+
+11. **Cache binding** — apply kontroluje pack_name+dep_id v cached candidates (Codex P1 #3)
+
+12. **DRY: auto-apply helper** — konsolidace logiky z _post_import_resolve a migrate_resolve_deps (Gemini P1 #2)
+
 **Testy:**
 - Unit: dependency_resolution task, MCP engine, search_huggingface, Preview Analysis
-- Integration: suggest s AI mock, modal rendering, HF search
-- Smoke: full AI resolve flow, multi-provider fallback
+- Integration: suggest s AI mock, modal rendering, HF search, import s evidence ladder
+- Smoke: full AI resolve flow, multi-provider fallback, kompletni import z Civitai s resolve
 
-### Phase 3: Local binding + background scan
+### Phase 3: Local binding + background scan + security
 
-**Cil:** Lokalni modely vsech typu. Plny background scan service.
+**Cil:** Lokalni modely vsech typu. Plny background scan service. Security hardening.
 
 **Deliverables:**
 
@@ -739,6 +782,10 @@ INLINE RESOLVE (progressive disclosure):
 4. AI-assisted canonical_source lookup (hash → find_model_by_hash na Civitai + HF LFS)
 5. Bez AI: local_path + sha256, bez canonical_source
 
+6. **Security hardening (z Phase 1 odlozene):**
+   - URL validace v apply-manual-resolution — scheme/host allowlist, SSRF prevence (Codex P1 #1)
+   - HF file loading race condition fix v BaseModelResolverModal (Codex P1 #5, pre-existing)
+
 **Testy**
 
 ### Phase 4: Provider polish + download
@@ -750,7 +797,7 @@ INLINE RESOLVE (progressive disclosure):
 1. Typed provider payloady end-to-end — odmitat nekompletni
 2. Audit Civitai/HF search endpointu
 3. Resolution → Download explicitne oddeleno, napojeni na download system
-4. Cleanup: smazat stary endpoint, BaseModelResolverModal, extractBaseModelHint
+4. Cleanup: smazat stary endpoint /resolve-base-model, BaseModelResolverModal, ~~extractBaseModelHint~~ (uz smazano)
 
 **Testy**
 

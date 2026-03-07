@@ -509,6 +509,7 @@ function PackDetailPageContent() {
       <BaseModelResolverModal
         isOpen={modals.baseModelResolver}
         packDescription={pack.description}
+        baseModel={pack.pack?.base_model}
         localModels={localModels}
         isLoadingLocalModels={isLoadingLocalModels}
         searchResponse={searchResponse}
