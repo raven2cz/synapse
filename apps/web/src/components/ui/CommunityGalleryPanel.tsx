@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Loader2, ChevronDown, Check, Minimize2, Maximize2 } from 'lucide-react'
+import { Loader2, Minimize2, Maximize2 } from 'lucide-react'
 import { clsx } from 'clsx'
 
 import { MediaPreview } from './MediaPreview'
+import { ThemedSelect } from './ThemedSelect'
 import { useNsfwStore } from '@/stores/nsfwStore'
 import { getAdapter } from '@/lib/api/searchAdapters'
 import type { SearchProvider, ModelPreview } from '@/lib/api/searchTypes'
@@ -39,88 +40,6 @@ const BROWSING_LEVEL_OPTIONS = [
   { value: 15, i18nKey: 'community.browsingLevel.x' },
   { value: 31, i18nKey: 'community.browsingLevel.all' },
 ] as const
-
-// =============================================================================
-// ThemedSelect — glass-morphism dropdown (local to this component)
-// =============================================================================
-
-interface ThemedSelectProps<T extends string | number> {
-  value: T
-  options: { value: T; label: string }[]
-  onChange: (value: T) => void
-  className?: string
-}
-
-function ThemedSelect<T extends string | number>({
-  value,
-  options,
-  onChange,
-  className,
-}: ThemedSelectProps<T>) {
-  const [isOpen, setIsOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  const handleClickOutside = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) {
-      setIsOpen(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [handleClickOutside])
-
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? String(value)
-
-  return (
-    <div className={clsx('relative', className)} ref={ref}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={clsx(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs',
-          'bg-slate-dark/80 backdrop-blur border border-slate-mid/50',
-          'text-text-primary hover:bg-slate-mid/50 transition-colors duration-150',
-          'cursor-pointer select-none'
-        )}
-      >
-        <span className="truncate max-w-[120px]">{selectedLabel}</span>
-        <ChevronDown className={clsx('w-3.5 h-3.5 opacity-60 transition-transform duration-150', isOpen && 'rotate-180')} />
-      </button>
-      {isOpen && (
-        <div
-          className={clsx(
-            'absolute top-full mt-1.5 min-w-[160px] p-1',
-            'bg-slate-darker/95 backdrop-blur-xl',
-            'border border-slate-mid/30 rounded-xl',
-            'shadow-xl shadow-black/30',
-            'z-[9999] overflow-y-auto max-h-[240px]'
-          )}
-        >
-          {options.map((opt) => (
-            <button
-              key={String(opt.value)}
-              onClick={() => {
-                onChange(opt.value)
-                setIsOpen(false)
-              }}
-              className={clsx(
-                'w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-left',
-                'transition-colors duration-150',
-                opt.value === value
-                  ? 'bg-synapse/20 text-synapse'
-                  : 'text-text-secondary hover:bg-slate-mid/50 hover:text-text-primary'
-              )}
-            >
-              <span className="flex-1">{opt.label}</span>
-              {opt.value === value && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // =============================================================================
 // Props
@@ -160,6 +79,7 @@ export function CommunityGalleryPanel({
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   const storeBrowsingLevel = useNsfwStore((s) => s.getBrowsingLevel())
+  const shouldHide = useNsfwStore((s) => s.shouldHide)
   const effectiveBrowsingLevel = communityBrowsingLevel === 'auto'
     ? storeBrowsingLevel
     : communityBrowsingLevel
@@ -184,9 +104,15 @@ export function CommunityGalleryPanel({
     staleTime: 5 * 60 * 1000,
   })
 
+  // Client-side NSFW filter — shouldHide handles BOTH hide mode AND maxLevel cutoff
+  const visibleImages = useMemo(
+    () => (images ?? []).filter((img) => !shouldHide(img.nsfw)),
+    [images, shouldHide]
+  )
+
   useEffect(() => {
-    if (images) onImagesChange?.(images)
-  }, [images, onImagesChange])
+    onImagesChange?.(visibleImages)
+  }, [visibleImages, onImagesChange])
 
   // Build option arrays for ThemedSelect
   const sortOptions = COMMUNITY_SORT_OPTIONS.map((opt) => ({
@@ -241,7 +167,7 @@ export function CommunityGalleryPanel({
         <div className="flex items-center gap-2 ml-auto">
           {images && !isLoading && (
             <span className="text-xs text-text-muted">
-              {t('community.imageCount', { count: images.length })}
+              {t('community.imageCount', { count: visibleImages.length })}
               {images.length > communityLimit && (
                 <span className="text-text-muted/60">
                   {' · '}{t('community.limit.posts', { count: communityLimit })}
@@ -304,19 +230,19 @@ export function CommunityGalleryPanel({
                 className="aspect-[3/4] rounded-xl bg-slate-mid/30 animate-pulse"
               />
             ))
-          ) : images?.length ? (
-            images.map((preview, idx) => (
-              <MediaPreview
-                key={idx}
-                src={preview.url}
-                type={preview.media_type}
-                thumbnailSrc={preview.thumbnail_url}
-                nsfw={preview.nsfw}
-                aspectRatio="portrait"
-                className="cursor-pointer hover:ring-2 ring-synapse"
-                autoPlay={true}
-                onClick={onImageClick ? () => onImageClick(idx) : undefined}
-              />
+          ) : visibleImages.length ? (
+            visibleImages.map((preview, idx) => (
+                <MediaPreview
+                  key={idx}
+                  src={preview.url}
+                  type={preview.media_type}
+                  thumbnailSrc={preview.thumbnail_url}
+                  nsfw={preview.nsfw}
+                  aspectRatio="portrait"
+                  className="cursor-pointer hover:ring-2 ring-synapse"
+                  autoPlay={true}
+                  onClick={onImageClick ? () => onImageClick(idx) : undefined}
+                />
             ))
           ) : (
             <div

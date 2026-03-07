@@ -2,9 +2,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Settings, Save, RefreshCw, CheckCircle2, XCircle, AlertCircle, Key, FolderOpen, Eye, EyeOff, Database, Layers, Zap, Cloud, Link2, Unlink } from 'lucide-react'
 import { Card, CardTitle, CardDescription } from '../ui/Card'
+import { ThemedSelect } from '../ui/ThemedSelect'
 import { Button } from '../ui/Button'
 import { useState, useEffect, useRef } from 'react'
 import { useSettingsStore } from '../../stores/settingsStore'
+import { useNsfwStore, type NsfwMaxLevel } from '../../stores/nsfwStore'
 import { toast } from '../../stores/toastStore'
 import type { BackupStatus, BackupConfigRequest } from './inventory/types'
 import { formatBytes } from '../../lib/utils/format'
@@ -41,7 +43,8 @@ interface DiagnosticsResponse {
 export function SettingsPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const { nsfwBlurEnabled, setNsfwBlur, autoCheckUpdates, setAutoCheckUpdates } = useSettingsStore()
+  const { autoCheckUpdates, setAutoCheckUpdates } = useSettingsStore()
+  const { filterMode, maxLevel, setFilterMode, setMaxLevel, nsfwBlurEnabled } = useNsfwStore()
   const avatarSettingsRef = useRef<AvatarSettingsHandle>(null)
   const [comfyuiPath, setComfyuiPath] = useState('~/ComfyUI')
   const [civitaiToken, setCivitaiToken] = useState('')
@@ -234,26 +237,60 @@ export function SettingsPage() {
             {/* Divider */}
             <div className="border-t border-slate-700/50" />
 
-            {/* NSFW Blur toggle */}
-            <div className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
+            {/* NSFW Filter Mode */}
+            <div className="p-3 bg-slate-800/30 rounded-lg space-y-3">
               <div>
-                <span className="text-slate-100">{t('settings.display.nsfwBlur')}</span>
+                <span className="text-slate-100">{t('settings.display.nsfwMode')}</span>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  {t('settings.display.nsfwBlurDesc')}
+                  {t('settings.display.nsfwModeDesc')}
                 </p>
               </div>
-              <button
-                onClick={() => setNsfwBlur(!nsfwBlurEnabled)}
-                className={`relative w-12 h-6 rounded-full transition-all duration-200 ${
-                  nsfwBlurEnabled ? 'bg-indigo-500 shadow-lg shadow-indigo-500/40' : 'bg-slate-700'
-                }`}
-              >
-                <span
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-200 ${
-                    nsfwBlurEnabled ? 'left-7' : 'left-1'
-                  }`}
-                />
-              </button>
+
+              {/* 3-mode segmented control */}
+              <div className="flex rounded-lg bg-slate-900/50 p-0.5" role="radiogroup" aria-label={t('settings.display.nsfwMode')}>
+                {(['show', 'blur', 'hide'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="radio"
+                    aria-checked={filterMode === mode}
+                    onClick={() => setFilterMode(mode)}
+                    className={`flex-1 px-3 py-1.5 text-sm rounded-md transition-all duration-200 ${
+                      filterMode === mode
+                        ? 'bg-indigo-500 text-white shadow-lg shadow-indigo-500/30'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {t(`settings.display.nsfwMode_${mode}`)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Mode description */}
+              <p className="text-xs text-slate-500">
+                {t(`settings.display.nsfwMode_${filterMode}Desc`)}
+              </p>
+
+              {/* Max level dropdown — hidden when mode=hide */}
+              {filterMode !== 'hide' && (
+                <div className="flex items-center justify-between pt-2 border-t border-slate-700/30">
+                  <div>
+                    <span className="text-sm text-slate-200">{t('settings.display.nsfwMaxLevel')}</span>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {t('settings.display.nsfwMaxLevelDesc')}
+                    </p>
+                  </div>
+                  <ThemedSelect
+                    value={maxLevel}
+                    onChange={(val) => setMaxLevel(val as NsfwMaxLevel)}
+                    align="right"
+                    options={(['pg', 'pg13', 'r', 'x', 'all'] as const).map((level) => ({
+                      value: level,
+                      label: t(`settings.display.nsfwLevel_${level}`),
+                    }))}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Divider */}
@@ -267,16 +304,17 @@ export function SettingsPage() {
                   {t('settings.display.autoCheckUpdatesDesc')}
                 </p>
               </div>
-              <select
+              <ThemedSelect
                 value={autoCheckUpdates}
-                onChange={(e) => setAutoCheckUpdates(e.target.value as 'off' | '1h' | '6h' | '24h')}
-                className="px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-sm focus:outline-none focus:border-indigo-500/50"
-              >
-                <option value="off">{t('settings.display.autoCheckOff')}</option>
-                <option value="1h">{t('settings.display.autoCheck1h')}</option>
-                <option value="6h">{t('settings.display.autoCheck6h')}</option>
-                <option value="24h">{t('settings.display.autoCheck24h')}</option>
-              </select>
+                onChange={(val) => setAutoCheckUpdates(val as 'off' | '1h' | '6h' | '24h')}
+                align="right"
+                options={[
+                  { value: 'off', label: t('settings.display.autoCheckOff') },
+                  { value: '1h', label: t('settings.display.autoCheck1h') },
+                  { value: '6h', label: t('settings.display.autoCheck6h') },
+                  { value: '24h', label: t('settings.display.autoCheck24h') },
+                ]}
+              />
             </div>
           </div>
         </Card>
@@ -340,17 +378,16 @@ export function SettingsPage() {
               <label className="block text-sm text-slate-400 mb-2">
                 {t('settings.store.defaultUiSet')}
               </label>
-              <select
+              <ThemedSelect
                 value={storeDefaultUiSet}
-                onChange={(e) => setStoreDefaultUiSet(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-xl text-slate-100 focus:outline-none focus:border-indigo-500/50"
-              >
-                {settings?.store_ui_sets && Object.keys(settings.store_ui_sets).map((setName) => (
-                  <option key={setName} value={setName}>
-                    {setName} ({settings.store_ui_sets[setName].join(', ')})
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setStoreDefaultUiSet(val)}
+                options={(settings?.store_ui_sets ? Object.keys(settings.store_ui_sets) : [storeDefaultUiSet]).map((setName) => ({
+                  value: setName,
+                  label: settings?.store_ui_sets
+                    ? `${setName} (${settings.store_ui_sets[setName].join(', ')})`
+                    : setName,
+                }))}
+              />
             </div>
 
             {/* UI Roots */}

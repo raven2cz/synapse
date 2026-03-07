@@ -214,6 +214,8 @@ export const PERIOD_OPTIONS = [
 export interface ModelPreview {
   url: string
   nsfw: boolean
+  /** Civitai numeric NSFW level (1=PG, 2=PG13, 4=R, 8=X, 16=XXX) */
+  nsfwLevel?: number
   width?: number
   height?: number
   meta?: Record<string, unknown>
@@ -248,6 +250,8 @@ export interface CivitaiModel {
   description?: string
   type: string
   nsfw: boolean
+  /** Civitai numeric NSFW level (1=PG, 2=PG13, 4=R, 8=X, 16=XXX) */
+  nsfwLevel?: number
   tags: string[]
   creator?: string
   stats: {

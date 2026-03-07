@@ -57,7 +57,7 @@ export interface EditPackModalProps {
 // Constants
 // =============================================================================
 
-const SUGGESTED_TAGS = ['favorite', 'nsfw-pack', 'anime', 'realistic', 'style', 'character']
+const SUGGESTED_TAGS = ['favorite', 'nsfw-pack', 'nsfw-pack-hide', 'anime', 'realistic', 'style', 'character']
 
 // =============================================================================
 // Sub-components
@@ -70,16 +70,19 @@ interface TagChipProps {
 
 function TagChip({ tag, onRemove }: TagChipProps) {
   const { t } = useTranslation()
-  const isNsfw = tag === 'nsfw-pack'
+  const isNsfwPack = tag === 'nsfw-pack'
+  const isNsfwHide = tag === 'nsfw-pack-hide'
 
   return (
     <span
       className={clsx(
         "px-3 py-1.5 rounded-lg text-sm flex items-center gap-2",
         "transition-all duration-200",
-        isNsfw
+        isNsfwPack
           ? "bg-red-500/20 text-red-400 border border-red-500/30"
-          : "bg-pulse/20 text-pulse border border-pulse/30"
+          : isNsfwHide
+            ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+            : "bg-pulse/20 text-pulse border border-pulse/30"
       )}
     >
       {tag}
@@ -101,7 +104,8 @@ interface SuggestedTagButtonProps {
 }
 
 function SuggestedTagButton({ tag, isAdded, onAdd }: SuggestedTagButtonProps) {
-  const isNsfw = tag === 'nsfw-pack'
+  const isNsfwPack = tag === 'nsfw-pack'
+  const isNsfwHide = tag === 'nsfw-pack-hide'
 
   return (
     <button
@@ -111,9 +115,11 @@ function SuggestedTagButton({ tag, isAdded, onAdd }: SuggestedTagButtonProps) {
         "px-2.5 py-1 rounded text-xs transition-all duration-200",
         isAdded
           ? "bg-slate-mid/30 text-text-muted cursor-not-allowed"
-          : isNsfw
+          : isNsfwPack
             ? "bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:scale-105"
-            : "bg-slate-mid/50 text-text-secondary hover:bg-slate-mid hover:scale-105"
+            : isNsfwHide
+              ? "bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:scale-105"
+              : "bg-slate-mid/50 text-text-secondary hover:bg-slate-mid hover:scale-105"
       )}
     >
       + {tag}
