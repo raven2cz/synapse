@@ -704,66 +704,252 @@ INLINE RESOLVE (progressive disclosure):
 
 ### Phase 2: AI-enhanced resolution + UI
 
-**Cil:** MCP-enabled AI. DependencyResolverModal s Preview Analysis tabem.
+**Cil:** MCP-enabled AI dependency resolution. DependencyResolverModal s Preview Analysis tabem.
 
-**Deliverables:**
+**DULEZITE:** Tato faze pridava AI vrstvu (E7) nad existujici E1-E6 evidence providers z Phase 0/1.
+AI NIKDY neprebije hash match (TIER-1). AI ceiling = 0.89. Prompty MUSI byt v konfiguracnich
+souborech (skills), NE hardcoded v Python kodu.
 
-1. **MCP-enabled task execution** v AvatarTaskService
-   - mcp_servers predavane do AvatarEngine
-   - Timeout management (delsi nez pure prompt)
+---
 
-2. **search_huggingface MCP tool** — novy
-   - Sirsi nez browse.py (ne jen diffusers)
-   - Filename search, model card inspection
-   - LFS pointer SHA256 fetch
+#### Phase 2 — Implementacni bloky
 
-3. **dependency_resolution task** — `src/avatar/tasks/`
-   - Input: pack metadata, dep info, evidence z E1-E6, preview hints
-   - MCP: search_civitai + search_huggingface (dle eligibility)
-   - Cross-reference, AI ceiling = 0.89
-   - Pokud vice AI provideru: fallback chain (zkusit dalsi pri failure)
+##### BLOK A: Skill soubory (konfigurace — prompty + domain knowledge)
 
-4. **suggest_resolution() s AI** — rozsirit resolve_service
-   - E1-E6 jako dosud
-   - Pokud can_use_ai() AND zadny TIER-1/2 kandidat:
-     - dependency_resolution task
-     - Merge + re-rank (provenance grouping zachovano)
+Prompty pro AI ziji v `config/avatar/skills/*.md`. System je nacita dynamicky pres
+`src/avatar/skills.py` → `load_skills(skill_names)` → predava do `AITask.build_system_prompt()`.
+Uzivatel je muze editovat bez zmeny kodu. Custom override: `~/.synapse/avatar/custom-skills/`.
 
-5. **DependencyResolverModal** (nahrazuje BaseModelResolverModal)
-   - Generic: dep_id + AssetKind
-   - Candidates list s tier badges, evidence, compatibility warnings
-   - 5 tabu: AI, Preview Analysis, Local, Civitai, HF (dle eligibility)
-   - useAvatarAvailable() pro AI tab visibility
-   - HF tab jen pokud kind je HF eligible
-   - UI posila typed IDs (model_id, version_id) — ne jen download_url (Codex P1 #2)
+| # | Soubor | Stav | Popis |
+|---|--------|------|-------|
+| A1 | `config/avatar/skills/model-resolution.md` | ❌ NEEXISTUJE | **HLAVNI prompt pro AI dependency resolution.** Viz obsah nize. |
+| A2 | `config/avatar/skills/dependency-resolution.md` | ✅ Existuje (40 radku) | Obecny popis asset dependency modelu. Pouziva se jako reference knowledge. |
+| A3 | `config/avatar/skills/model-types.md` | ✅ Existuje (32 radku) | Base model architectures (SD1.5, SDXL, Flux, Pony). Reference knowledge. |
+| A4 | `config/avatar/skills/civitai-integration.md` | ✅ Existuje (70 radku) | Civitai API docs, CDN patterns. Reference knowledge. |
 
-6. **Preview Analysis tab:**
-   - Preview image grid
-   - Klik → metadata extrakce (API meta + PNG)
-   - Kind-aware zobrazeni, unresolvable oznaceni
-   - "Use this model" → create candidate + apply
+**A1 — `model-resolution.md` MUSI obsahovat:**
 
-7. **HF search endpoint rozsireni** — browse.py
-   - Ne jen diffusers filter
-   - Single-file repo support
+```
+1. UCEL: Co AI dela — analyzuje pack metadata + evidence z E1-E6, hleda na Civitai/HF,
+   vraci strukturovane kandidaty s confidence.
 
-8. **Gates (z Phase 1 odlozene):**
-   - `can_use_ai()` gate
-   - Fix BUG 5: TS union + incompatible
-   - Fix BUG 6: AI gate available
+2. INPUT FORMAT: JSON schema vstupu — pack info, dependency info, existing evidence,
+   preview hints. Presne klice a typy.
 
-9. **Konfigurovatelny auto-apply threshold** v store.yaml (hard-coded 0.15 z Phase 1)
+3. INSTRUKCE PRO AI:
+   - Jak interpretovat evidence z E1-E6 (co je silny signal, co slaby)
+   - Jak formulovat search queries pro Civitai/HF MCP tools
+   - Kdy pouzit search_civitai vs search_huggingface (dle AssetKind eligibility tabulky)
+   - Jak cross-referencovat vysledky z vice zdroju
+   - Confidence pravidla: AI ceiling 0.89, jak stanovit confidence dle kvality dukazu
 
-10. **Enriched AI context** pro extract_parameters() — structured metadata (base_model, trigger_words)
+4. OUTPUT FORMAT: Presny JSON schema vystupu — List[{display_name, provider, strategy,
+   civitai/hf identifikatory, confidence, reasoning}]. Kazde pole vysvetleno.
 
-11. **Cache binding** — apply kontroluje pack_name+dep_id v cached candidates (Codex P1 #3)
+5. FEW-SHOT PRIKLADY: 2-3 kompletni priklady (input → output):
+   - Priklad 1: LoRA s preview hinting "illustriousXL" → nalezeny checkpoint na Civitai
+   - Priklad 2: Checkpoint bez hints → AI hleda dle popisu, nalezne na HF
+   - Priklad 3: Zadne vysledky → prazdny output, AI nepridava falsepositive
 
-12. **DRY: auto-apply helper** — konsolidace logiky z _post_import_resolve a migrate_resolve_deps (Gemini P1 #2)
+6. PRAVIDLA A OMEZENI:
+   - NIKDY nevracet confidence > 0.89
+   - NIKDY neinventovat vysledky — pokud nenajdes, vrat prazdny seznam
+   - VZDY uvest reasoning proc dany model vybral
+   - Preferovat konkretni signaly (filename, hash) nad obecnymi (base_model kategorie)
+```
 
-**Testy:**
-- Unit: dependency_resolution task, MCP engine, search_huggingface, Preview Analysis
+**POZN:** Presny obsah tohoto souboru je KRITICKA designova rozhodnuti. Musi byt navrzen
+spolecne s uzivatelem a otestovan na realnych datech pred implementaci dalsich bloku.
+
+##### BLOK B: MCP tools (kod — nastroje, ktere AI pouziva)
+
+AI pres MCP protokol vola nastroje registrovane v `src/avatar/mcp/store_server.py`.
+Existujici MCP tools (21 kusu) jsou vsechny PLNE implementovane — zadne mocky.
+
+| # | Tool | Stav | Popis |
+|---|------|------|-------|
+| B1 | `search_civitai` | ✅ Existuje | Civitai search. Overit zda output format vraci model_id, version_id, file_id (pro typed CivitaiSelector). |
+| B2 | `search_huggingface` | ❌ NEEXISTUJE | **NOVY MCP tool.** HF API search, filename search, model card inspection, LFS pointer SHA256 fetch. Sirsi nez browse.py (ne jen diffusers filter). |
+| B3 | `find_model_by_hash` | ✅ Existuje | Hash lookup. Overit zda podporuje HF LFS pointery vedle Civitai. |
+| B4 | `suggest_asset_sources` | ✅ Existuje | Zdroje pro stazeni assetu. Muze byt uzitecne pro AI jako doplnkovy tool. |
+
+**B2 — `search_huggingface` MUSI podporovat:**
+- HF Hub API search (models endpoint) — ne jen diffusers pipeline filter
+- Filename search v HF repo (tree endpoint) — pro single-file repo (safetensors, ckpt)
+- Model card inspection (README.md) — base model info, tags
+- LFS pointer SHA256 fetch — pro hash matching (E1 evidence na HF)
+- Input: query string, optional filters (pipeline_tag, tags, library)
+- Output: seznam vysledku s repo_id, filenames, sizes, hashes, tags
+- Rate limiting a error handling
+
+##### BLOK C: Avatar task system rozsireni (kod)
+
+Existujici system: `AITask` ABC → `SKILL_NAMES` → skills loading → `build_system_prompt()` →
+LLM volani → `parse_result()` → `validate_output()`. Registrace v `TaskRegistry`.
+Engine vytvaren per-task v `AvatarTaskService._ensure_engine_for_task()`.
+
+| # | Soubor | Stav | Zmena |
+|---|--------|------|-------|
+| C1 | `src/avatar/tasks/base.py` | ✅ Existuje | **ROZSIRIT:** Pridat `needs_mcp: bool = False` a `timeout_s: int = 120` na `AITask` ABC |
+| C2 | `src/avatar/task_service.py` | ✅ Existuje | **ROZSIRIT:** V `_ensure_engine_for_task()` predavat `mcp_servers` do `AvatarEngine` pokud `task.needs_mcp == True`. Predavat `timeout=task.timeout_s`. |
+| C3 | `src/avatar/tasks/dependency_resolution.py` | ❌ NEEXISTUJE | **NOVY AITask subclass.** Viz design nize. |
+| C4 | `src/avatar/tasks/registry.py` | ✅ Existuje | **ROZSIRIT:** Pridat `DependencyResolutionTask()` do default registry. |
+
+**C3 — `DependencyResolutionTask` design:**
+
+```python
+class DependencyResolutionTask(AITask):
+    task_type = "dependency_resolution"
+    SKILL_NAMES = ("model-resolution", "dependency-resolution", "model-types", "civitai-integration")
+    needs_mcp = True          # AI pouziva search_civitai + search_huggingface MCP tools
+    timeout_s = 180           # MCP volani jsou pomalejsi nez pure prompt
+
+    def build_system_prompt(self, skills_content: str) -> str:
+        # skills_content = concatenace VSECH 4 skill souboru (nactenych dynamicky)
+        # Task NEPRIDAVA vlastni hardcoded prompt — VSECHEN prompt je ve skill souborech
+        return skills_content
+
+    def parse_result(self, raw_output: Dict) -> Dict:
+        # Mapuje AI JSON output → strukturovany format pro AIEvidenceProvider:
+        # - Extrahuje candidates[] z AI vystupu
+        # - Pro kazdy: display_name, provider (civitai/hf), confidence, reasoning
+        # - Pro civitai: model_id, version_id, file_id
+        # - Pro hf: repo_id, filename
+        # - Orizne confidence na max 0.89 (AI ceiling)
+        ...
+
+    def validate_output(self, output: Any) -> bool:
+        # Overuje:
+        # - output je dict s klicem "candidates" (list)
+        # - Kazdy kandidat ma povinne fieldy: display_name, confidence, reasoning
+        # - confidence je float v rozmezi 0.0-0.89
+        # - provider je "civitai" | "huggingface" | None
+        ...
+
+    def get_fallback(self) -> None:
+        return None  # Zadny fallback — E1-E6 evidence providers uz bezi nezavisle na AI
+```
+
+**KRITICKE:** `build_system_prompt()` NEMA pridavat vlastni hardcoded text. VSECHEN prompt
+obsah musi byt v skill souborech (`config/avatar/skills/`), aby sel editovat bez zmeny kodu.
+Jedina vyjimka: formatovani input dat (pack metadata) do promptu — to je v kodu, protoze
+je to strukturovana data transformace, ne prompt engineering.
+
+##### BLOK D: AIEvidenceProvider (kod — napojeni AI do resolve pipeline)
+
+| # | Soubor | Stav | Zmena |
+|---|--------|------|-------|
+| D1 | `src/store/evidence_providers.py` | ✅ Existuje (5 provideru) | **PRIDAT 6. provider:** `AIEvidenceProvider` |
+| D2 | `can_use_ai()` gate funkce | ❌ NEEXISTUJE | Funkce: je avatar dostupny? Je AI povoleno? |
+
+**D1 — AIEvidenceProvider design (ze sekce 11d):**
+
+```python
+class AIEvidenceProvider:
+    """E7: AI analysis via MCP-backed DependencyResolutionTask. Ceiling 0.89."""
+    tier = 2  # AI muze dosahnout az TIER-2 (0.75-0.89)
+
+    def __init__(self, avatar_getter: Callable[[], Optional[AvatarTaskService]]):
+        self._get_avatar = avatar_getter
+
+    def supports(self, ctx: ResolveContext) -> bool:
+        avatar = self._get_avatar()
+        return avatar is not None and can_use_ai()
+
+    def gather(self, ctx: ResolveContext) -> ProviderResult:
+        avatar = self._get_avatar()
+        if avatar is None:
+            return ProviderResult(error="Avatar not available")
+
+        # Sestavi input pro task z kontextu:
+        # - pack.name, pack.base_model, pack.description, pack.tags
+        # - dependency: id, kind, existing selector, existing evidence z E1-E6
+        # - preview_hints (filenames, kinds)
+        input_data = _build_ai_input(ctx)
+
+        result = avatar.execute_task("dependency_resolution", input_data)
+
+        if not result.success:
+            return ProviderResult(error=result.error)
+
+        # Mapuje AI output → List[EvidenceHit]
+        hits = _map_ai_result_to_hits(result.output, ctx)
+        return ProviderResult(hits=hits)
+```
+
+**D2 — `can_use_ai()` gate:**
+- Kontroluje: `avatar_getter()` vraci ne-None
+- Kontroluje: avatar config povoluje AI (napr. `avatar.yaml` enable flag)
+- Volano z: `AIEvidenceProvider.supports()`, UI (`useAvatarAvailable()` hook)
+- Umisteni: `src/store/resolve_service.py` nebo `src/avatar/__init__.py`
+
+##### BLOK E: ResolveService rozsireni (kod — AI merge do suggest pipeline)
+
+| # | Soubor | Stav | Zmena |
+|---|--------|------|-------|
+| E1 | `src/store/resolve_service.py` | ✅ Existuje | **ROZSIRIT suggest():** Pokud `include_ai=True` a zadny TIER-1/2 kandidat z E1-E6, pustit AIEvidenceProvider. Merge + re-rank vysledky. |
+| E2 | Auto-apply threshold | Hard-coded 0.15 | **PRESUNOUT** do `store.yaml` jako `resolve.auto_apply_margin: 0.15` |
+| E3 | AI confidence ceiling | Hard-coded 0.89 | **DEFINOVAT** v `resolve_config.py` jako `AI_CONFIDENCE_CEILING = 0.89` |
+| E4 | DRY auto-apply helper | Duplicitni logika | **KONSOLIDOVAT** `_post_import_resolve()` a `migrate_resolve_deps()` do sdilene helper funkce |
+| E5 | Cache binding | Chybi | **PRIDAT** apply kontroluje `pack_name+dep_id` v cached candidates (Codex P1 #3) |
+
+##### BLOK F: UI — DependencyResolverModal + inline resolve (frontend)
+
+| # | Soubor | Stav | Zmena |
+|---|--------|------|-------|
+| F1 | `DependencyResolverModal.tsx` | ❌ NEEXISTUJE | **NOVY modal** — nahrazuje BaseModelResolverModal. Generic: dep_id + AssetKind. 5 tabu. Design v sekci 11k. |
+| F2 | `usePackData.ts` | ✅ Existuje | **ROZSIRIT:** suggest/apply/applyAndDownload mutace. Design v sekci 11k+11l. |
+| F3 | `PackDependenciesSection.tsx` | ✅ Existuje | **ROZSIRIT:** Inline resolve UI — candidates, Apply, Apply & Download, More options. Design v sekci 11l. |
+| F4 | `PackDetailPage.tsx` | ✅ Existuje | **ROZSIRIT:** Orchestrace apply+download, eager suggest pro unresolved deps. Design v sekci 11l. |
+| F5 | `useAvatarAvailable()` hook | ❌ NEEXISTUJE | **NOVY hook** — kontroluje zda AI tab ma byt viditelny. Volá backend `can_use_ai()`. |
+| F6 | TS typy pro resolve | Chybi | **PRIDAT:** ResolutionCandidate, SuggestResult, ApplyResult, ManualResolveData do frontend types.ts |
+| F7 | BUG 5: TS union + incompatible | ❌ | Fix TypeScript typy pro dependency resolution stav |
+| F8 | BUG 6: AI gate v UI | ❌ | UI respektuje `can_use_ai()` — skryva AI tab pokud nedostupny |
+| F9 | HF tab | ❌ | Jen pokud AssetKind je HF-eligible (tabulka v 2c) |
+
+##### BLOK G: HF search backend rozsireni
+
+| # | Soubor | Stav | Zmena |
+|---|--------|------|-------|
+| G1 | `src/clients/huggingface.py` nebo `browse.py` | ✅ Existuje (browse.py) | **ROZSIRIT:** Ne jen diffusers filter. Single-file repo support. |
+| G2 | HF LFS pointer SHA256 | ❌ Chybi | Fetch SHA256 z HF LFS pointeru pro hash matching (E1 evidence na HF) |
+
+##### BLOK H: Konfigurace a konstanty
+
+| # | Co | Kde | Popis |
+|---|-----|-----|-------|
+| H1 | Provider eligibility matrix | `src/store/resolve_config.py` | Ktera AssetKind muze hledat na HF — tabulka z sekce 2c. Musi byt editovatelna (config, ne hardcoded). |
+| H2 | AI confidence ceiling | `src/store/resolve_config.py` | `AI_CONFIDENCE_CEILING = 0.89` |
+| H3 | Auto-apply margin | `store.yaml` | `resolve.auto_apply_margin: 0.15` |
+| H4 | AI timeout | `src/avatar/tasks/dependency_resolution.py` | `timeout_s = 180` (konfigurovatelne v budoucnu pres avatar.yaml) |
+
+---
+
+#### Phase 2 — Poradi implementace (doporucene)
+
+```
+1. BLOK A: Skill soubor model-resolution.md (spolecne s uzivatelem — prompt design)
+2. BLOK C: AITask rozsireni (base.py, task_service.py, dependency_resolution.py)
+3. BLOK B: search_huggingface MCP tool
+4. BLOK D: AIEvidenceProvider + can_use_ai()
+5. BLOK E: ResolveService AI merge, config, DRY helper
+6. BLOK H: Konfigurace a konstanty
+7. BLOK G: HF backend rozsireni
+8. BLOK F: UI — DependencyResolverModal + inline resolve
+```
+
+**POZN:** Bloky A-E jsou backend, testovatelne bez UI. Blok F (UI) je posledni, protoze
+zavisi na vsech backendovych blocich. Blok A (skill soubor) je PRVNI, protoze definuje
+co AI vlastne dela — bez nej nema smysl implementovat zbytek.
+
+---
+
+#### Phase 2 — Testy
+
+- Unit: dependency_resolution task, MCP engine, search_huggingface, AIEvidenceProvider, can_use_ai
 - Integration: suggest s AI mock, modal rendering, HF search, import s evidence ladder
 - Smoke: full AI resolve flow, multi-provider fallback, kompletni import z Civitai s resolve
+- Viz detailni test plan v sekci 11o
 
 ### Phase 3: Local binding + background scan + security
 
