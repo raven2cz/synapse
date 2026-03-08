@@ -263,6 +263,15 @@ class TestSourceMetaEvidenceProvider:
         assert result.hits == []
 
 
+def _make_task_result(success=True, output=None, error=None):
+    """Create a mock TaskResult matching avatar.tasks.base.TaskResult."""
+    tr = MagicMock()
+    tr.success = success
+    tr.output = output
+    tr.error = error
+    return tr
+
+
 class TestAIEvidenceProvider:
     def test_tier_is_2(self):
         assert AIEvidenceProvider(lambda: None).tier == 2
@@ -286,12 +295,15 @@ class TestAIEvidenceProvider:
 
     def test_caps_confidence_at_089(self):
         avatar = MagicMock()
-        avatar.execute_task.return_value = {
-            "candidates": [
-                {"key": "test:1", "name": "High conf", "confidence": 0.99,
-                 "model_id": 123, "reasoning": "test"},
-            ],
-        }
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {"display_name": "High conf", "provider": "civitai",
+                     "model_id": 123, "confidence": 0.99, "reasoning": "test"},
+                ],
+                "search_summary": "tested",
+            }
+        )
         p = AIEvidenceProvider(lambda: avatar)
         ctx = _make_context()
         result = p.gather(ctx)
@@ -301,7 +313,9 @@ class TestAIEvidenceProvider:
 
     def test_gather_calls_dependency_resolution_task(self):
         avatar = MagicMock()
-        avatar.execute_task.return_value = {"candidates": []}
+        avatar.execute_task.return_value = _make_task_result(
+            output={"candidates": [], "search_summary": ""}
+        )
 
         p = AIEvidenceProvider(lambda: avatar)
         ctx = _make_context()
@@ -310,6 +324,194 @@ class TestAIEvidenceProvider:
         avatar.execute_task.assert_called_once()
         call_args = avatar.execute_task.call_args
         assert call_args[0][0] == "dependency_resolution"
+        # Second arg is the formatted input text (string, not dict)
+        assert isinstance(call_args[0][1], str)
+        assert "PACK INFO:" in call_args[0][1]
+        assert "DEPENDENCY TO RESOLVE:" in call_args[0][1]
+
+    def test_gather_passes_structured_input(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={"candidates": [], "search_summary": ""}
+        )
+
+        pack = MagicMock()
+        pack.name = "test_lora_v2"
+        pack.type = "lora"
+        pack.base_model = "SDXL"
+        pack.description = "A test LoRA for portraits"
+        pack.tags = ["portrait", "anime"]
+
+        dep = MagicMock()
+        dep.selector = MagicMock()
+        dep.selector.base_model = "SDXL"
+        dep.expose = MagicMock()
+        dep.expose.filename = "sdxl_base.safetensors"
+
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context(pack=pack, dependency=dep, dep_id="base_ckpt")
+        p.gather(ctx)
+
+        input_text = avatar.execute_task.call_args[0][1]
+        assert "test_lora_v2" in input_text
+        assert "lora" in input_text
+        assert "SDXL" in input_text
+        assert "base_ckpt" in input_text
+        assert "sdxl_base.safetensors" in input_text
+
+    def test_gather_civitai_candidate_with_full_ids(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {
+                        "display_name": "Illustrious XL v0.1",
+                        "provider": "civitai",
+                        "model_id": 795765,
+                        "version_id": 889818,
+                        "file_id": 795432,
+                        "base_model": "Illustrious",
+                        "confidence": 0.85,
+                        "reasoning": "Strong match.",
+                    }
+                ],
+                "search_summary": "Found on Civitai.",
+            }
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        hit = result.hits[0]
+        assert hit.candidate.display_name == "Illustrious XL v0.1"
+        assert hit.candidate.provider_name == "civitai"
+        assert hit.candidate.selector.strategy == SelectorStrategy.CIVITAI_FILE
+        assert hit.candidate.selector.civitai.model_id == 795765
+        assert hit.candidate.selector.civitai.version_id == 889818
+        assert hit.candidate.selector.civitai.file_id == 795432
+        assert hit.item.confidence == 0.85
+        assert hit.item.source == "ai_analysis"
+        assert "civitai:795765:889818" in hit.candidate.key
+
+    def test_gather_civitai_candidate_without_version(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {
+                        "display_name": "Some model",
+                        "provider": "civitai",
+                        "model_id": 100,
+                        "version_id": None,
+                        "file_id": None,
+                        "confidence": 0.60,
+                        "reasoning": "Partial.",
+                    }
+                ],
+                "search_summary": "Searched.",
+            }
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        assert result.hits[0].candidate.selector.strategy == SelectorStrategy.CIVITAI_MODEL_LATEST
+
+    def test_gather_huggingface_candidate(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {
+                        "display_name": "SDXL Base (HF)",
+                        "provider": "huggingface",
+                        "repo_id": "stabilityai/stable-diffusion-xl-base-1.0",
+                        "filename": "sd_xl_base_1.0.safetensors",
+                        "revision": "main",
+                        "confidence": 0.72,
+                        "reasoning": "HF match.",
+                    }
+                ],
+                "search_summary": "Found on HF.",
+            }
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        hit = result.hits[0]
+        assert hit.candidate.provider_name == "huggingface"
+        assert hit.candidate.selector.strategy == SelectorStrategy.HUGGINGFACE_FILE
+        assert hit.candidate.selector.huggingface.repo_id == "stabilityai/stable-diffusion-xl-base-1.0"
+        assert hit.candidate.selector.huggingface.filename == "sd_xl_base_1.0.safetensors"
+        assert "hf:" in hit.candidate.key
+
+    def test_gather_mixed_providers(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {
+                        "display_name": "Civitai model",
+                        "provider": "civitai",
+                        "model_id": 100,
+                        "confidence": 0.85,
+                        "reasoning": "Civitai match.",
+                    },
+                    {
+                        "display_name": "HF model",
+                        "provider": "huggingface",
+                        "repo_id": "org/repo",
+                        "filename": "model.safetensors",
+                        "confidence": 0.72,
+                        "reasoning": "HF match.",
+                    },
+                ],
+                "search_summary": "Multi-provider.",
+            }
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 2
+        providers = {h.candidate.provider_name for h in result.hits}
+        assert providers == {"civitai", "huggingface"}
+
+    def test_gather_skips_invalid_candidates(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={
+                "candidates": [
+                    {"display_name": "No provider", "confidence": 0.50, "reasoning": "x"},
+                    {"display_name": "Unknown provider", "provider": "other",
+                     "confidence": 0.50, "reasoning": "x"},
+                    {"display_name": "Civitai no model_id", "provider": "civitai",
+                     "confidence": 0.50, "reasoning": "x"},
+                    {"display_name": "HF no repo", "provider": "huggingface",
+                     "filename": "x.safetensors", "confidence": 0.50, "reasoning": "x"},
+                ],
+                "search_summary": "All invalid.",
+            }
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+        assert len(result.hits) == 0
+
+    def test_gather_task_failure(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            success=False, error="Engine timeout"
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+        assert result.error is not None
+        assert "Engine timeout" in result.error
 
     def test_gather_handles_exception(self):
         avatar = MagicMock()
@@ -321,3 +523,36 @@ class TestAIEvidenceProvider:
 
         assert result.error is not None
         assert "AI crashed" in result.error
+
+    def test_gather_empty_candidates(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={"candidates": [], "search_summary": "Nothing found."}
+        )
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context()
+        result = p.gather(ctx)
+        assert result.hits == []
+
+    def test_gather_includes_preview_hints_in_input(self):
+        avatar = MagicMock()
+        avatar.execute_task.return_value = _make_task_result(
+            output={"candidates": [], "search_summary": ""}
+        )
+
+        hints = [
+            PreviewModelHint(
+                filename="realvisxl_v40.safetensors",
+                source_image="preview_001.png",
+                source_type="api_meta",
+                raw_value="RealVisXL V4.0",
+            ),
+        ]
+        p = AIEvidenceProvider(lambda: avatar)
+        ctx = _make_context(preview_hints=hints)
+        p.gather(ctx)
+
+        input_text = avatar.execute_task.call_args[0][1]
+        assert "PREVIEW HINTS:" in input_text
+        assert "realvisxl_v40.safetensors" in input_text
+        assert "RealVisXL V4.0" in input_text

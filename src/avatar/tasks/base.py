@@ -58,6 +58,12 @@ class AITask(ABC):
     # Immutable tuple of skill markdown file names (without .md extension)
     SKILL_NAMES: Tuple[str, ...] = ()
 
+    # Whether this task needs MCP tools (e.g., search_civitai, search_huggingface)
+    needs_mcp: bool = False
+
+    # Timeout in seconds for the AI engine (MCP tasks need more time)
+    timeout_s: int = 120
+
     @abstractmethod
     def build_system_prompt(self, skills_content: str) -> str:
         """Build complete system prompt: task instructions + skills knowledge.

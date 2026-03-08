@@ -316,13 +316,19 @@ class AvatarTaskService:
                 "See docs/avatar/getting-started.md for installation instructions."
             )
 
-        engine = AvatarEngine(
-            provider=self._provider,
-            model=self._model or None,
-            system_prompt=system_prompt,
-            timeout=120,
-            safety_instructions="unrestricted",
-        )
+        engine_kwargs: dict = {
+            "provider": self._provider,
+            "model": self._model or None,
+            "system_prompt": system_prompt,
+            "timeout": task.timeout_s,
+            "safety_instructions": "unrestricted",
+        }
+
+        # MCP-enabled tasks get access to MCP servers (e.g., search tools)
+        if task.needs_mcp and self.config.mcp_servers:
+            engine_kwargs["mcp_servers"] = self.config.mcp_servers
+
+        engine = AvatarEngine(**engine_kwargs)
         engine.start_sync()
         self._engine = engine
         self._current_task_type = task.task_type

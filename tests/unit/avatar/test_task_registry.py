@@ -146,10 +146,22 @@ class TestDefaultRegistry:
         assert task.task_type == "model_tagging"
         assert task.get_fallback() is not None
 
-    def test_default_registry_has_two_tasks(self):
-        """Default registry has both built-in tasks."""
+    def test_default_registry_has_dependency_resolution(self):
+        """Default registry auto-registers dependency_resolution."""
+        reg = get_default_registry()
+        assert "dependency_resolution" in reg.list_tasks()
+        task = reg.get("dependency_resolution")
+        assert task is not None
+        assert task.task_type == "dependency_resolution"
+        assert task.needs_mcp is True
+        assert task.timeout_s == 180
+        assert task.get_fallback() is None
+
+    def test_default_registry_has_three_tasks(self):
+        """Default registry has all built-in tasks."""
         reg = get_default_registry()
         tasks = reg.list_tasks()
-        assert len(tasks) == 2
+        assert len(tasks) == 3
         assert "parameter_extraction" in tasks
         assert "model_tagging" in tasks
+        assert "dependency_resolution" in tasks

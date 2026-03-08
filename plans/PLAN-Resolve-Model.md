@@ -789,10 +789,10 @@ Engine vytvaren per-task v `AvatarTaskService._ensure_engine_for_task()`.
 
 | # | Soubor | Stav | Zmena |
 |---|--------|------|-------|
-| C1 | `src/avatar/tasks/base.py` | ✅ Existuje | **ROZSIRIT:** Pridat `needs_mcp: bool = False` a `timeout_s: int = 120` na `AITask` ABC |
-| C2 | `src/avatar/task_service.py` | ✅ Existuje | **ROZSIRIT:** V `_ensure_engine_for_task()` predavat `mcp_servers` do `AvatarEngine` pokud `task.needs_mcp == True`. Predavat `timeout=task.timeout_s`. |
-| C3 | `src/avatar/tasks/dependency_resolution.py` | ❌ NEEXISTUJE | **NOVY AITask subclass.** Viz design nize. |
-| C4 | `src/avatar/tasks/registry.py` | ✅ Existuje | **ROZSIRIT:** Pridat `DependencyResolutionTask()` do default registry. |
+| C1 | `src/avatar/tasks/base.py` | ✅ HOTOVO | Pridano `needs_mcp: bool = False` a `timeout_s: int = 120` na `AITask` ABC |
+| C2 | `src/avatar/task_service.py` | ✅ HOTOVO | V `_ensure_engine_for_task()` predava `mcp_servers` + `timeout=task.timeout_s` do AvatarEngine |
+| C3 | `src/avatar/tasks/dependency_resolution.py` | ✅ HOTOVO | `DependencyResolutionTask` — 5 skill files, needs_mcp=True, timeout_s=180, confidence ceiling enforcement |
+| C4 | `src/avatar/tasks/registry.py` | ✅ HOTOVO | `DependencyResolutionTask()` zaregistrovan v default registry |
 
 **C3 — `DependencyResolutionTask` design:**
 
@@ -838,49 +838,16 @@ je to strukturovana data transformace, ne prompt engineering.
 
 | # | Soubor | Stav | Zmena |
 |---|--------|------|-------|
-| D1 | `src/store/evidence_providers.py` | ✅ Existuje (5 provideru) | **PRIDAT 6. provider:** `AIEvidenceProvider` |
-| D2 | `can_use_ai()` gate funkce | ❌ NEEXISTUJE | Funkce: je avatar dostupny? Je AI povoleno? |
+| D1 | `src/store/evidence_providers.py` | ✅ HOTOVO | `AIEvidenceProvider` prepsany: `_build_ai_input()` formatuje strukturovany text, `_ai_candidate_to_hit()` mapuje civitai+hf kandidaty na EvidenceHit, spravne pouziva `TaskResult` (ne raw dict) |
+| D2 | `can_use_ai()` gate funkce | ⚠️ ODLOZENO na Phase 2 UI | Zatim `supports()` kontroluje jen `avatar is not None`. Full gate s config flagy az pri UI integraci (Block F). |
 
-**D1 — AIEvidenceProvider design (ze sekce 11d):**
-
-```python
-class AIEvidenceProvider:
-    """E7: AI analysis via MCP-backed DependencyResolutionTask. Ceiling 0.89."""
-    tier = 2  # AI muze dosahnout az TIER-2 (0.75-0.89)
-
-    def __init__(self, avatar_getter: Callable[[], Optional[AvatarTaskService]]):
-        self._get_avatar = avatar_getter
-
-    def supports(self, ctx: ResolveContext) -> bool:
-        avatar = self._get_avatar()
-        return avatar is not None and can_use_ai()
-
-    def gather(self, ctx: ResolveContext) -> ProviderResult:
-        avatar = self._get_avatar()
-        if avatar is None:
-            return ProviderResult(error="Avatar not available")
-
-        # Sestavi input pro task z kontextu:
-        # - pack.name, pack.base_model, pack.description, pack.tags
-        # - dependency: id, kind, existing selector, existing evidence z E1-E6
-        # - preview_hints (filenames, kinds)
-        input_data = _build_ai_input(ctx)
-
-        result = avatar.execute_task("dependency_resolution", input_data)
-
-        if not result.success:
-            return ProviderResult(error=result.error)
-
-        # Mapuje AI output → List[EvidenceHit]
-        hits = _map_ai_result_to_hits(result.output, ctx)
-        return ProviderResult(hits=hits)
-```
-
-**D2 — `can_use_ai()` gate:**
-- Kontroluje: `avatar_getter()` vraci ne-None
-- Kontroluje: avatar config povoluje AI (napr. `avatar.yaml` enable flag)
-- Volano z: `AIEvidenceProvider.supports()`, UI (`useAvatarAvailable()` hook)
-- Umisteni: `src/store/resolve_service.py` nebo `src/avatar/__init__.py`
+**D1 — AIEvidenceProvider opravy (vs. puvodni stub):**
+- `execute_task()` prijima string, ne dict → `_build_ai_input(ctx)` formatuje PACK INFO + DEPENDENCY + PREVIEW HINTS
+- Vysledek je `TaskResult` dataclass, ne dict → `task_result.success`, `task_result.output`
+- Podpora Civitai i HuggingFace kandidatu → `_ai_candidate_to_hit()` routi dle `provider`
+- CIVITAI_FILE strategie pokud mame `version_id` + `file_id`, jinak CIVITAI_MODEL_LATEST
+- Dedup key: `civitai:{model_id}:{version_id}` nebo `hf:{repo_id}:{filename}`
+- 18 unit testu v `tests/unit/store/test_evidence_providers.py`
 
 ##### BLOK E: ResolveService rozsireni (kod — AI merge do suggest pipeline)
 

@@ -58,9 +58,11 @@ def get_default_registry() -> TaskRegistry:
     if not _default_registry_initialized:
         with _default_registry_lock:
             if not _default_registry_initialized:
+                from .dependency_resolution import DependencyResolutionTask
                 from .model_tagging import ModelTaggingTask
                 from .parameter_extraction import ParameterExtractionTask
                 _default_registry.register(ParameterExtractionTask())
                 _default_registry.register(ModelTaggingTask())
+                _default_registry.register(DependencyResolutionTask())
                 _default_registry_initialized = True
     return _default_registry

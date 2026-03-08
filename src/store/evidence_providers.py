@@ -308,59 +308,60 @@ class SourceMetaEvidenceProvider:
 
 
 class AIEvidenceProvider:
-    """E7: AI-assisted analysis (MCP-backed). Ceiling 0.89."""
+    """E7: AI-assisted analysis (MCP-backed). Ceiling 0.89.
 
-    tier = 2  # AI can be up to Tier 2
+    Delegates to AvatarTaskService.execute_task("dependency_resolution", ...)
+    which uses MCP tools (search_civitai, analyze_civitai_model,
+    search_huggingface, find_model_by_hash) to find matching models.
+
+    Input is formatted as structured text matching the format expected by
+    config/avatar/skills/model-resolution.md.
+    """
+
+    tier = 2  # AI can reach up to Tier 2
 
     def __init__(self, avatar_getter: Callable):
         self._get_avatar = avatar_getter
 
     def supports(self, ctx: ResolveContext) -> bool:
-        avatar = self._get_avatar()
-        return avatar is not None
+        return self._get_avatar() is not None
 
     def gather(self, ctx: ResolveContext) -> ProviderResult:
-        """Delegate to AI task service for dependency resolution."""
+        """Build structured input, call AI task, convert candidates to hits."""
         avatar = self._get_avatar()
         if avatar is None:
             return ProviderResult(error="Avatar not available")
 
         try:
-            result = avatar.execute_task("dependency_resolution", {
-                "pack_name": getattr(ctx.pack, "name", ""),
-                "dep_id": ctx.dep_id,
-                "kind": ctx.kind.value if ctx.kind else "unknown",
-            })
+            input_text = _build_ai_input(ctx)
+            task_result = avatar.execute_task("dependency_resolution", input_text)
+
+            if not task_result.success:
+                return ProviderResult(
+                    error=f"AI task failed: {task_result.error}",
+                    warnings=[f"AI analysis failed: {task_result.error}"],
+                )
+
+            output = task_result.output
+            if not isinstance(output, dict):
+                return ProviderResult(warnings=["AI returned non-dict output"])
+
+            candidates = output.get("candidates", [])
+            if not isinstance(candidates, list):
+                return ProviderResult(warnings=["AI returned invalid candidates"])
 
             hits = []
-            if result and isinstance(result, dict):
-                candidates = result.get("candidates", [])
-                for c in candidates:
-                    confidence = min(float(c.get("confidence", 0.5)), AI_CONFIDENCE_CEILING)
-                    seed = CandidateSeed(
-                        key=f"ai:{c.get('key', 'unknown')}",
-                        selector=DependencySelector(
-                            strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
-                            civitai=CivitaiSelector(
-                                model_id=c.get("model_id", 0),
-                            ),
-                        ),
-                        display_name=c.get("name", "AI suggestion"),
-                        provider_name="civitai",
-                    )
-                    hits.append(EvidenceHit(
-                        candidate=seed,
-                        provenance=f"ai:{ctx.dep_id}",
-                        item=EvidenceItem(
-                            source="ai_analysis",
-                            description=c.get("reasoning", "AI analysis"),
-                            confidence=confidence,
-                            raw_value=str(c),
-                        ),
-                    ))
+            for c in candidates:
+                hit = _ai_candidate_to_hit(c, ctx.dep_id)
+                if hit:
+                    hits.append(hit)
 
-            return ProviderResult(hits=hits)
+            summary = output.get("search_summary", "")
+            warnings = [f"AI search: {summary}"] if summary else []
+
+            return ProviderResult(hits=hits, warnings=warnings)
         except Exception as e:
+            logger.warning("[ai-provider] gather failed: %s", e, exc_info=True)
             return ProviderResult(error=f"AI analysis failed: {e}")
 
 
@@ -463,3 +464,140 @@ def _alias_to_hit(alias_key: str, alias_target: dict) -> Optional[EvidenceHit]:
             )
 
     return None
+
+
+# --- AI helpers ---
+
+def _build_ai_input(ctx: ResolveContext) -> str:
+    """Build structured text input for the AI dependency resolution task.
+
+    Matches the format expected by config/avatar/skills/model-resolution.md.
+    """
+    pack = ctx.pack
+    dep = ctx.dependency
+    kind = ctx.kind.value if ctx.kind else "unknown"
+
+    lines = ["PACK INFO:"]
+    lines.append(f"  name: {getattr(pack, 'name', 'unknown')}")
+    lines.append(f"  type: {getattr(pack, 'type', 'unknown')}")
+    lines.append(f"  base_model: {getattr(pack, 'base_model', None)}")
+
+    desc = getattr(pack, 'description', '') or ''
+    lines.append(f"  description: {desc[:500]}")
+
+    tags = getattr(pack, 'tags', []) or []
+    lines.append(f"  tags: [{', '.join(str(t) for t in tags[:20])}]")
+
+    lines.append("")
+    lines.append("DEPENDENCY TO RESOLVE:")
+    lines.append(f"  id: {ctx.dep_id}")
+    lines.append(f"  kind: {kind}")
+
+    # hint: base_model from selector or pack-level base_model
+    selector = getattr(dep, 'selector', None)
+    hint = None
+    if selector:
+        hint = getattr(selector, 'base_model', None)
+    if not hint:
+        hint = getattr(pack, 'base_model', None)
+    lines.append(f"  hint: {hint}")
+
+    expose = getattr(dep, 'expose', None)
+    expose_fn = getattr(expose, 'filename', None) if expose else None
+    lines.append(f"  expose_filename: {expose_fn}")
+
+    # Preview hints
+    if ctx.preview_hints:
+        lines.append("")
+        lines.append("PREVIEW HINTS:")
+        for hint_item in ctx.preview_hints:
+            src = getattr(hint_item, 'source_image', 'unknown')
+            fn = getattr(hint_item, 'filename', '')
+            raw = getattr(hint_item, 'raw_value', '')
+            lines.append(f"  - {src}: model=\"{fn}\", raw=\"{raw}\"")
+    else:
+        lines.append("")
+        lines.append("EXISTING EVIDENCE (from rule-based providers):")
+        lines.append("  (none)")
+
+    return "\n".join(lines)
+
+
+def _ai_candidate_to_hit(
+    candidate: dict, dep_id: str
+) -> Optional[EvidenceHit]:
+    """Convert a single AI candidate dict to an EvidenceHit.
+
+    Supports both civitai and huggingface providers.
+    """
+    if not isinstance(candidate, dict):
+        return None
+
+    provider = candidate.get("provider", "")
+    display_name = candidate.get("display_name", "AI suggestion")
+    confidence = candidate.get("confidence", 0.0)
+    reasoning = candidate.get("reasoning", "AI analysis")
+
+    if not isinstance(confidence, (int, float)):
+        confidence = 0.0
+    confidence = min(float(confidence), AI_CONFIDENCE_CEILING)
+
+    if provider == "civitai":
+        model_id = candidate.get("model_id")
+        if not model_id:
+            return None
+        version_id = candidate.get("version_id")
+        file_id = candidate.get("file_id")
+
+        # Use CIVITAI_FILE if we have version+file, otherwise CIVITAI_MODEL_LATEST
+        if version_id and file_id:
+            strategy = SelectorStrategy.CIVITAI_FILE
+        else:
+            strategy = SelectorStrategy.CIVITAI_MODEL_LATEST
+
+        seed = CandidateSeed(
+            key=f"civitai:{model_id}:{version_id or 'latest'}",
+            selector=DependencySelector(
+                strategy=strategy,
+                civitai=CivitaiSelector(
+                    model_id=model_id,
+                    version_id=version_id,
+                    file_id=file_id,
+                ),
+            ),
+            display_name=display_name,
+            provider_name="civitai",
+        )
+    elif provider == "huggingface":
+        from .models import HuggingFaceSelector
+        repo_id = candidate.get("repo_id")
+        filename = candidate.get("filename")
+        if not repo_id or not filename:
+            return None
+
+        seed = CandidateSeed(
+            key=f"hf:{repo_id}:{filename}",
+            selector=DependencySelector(
+                strategy=SelectorStrategy.HUGGINGFACE_FILE,
+                huggingface=HuggingFaceSelector(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=candidate.get("revision", "main"),
+                ),
+            ),
+            display_name=display_name,
+            provider_name="huggingface",
+        )
+    else:
+        return None
+
+    return EvidenceHit(
+        candidate=seed,
+        provenance=f"ai:{dep_id}",
+        item=EvidenceItem(
+            source="ai_analysis",
+            description=reasoning,
+            confidence=confidence,
+            raw_value=str(candidate),
+        ),
+    )
