@@ -324,6 +324,15 @@ class AvatarTaskService:
             "safety_instructions": "unrestricted",
         }
 
+        # Pass provider-specific config (permission_mode, allowed_tools, etc.)
+        # AvatarEngine reads these from kwargs when config object is not passed.
+        raw_provider_cfg = self.config._raw.get(self._provider, {})
+        if isinstance(raw_provider_cfg, dict):
+            for key in ("permission_mode", "allowed_tools", "additional_dirs",
+                        "approval_mode", "strict_mcp_config"):
+                if key in raw_provider_cfg:
+                    engine_kwargs[key] = raw_provider_cfg[key]
+
         # MCP-enabled tasks get access to MCP servers (e.g., search tools)
         if task.needs_mcp and self.config.mcp_servers:
             engine_kwargs["mcp_servers"] = self.config.mcp_servers

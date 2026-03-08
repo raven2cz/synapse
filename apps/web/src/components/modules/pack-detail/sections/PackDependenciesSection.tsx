@@ -83,6 +83,7 @@ export interface PackDependenciesSectionProps {
   onDeleteResource: (assetName: string) => void
   onOpenBaseModelResolver: () => void
   onResolvePack: () => void
+  onOpenDependencyResolver?: (asset: AssetInfo) => void
   onSetAsBaseModel?: (asset: AssetInfo) => void
 
   /**
@@ -331,6 +332,7 @@ interface AssetRowProps {
   onDeleteResource: (assetName: string) => void
   onOpenBaseModelResolver: () => void
   onResolvePack: () => void
+  onOpenDependencyResolver?: (asset: AssetInfo) => void
   onSetAsBaseModel?: (asset: AssetInfo) => void
   isResolvePending?: boolean
   isDeletePending?: boolean
@@ -347,6 +349,7 @@ function AssetRow({
   onDeleteResource,
   onOpenBaseModelResolver,
   onResolvePack,
+  onOpenDependencyResolver,
   onSetAsBaseModel,
   isResolvePending = false,
   isDeletePending = false,
@@ -509,10 +512,10 @@ function AssetRow({
             </button>
           )}
 
-          {/* Resolve button */}
+          {/* Resolve button — opens per-asset resolver if available, otherwise pack-level */}
           {!isBaseModel && needsResolve && !isSuggested && !isResolvePending && (
             <button
-              onClick={onResolvePack}
+              onClick={() => onOpenDependencyResolver ? onOpenDependencyResolver(asset) : onResolvePack()}
               className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
               title={t('pack.dependencies.reResolve')}
             >
@@ -603,6 +606,7 @@ export function PackDependenciesSection({
   onDeleteResource,
   onOpenBaseModelResolver,
   onResolvePack,
+  onOpenDependencyResolver,
   onSetAsBaseModel,
   isDownloadAllPending = false,
   isResolvePending = false,
@@ -671,6 +675,7 @@ export function PackDependenciesSection({
               onDeleteResource={onDeleteResource}
               onOpenBaseModelResolver={onOpenBaseModelResolver}
               onResolvePack={onResolvePack}
+              onOpenDependencyResolver={onOpenDependencyResolver}
               onSetAsBaseModel={onSetAsBaseModel}
               isResolvePending={isResolvePending}
               isDeletePending={isDeletePending}
@@ -702,6 +707,7 @@ export function PackDependenciesSection({
                   onDeleteResource={onDeleteResource}
                   onOpenBaseModelResolver={onOpenBaseModelResolver}
                   onResolvePack={onResolvePack}
+                  onOpenDependencyResolver={onOpenDependencyResolver}
                   onSetAsBaseModel={onSetAsBaseModel}
                   isResolvePending={isResolvePending}
                   isDeletePending={isDeletePending}

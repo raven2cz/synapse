@@ -124,6 +124,17 @@ def get_kind_config(kind: AssetKind) -> AssetKindConfig:
     ))
 
 
+# Convenience set: asset kinds eligible for HuggingFace search
+HF_ELIGIBLE_KINDS: FrozenSet[AssetKind] = frozenset(
+    kind for kind, cfg in ASSET_KIND_CONFIG.items() if cfg.hf_eligible
+)
+
+# Auto-apply margin: minimum confidence gap between top-1 and top-2 candidate
+# for automatic resolution during import. Candidates within this margin
+# are presented to user for manual selection.
+AUTO_APPLY_MARGIN = 0.15
+
+
 # =============================================================================
 # Cross-Kind Compatibility Rules
 # =============================================================================

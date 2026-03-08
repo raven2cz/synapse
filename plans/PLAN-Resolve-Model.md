@@ -628,9 +628,9 @@ INLINE RESOLVE (progressive disclosure):
 - ✅ `Store.migrate_resolve_deps(dry_run=True/False)` — migration helper pro stare packy
 
 **Gates:** ❌ Phase 2
-14. ❌ `can_use_ai()` gate — Phase 2
-15. ❌ Fix BUG 5: TS union + incompatible — Phase 2
-16. ❌ Fix BUG 6: AI gate available — Phase 2
+14. ✅ `can_use_ai()` gate — useAvatarAvailable hook + AI tab visibility in DependencyResolverModal
+15. ✅ Fix BUG 5: TS union + incompatible — AvatarStatus.state includes 'incompatible', engine_min_version added
+16. ✅ Fix BUG 6: AI gate available — Layout.tsx gates on `available === true` instead of `enabled !== false`
 
 **Testy:** ✅ 291 TESTU (+ 2 calibration external)
 - ✅ Unit: modely (22), config (37), validation (26), scoring (23), hash_cache (15), evidence_providers (34), resolve_service (19), preview_extractor (27)
@@ -863,15 +863,15 @@ je to strukturovana data transformace, ne prompt engineering.
 
 | # | Soubor | Stav | Zmena |
 |---|--------|------|-------|
-| F1 | `DependencyResolverModal.tsx` | ❌ NEEXISTUJE | **NOVY modal** — nahrazuje BaseModelResolverModal. Generic: dep_id + AssetKind. 5 tabu. Design v sekci 11k. |
-| F2 | `usePackData.ts` | ✅ Existuje | **ROZSIRIT:** suggest/apply/applyAndDownload mutace. Design v sekci 11k+11l. |
-| F3 | `PackDependenciesSection.tsx` | ✅ Existuje | **ROZSIRIT:** Inline resolve UI — candidates, Apply, Apply & Download, More options. Design v sekci 11l. |
-| F4 | `PackDetailPage.tsx` | ✅ Existuje | **ROZSIRIT:** Orchestrace apply+download, eager suggest pro unresolved deps. Design v sekci 11l. |
-| F5 | `useAvatarAvailable()` hook | ❌ NEEXISTUJE | **NOVY hook** — kontroluje zda AI tab ma byt viditelny. Volá backend `can_use_ai()`. |
-| F6 | TS typy pro resolve | Chybi | **PRIDAT:** ResolutionCandidate, SuggestResult, ApplyResult, ManualResolveData do frontend types.ts |
-| F7 | BUG 5: TS union + incompatible | ❌ | Fix TypeScript typy pro dependency resolution stav |
-| F8 | BUG 6: AI gate v UI | ❌ | UI respektuje `can_use_ai()` — skryva AI tab pokud nedostupny |
-| F9 | HF tab | ❌ | Jen pokud AssetKind je HF-eligible (tabulka v 2c) |
+| F1 | `DependencyResolverModal.tsx` | ✅ IMPL+INTEG | **NOVY modal** — 5 tabu (Candidates, Preview, AI Resolve, Civitai, HF). CandidateCard, EvidenceGroups, confidence tiers. Integrovan v PackDetailPage. |
+| F2 | `usePackData.ts` | ✅ IMPL+INTEG | **ROZSIRENO:** suggestResolution, applyResolution, applyAndDownload mutace. isSuggesting/isApplying/isApplyingAndDownloading states. |
+| F3 | `PackDependenciesSection.tsx` | ✅ IMPL+INTEG | **ROZSIRENO:** onOpenDependencyResolver prop, per-asset resolve button opens modal (fallback to onResolvePack). |
+| F4 | `PackDetailPage.tsx` | ✅ IMPL+INTEG | **ROZSIRENO:** Resolver state, handlers (open/suggest/apply/applyAndDownload), eager suggest, DependencyResolverModal JSX, useAvatarAvailable. |
+| F5 | `useAvatarAvailable()` hook | ✅ IMPL+INTEG | **NOVY hook** — kontroluje avatarStatus.available via TanStack Query. Exportovan z hooks/index.ts. |
+| F6 | TS typy pro resolve | ✅ IMPL+INTEG | **PRIDANO:** ResolutionCandidate, SuggestResult, ApplyResult, EvidenceItemInfo, EvidenceGroupInfo, ConfidenceLevel, HF_ELIGIBLE_KINDS do types.ts. |
+| F7 | BUG 5: TS union + incompatible | ✅ OPRAVENO | AvatarStatus.state union rozsiren o 'incompatible', pridano engine_min_version field (lib/avatar/api.ts). |
+| F8 | BUG 6: AI gate v UI | ✅ OPRAVENO | Layout.tsx: zmeneno z `enabled !== false` na `available === true`. Koment upraven. |
+| F9 | HF tab | ✅ IMPL | DependencyResolverModal: HF tab ma `visible: HF_ELIGIBLE_KINDS.has(kind)` — skryty pro lora/embedding/upscaler. |
 
 ##### BLOK G: HF search backend rozsireni
 
@@ -924,6 +924,30 @@ AvatarEngine + MCP tools → `DependencyResolutionTask.parse_result()` → confi
 
 **Celkem:** 93 novych testu pro Phase 2 AI resolution.
 Viz detailni test plan v sekci 11o
+
+#### Phase 2 — Review & Final Integration (2026-03-08)
+
+**Backend (Blocks G, H):**
+- ✅ `HF_ELIGIBLE_KINDS` frozenset, `AUTO_APPLY_MARGIN = 0.15` in resolve_config.py
+- ✅ AI_CONFIDENCE_CEILING deduplicated (dependency_resolution.py re-exports from resolve_config.py)
+- ✅ `_hf_hash_lookup()` in evidence_providers.py — verifies HF LFS SHA256 against known hash
+- ✅ 15 new config+evidence tests (8 HF eligibility, 3 auto-apply margin, 4 HF hash lookup)
+
+**Frontend (Block F):**
+- ✅ DependencyResolverModal.tsx — 5-tab modal (Candidates, Preview, AI Resolve, Civitai, HF)
+- ✅ usePackData.ts — 3 mutations (suggest/apply/applyAndDownload) + error toasts
+- ✅ useAvatarAvailable.ts hook — gates AI tab on `available === true`
+- ✅ PackDependenciesSection.tsx — per-asset resolve button → opens DependencyResolverModal
+- ✅ PackDetailPage.tsx — orchestrator state, handlers, eager suggest with stale-response guard
+- ✅ BUG 5 (TS union + incompatible), BUG 6 (AI gate available vs enabled)
+- ✅ HF tab visibility gated on HF_ELIGIBLE_KINDS
+- ✅ pack-data-invalidation.test.ts updated (2 new mutations categorized)
+
+**3-Review Cycle:**
+- **Claude:** Fixed hook ordering bug (openModal/closeModal before resolver handlers)
+- **Gemini:** Found race condition in eager suggest, missing catch handlers, nested buttons — all fixed
+- **Codex:** Found nested interactive controls in CandidateCard, unhandled AI resolve rejection — all fixed
+- **Testy:** 2096 backend passed (8 pre-existing failures), 1141 frontend passed, 0 new failures
 
 ### Phase 3: Local binding + background scan + security
 

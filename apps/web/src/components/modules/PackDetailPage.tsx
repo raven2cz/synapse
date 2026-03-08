@@ -29,6 +29,7 @@ import {
   usePackDownloads,
   usePackEdit,
   usePackPlugin,
+  useAvatarAvailable,
   // Sections
   PackHeader,
   PackGallery,
@@ -44,6 +45,7 @@ import {
   EditParametersModal,
   UploadWorkflowModal,
   BaseModelResolverModal,
+  DependencyResolverModal,
   EditPreviewsModal,
   DescriptionEditorModal,
   // Shared
@@ -54,7 +56,10 @@ import {
   type BaseModelSearchResponse,
   type HuggingFaceFile,
   type AssetInfo,
+  type AssetType,
   type ModalState,
+  type ResolutionCandidate,
+  type SuggestResult,
   // Constants
   DEFAULT_MODAL_STATE,
   QUERY_KEYS,
@@ -103,6 +108,9 @@ function PackDetailPageContent() {
     },
   })
 
+  // Avatar availability (for AI resolve tab)
+  const { avatarAvailable } = useAvatarAvailable()
+
   // ==========================================================================
   // Modal State
   // ==========================================================================
@@ -116,6 +124,79 @@ function PackDetailPageContent() {
   const closeModal = useCallback((key: keyof ModalState | string) => {
     setModals((prev) => ({ ...prev, [key]: false }))
   }, [])
+
+  // ==========================================================================
+  // Dependency Resolver State
+  // ==========================================================================
+
+  const [resolveDepId, setResolveDepId] = useState<string | null>(null)
+  const [resolveDepName, setResolveDepName] = useState('')
+  const [resolveDepKind, setResolveDepKind] = useState<AssetType>('checkpoint')
+  const [resolveCandidates, setResolveCandidates] = useState<ResolutionCandidate[]>([])
+  const [resolveRequestId, setResolveRequestId] = useState<string | undefined>()
+
+  const handleOpenDependencyResolver = useCallback(
+    (asset: AssetInfo) => {
+      setResolveDepId(asset.name)
+      setResolveDepName(asset.filename || asset.name)
+      setResolveDepKind((asset.asset_type as AssetType) || 'checkpoint')
+      setResolveCandidates([])
+      setResolveRequestId(undefined)
+      openModal('dependencyResolver')
+
+      // Eager suggest (without AI) — best-effort, user can retry in modal
+      const depName = asset.name
+      packData
+        .suggestResolution(depName, { include_ai: false })
+        .then((result: SuggestResult) => {
+          // Guard against stale response (user may have opened a different dep)
+          setResolveDepId((currentId) => {
+            if (currentId === depName) {
+              setResolveCandidates(result.candidates)
+              setResolveRequestId(result.request_id)
+            }
+            return currentId
+          })
+        })
+        .catch((err) => {
+          console.warn('[PackDetailPage] Eager suggest failed:', err?.message)
+        })
+    },
+    [openModal, packData]
+  )
+
+  const handleSuggestResolution = useCallback(
+    async (options?: { include_ai?: boolean; max_candidates?: number }) => {
+      if (!resolveDepId) throw new Error('No dependency selected')
+      const result = await packData.suggestResolution(resolveDepId, options)
+      setResolveCandidates(result.candidates)
+      setResolveRequestId(result.request_id)
+      return result
+    },
+    [resolveDepId, packData]
+  )
+
+  const handleApplyResolution = useCallback(
+    (candidateId: string) => {
+      if (!resolveDepId) return
+      packData
+        .applyResolution(resolveDepId, candidateId, resolveRequestId)
+        .then(() => closeModal('dependencyResolver'))
+        .catch(() => {}) // Error toast shown by mutation onError
+    },
+    [resolveDepId, resolveRequestId, packData, closeModal]
+  )
+
+  const handleApplyAndDownload = useCallback(
+    (candidateId: string) => {
+      if (!resolveDepId) return
+      packData
+        .applyAndDownload(resolveDepId, candidateId, resolveRequestId)
+        .then(() => closeModal('dependencyResolver'))
+        .catch(() => {}) // Error toast shown by mutation onError
+    },
+    [resolveDepId, resolveRequestId, packData, closeModal]
+  )
 
   // ==========================================================================
   // Plugin System
@@ -366,6 +447,7 @@ function PackDetailPageContent() {
           onDeleteResource={packData.deleteResource}
           onOpenBaseModelResolver={() => openModal('baseModelResolver')}
           onResolvePack={packData.resolvePack}
+          onOpenDependencyResolver={handleOpenDependencyResolver}
           onSetAsBaseModel={(asset) => packData.setAsBaseModel(asset.name)}
           isDownloadAllPending={downloads.isDownloadingAll}
           isResolvePending={packData.isResolvingPack}
@@ -522,6 +604,27 @@ function PackDetailPageContent() {
         }}
         onClose={() => closeModal('baseModelResolver')}
         isResolving={packData.isResolvingBaseModel}
+      />
+
+      {/* Dependency Resolver Modal */}
+      <DependencyResolverModal
+        isOpen={modals.dependencyResolver}
+        onClose={() => {
+          closeModal('dependencyResolver')
+          setResolveDepId(null)
+        }}
+        packName={pack.name}
+        depId={resolveDepId || ''}
+        depName={resolveDepName}
+        kind={resolveDepKind}
+        candidates={resolveCandidates}
+        isSuggesting={packData.isSuggesting}
+        requestId={resolveRequestId}
+        onSuggest={handleSuggestResolution}
+        onApply={handleApplyResolution}
+        onApplyAndDownload={handleApplyAndDownload}
+        isApplying={packData.isApplying || packData.isApplyingAndDownloading}
+        avatarAvailable={avatarAvailable}
       />
 
       {/* Edit Previews Modal */}

@@ -300,6 +300,7 @@ export const DEFAULT_MODAL_STATE = {
   editWorkflows: false,
   uploadWorkflow: false,
   baseModelResolver: false,
+  dependencyResolver: false,
   importModel: false,
   markdownEditor: false,
   scriptConsole: false,

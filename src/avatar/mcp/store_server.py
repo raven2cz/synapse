@@ -595,14 +595,30 @@ def _search_civitai_impl(
 
         type_list = [t.strip() for t in types.split(",") if t.strip()] if types else None
 
-        response = civitai.search_models(
-            query=query,
-            types=type_list,
-            sort=sort,
-            limit=limit,
-        )
+        # Try Meilisearch first (full-text, same index as Civitai web UI).
+        # Falls back to REST API on failure OR empty results (belt-and-suspenders:
+        # some models are indexed differently between Meilisearch and REST).
+        items = []
+        try:
+            ms_response = civitai.search_meilisearch(
+                query=query,
+                types=type_list,
+                limit=limit,
+            )
+            items = ms_response.get("items", [])
+        except Exception as ms_err:
+            logger.debug("Meilisearch search failed, falling back to REST: %s", ms_err)
 
-        items = response.get("items", [])
+        # Fallback to REST API if Meilisearch returned nothing
+        if not items:
+            response = civitai.search_models(
+                query=query,
+                types=type_list,
+                sort=sort,
+                limit=limit,
+            )
+            items = response.get("items", [])
+
         if not items:
             return f"No models found on Civitai matching '{query}'."
 

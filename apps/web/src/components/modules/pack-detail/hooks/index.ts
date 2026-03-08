@@ -23,6 +23,10 @@ export {
   type FieldChange,
 } from './usePackEdit'
 
+export {
+  useAvatarAvailable,
+} from './useAvatarAvailable'
+
 // Future hooks:
 // export { usePackPlugin, type UsePackPluginReturn } from './usePackPlugin'
 // export { useMarkdownEditor } from './useMarkdownEditor'

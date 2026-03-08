@@ -22,6 +22,7 @@ from src.store.evidence_providers import (
     PreviewMetaEvidenceProvider,
     SourceMetaEvidenceProvider,
     _extract_stem,
+    _hf_hash_lookup,
 )
 
 
@@ -123,6 +124,126 @@ class TestHashEvidenceProvider:
         assert result.hits == []
         assert len(result.warnings) == 1
         assert "API error" in result.warnings[0]
+
+    def test_hf_hash_match_returns_hit(self):
+        """HF LFS SHA256 match → TIER-1 hit."""
+        from src.store.models import HuggingFaceSelector
+
+        dep = MagicMock()
+        dep.lock = MagicMock()
+        dep.lock.sha256 = "aabbccdd1122"
+        dep.selector = MagicMock()
+        dep.selector.huggingface = HuggingFaceSelector(
+            repo_id="org/model", filename="model.safetensors",
+        )
+
+        hf_file = MagicMock()
+        hf_file.filename = "model.safetensors"
+        hf_file.sha256 = "aabbccdd1122"
+
+        hf_client = MagicMock()
+        hf_client.get_repo_files.return_value = MagicMock(files=[hf_file])
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        ps = MagicMock()
+        ps.civitai = civitai
+        ps.huggingface = hf_client
+
+        p = HashEvidenceProvider(lambda: ps)
+        ctx = _make_context(dependency=dep, kind=AssetKind.CHECKPOINT)
+        result = p.gather(ctx)
+
+        hf_hits = [h for h in result.hits if h.candidate.provider_name == "huggingface"]
+        assert len(hf_hits) == 1
+        assert hf_hits[0].item.source == "hash_match"
+        assert hf_hits[0].item.confidence == 0.95
+        assert hf_hits[0].candidate.key == "hf:org/model:model.safetensors"
+        assert hf_hits[0].candidate.selector.strategy == SelectorStrategy.HUGGINGFACE_FILE
+
+    def test_hf_hash_no_match_returns_empty(self):
+        """HF LFS SHA256 doesn't match → no HF hit."""
+        from src.store.models import HuggingFaceSelector
+
+        dep = MagicMock()
+        dep.lock = MagicMock()
+        dep.lock.sha256 = "aabbccdd1122"
+        dep.selector = MagicMock()
+        dep.selector.huggingface = HuggingFaceSelector(
+            repo_id="org/model", filename="model.safetensors",
+        )
+
+        hf_file = MagicMock()
+        hf_file.filename = "model.safetensors"
+        hf_file.sha256 = "different_hash"
+
+        hf_client = MagicMock()
+        hf_client.get_repo_files.return_value = MagicMock(files=[hf_file])
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        ps = MagicMock()
+        ps.civitai = civitai
+        ps.huggingface = hf_client
+
+        p = HashEvidenceProvider(lambda: ps)
+        ctx = _make_context(dependency=dep, kind=AssetKind.CHECKPOINT)
+        result = p.gather(ctx)
+
+        # Only Civitai was checked (no match), HF hash didn't match
+        hf_hits = [h for h in result.hits if h.candidate.provider_name == "huggingface"]
+        assert len(hf_hits) == 0
+
+    def test_hf_hash_skipped_for_non_eligible_kind(self):
+        """HF hash lookup skipped for kinds like LORA."""
+        from src.store.models import HuggingFaceSelector
+
+        dep = MagicMock()
+        dep.lock = MagicMock()
+        dep.lock.sha256 = "aabbccdd1122"
+        dep.selector = MagicMock()
+        dep.selector.huggingface = HuggingFaceSelector(
+            repo_id="org/lora", filename="lora.safetensors",
+        )
+
+        hf_client = MagicMock()
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        ps = MagicMock()
+        ps.civitai = civitai
+        ps.huggingface = hf_client
+
+        p = HashEvidenceProvider(lambda: ps)
+        ctx = _make_context(dependency=dep, kind=AssetKind.LORA)
+        p.gather(ctx)
+
+        # HF client should NOT be called for LORA
+        hf_client.get_repo_files.assert_not_called()
+
+    def test_hf_hash_no_selector_skips(self):
+        """No HF selector on dep → skip HF lookup."""
+        dep = MagicMock()
+        dep.lock = MagicMock()
+        dep.lock.sha256 = "aabbccdd1122"
+        dep.selector = MagicMock()
+        dep.selector.huggingface = None
+
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = HashEvidenceProvider(lambda: ps)
+        ctx = _make_context(dependency=dep, kind=AssetKind.CHECKPOINT)
+        result = p.gather(ctx)
+
+        hf_hits = [h for h in result.hits if
+                   getattr(h.candidate, 'provider_name', None) == "huggingface"]
+        assert len(hf_hits) == 0
 
 
 class TestPreviewMetaEvidenceProvider:

@@ -90,6 +90,10 @@ const MUST_INVALIDATE_PACKS = [
   'batchUpdatePreviewsMutation',
   // Changes cover image shown on list
   'setCoverPreviewMutation',
+  // Resolves individual dependency → changes has_unresolved
+  'applyResolutionMutation',
+  // Resolves + downloads dependency → changes has_unresolved
+  'applyAndDownloadMutation',
 ]
 
 // ============================================================================

@@ -123,10 +123,12 @@ class HashEvidenceProvider:
             except Exception as e:
                 warnings.append(f"Civitai hash lookup failed: {e}")
 
-        # HF hash lookup (only if kind is eligible)
+        # HF hash lookup (only if kind is eligible for HF hash check)
         kind_config = get_kind_config(ctx.kind)
         if kind_config.hf_hash_lookup:
-            pass  # HF LFS pointer check — Phase 3+
+            hf_hit = _hf_hash_lookup(pack_service, sha256, ctx)
+            if hf_hit:
+                hits.append(hf_hit)
 
         return ProviderResult(hits=hits, warnings=warnings)
 
@@ -374,6 +376,68 @@ def _extract_file_id(version_data: dict, sha256: str) -> Optional[int]:
         hashes = f.get("hashes", {})
         if hashes.get("SHA256", "").lower() == sha256.lower():
             return f.get("id")
+    return None
+
+
+def _hf_hash_lookup(
+    pack_service: Any, sha256: str, ctx: ResolveContext
+) -> Optional[EvidenceHit]:
+    """Check if a SHA256 matches an LFS file in a known HF repo.
+
+    Only works when the dependency already has a HuggingFace selector
+    (from alias or previous resolve). HF has no reverse hash lookup API,
+    so we verify against the specific repo/file referenced in the selector.
+    """
+    dep = ctx.dependency
+    selector = getattr(dep, "selector", None)
+    if not selector:
+        return None
+
+    hf_sel = getattr(selector, "huggingface", None)
+    if not hf_sel:
+        return None
+
+    repo_id = getattr(hf_sel, "repo_id", None)
+    filename = getattr(hf_sel, "filename", None)
+    if not repo_id or not filename:
+        return None
+
+    hf_client = getattr(pack_service, "huggingface", None)
+    if hf_client is None:
+        return None
+
+    try:
+        repo_info = hf_client.get_repo_files(repo_id)
+        for file_info in repo_info.files:
+            if file_info.filename == filename and file_info.sha256:
+                if file_info.sha256.lower() == sha256.lower():
+                    from .models import HuggingFaceSelector
+                    seed = CandidateSeed(
+                        key=f"hf:{repo_id}:{filename}",
+                        selector=DependencySelector(
+                            strategy=SelectorStrategy.HUGGINGFACE_FILE,
+                            huggingface=HuggingFaceSelector(
+                                repo_id=repo_id,
+                                filename=filename,
+                                revision=getattr(hf_sel, "revision", None) or "main",
+                            ),
+                        ),
+                        display_name=f"{repo_id}/{filename}",
+                        provider_name="huggingface",
+                    )
+                    return EvidenceHit(
+                        candidate=seed,
+                        provenance=f"hash:{sha256[:12]}",
+                        item=EvidenceItem(
+                            source="hash_match",
+                            description="SHA256 match on HuggingFace LFS",
+                            confidence=0.95,
+                            raw_value=sha256,
+                        ),
+                    )
+    except Exception as e:
+        logger.debug("[hash-provider] HF LFS hash check failed: %s", e)
+
     return None
 
 

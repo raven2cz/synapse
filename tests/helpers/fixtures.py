@@ -201,6 +201,15 @@ class FakeCivitaiClient:
             "metadata": {"totalItems": len(results), "currentPage": 1, "pageSize": limit},
         }
 
+    def search_meilisearch(
+        self,
+        query: str,
+        types: Optional[List[str]] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Meilisearch stub — delegates to search_models for testing."""
+        return self.search_models(query=query, types=types, limit=limit)
+
     def get_model_by_hash(self, hash_value: str) -> Optional[Any]:
         """Find model version by file hash (SHA256). Returns CivitaiModelVersion-like or None."""
         hash_upper = hash_value.upper()

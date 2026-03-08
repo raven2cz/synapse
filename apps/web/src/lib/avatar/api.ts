@@ -18,10 +18,11 @@ export interface AvatarProvider {
 
 export interface AvatarStatus {
   available: boolean
-  state: 'ready' | 'no_provider' | 'no_engine' | 'setup_required' | 'disabled'
+  state: 'ready' | 'no_provider' | 'no_engine' | 'setup_required' | 'disabled' | 'incompatible'
   enabled: boolean
   engine_installed: boolean
   engine_version: string | null
+  engine_min_version?: string | null
   active_provider: string | null
   safety: string
   providers: AvatarProvider[]

@@ -464,7 +464,7 @@ class TestAvatarRouteSmoke:
         result = avatar_status()
 
         assert "state" in result
-        assert result["state"] in ("ready", "no_provider", "no_engine", "setup_required", "disabled")
+        assert result["state"] in ("ready", "no_provider", "no_engine", "setup_required", "disabled", "incompatible")
         assert isinstance(result["available"], bool)
         assert isinstance(result["providers"], list)
 

@@ -1122,6 +1122,11 @@ def _make_fake_civitai(models=None):
         "items": models,
         "metadata": {"totalItems": len(models), "currentPage": 1, "pageSize": 10},
     }
+    # Meilisearch is tried first; return same items
+    civitai.search_meilisearch.return_value = {
+        "items": models,
+        "metadata": {"totalItems": len(models)},
+    }
     return civitai
 
 
@@ -1159,10 +1164,36 @@ class TestSearchCivitai:
         result = _search_civitai_impl(civitai=MagicMock(), query="")
         assert "query is required" in result
 
+    def test_meilisearch_success_skips_rest(self):
+        """When Meilisearch returns results, REST API should not be called."""
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        models = [{"id": 1, "name": "Test", "type": "LORA", "modelVersions": []}]
+        civitai = MagicMock()
+        civitai.search_meilisearch.return_value = {"items": models}
+
+        result = _search_civitai_impl(civitai=civitai, query="Test")
+        assert "Found 1 model" in result
+        civitai.search_models.assert_not_called()
+
+    def test_meilisearch_failure_falls_back_to_rest(self):
+        """When Meilisearch fails, REST API should be used as fallback."""
+        from src.avatar.mcp.store_server import _search_civitai_impl
+
+        models = [{"id": 2, "name": "Fallback", "type": "Checkpoint", "modelVersions": []}]
+        civitai = MagicMock()
+        civitai.search_meilisearch.side_effect = RuntimeError("timeout")
+        civitai.search_models.return_value = {"items": models}
+
+        result = _search_civitai_impl(civitai=civitai, query="Fallback")
+        assert "Found 1 model" in result
+        assert "Fallback" in result
+
     def test_api_error(self):
         from src.avatar.mcp.store_server import _search_civitai_impl
 
         civitai = MagicMock()
+        civitai.search_meilisearch.side_effect = RuntimeError("API down")
         civitai.search_models.side_effect = RuntimeError("API down")
 
         result = _search_civitai_impl(civitai=civitai, query="test")

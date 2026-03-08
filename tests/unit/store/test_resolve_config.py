@@ -8,7 +8,9 @@ from src.store.models import AssetKind
 from src.store.resolve_config import (
     AI_CONFIDENCE_CEILING,
     ASSET_KIND_CONFIG,
+    AUTO_APPLY_MARGIN,
     COMPATIBILITY_RULES,
+    HF_ELIGIBLE_KINDS,
     TIER_CONFIGS,
     check_cross_kind_compatibility,
     get_kind_config,
@@ -166,3 +168,42 @@ class TestCrossKindCompatibility:
         """Illustrious is SDXL-compatible."""
         warnings = check_cross_kind_compatibility("Illustrious", "SDXL", AssetKind.LORA)
         assert warnings == []
+
+
+class TestHFEligibleKinds:
+    def test_checkpoint_eligible(self):
+        assert AssetKind.CHECKPOINT in HF_ELIGIBLE_KINDS
+
+    def test_vae_eligible(self):
+        assert AssetKind.VAE in HF_ELIGIBLE_KINDS
+
+    def test_controlnet_eligible(self):
+        assert AssetKind.CONTROLNET in HF_ELIGIBLE_KINDS
+
+    def test_lora_not_eligible(self):
+        assert AssetKind.LORA not in HF_ELIGIBLE_KINDS
+
+    def test_embedding_not_eligible(self):
+        assert AssetKind.EMBEDDING not in HF_ELIGIBLE_KINDS
+
+    def test_upscaler_not_eligible(self):
+        assert AssetKind.UPSCALER not in HF_ELIGIBLE_KINDS
+
+    def test_matches_config(self):
+        """HF_ELIGIBLE_KINDS must match ASSET_KIND_CONFIG hf_eligible flags."""
+        expected = {k for k, cfg in ASSET_KIND_CONFIG.items() if cfg.hf_eligible}
+        assert HF_ELIGIBLE_KINDS == expected
+
+    def test_is_frozen(self):
+        assert isinstance(HF_ELIGIBLE_KINDS, frozenset)
+
+
+class TestAutoApplyMargin:
+    def test_default_value(self):
+        assert AUTO_APPLY_MARGIN == 0.15
+
+    def test_positive(self):
+        assert AUTO_APPLY_MARGIN > 0
+
+    def test_less_than_one(self):
+        assert AUTO_APPLY_MARGIN < 1.0

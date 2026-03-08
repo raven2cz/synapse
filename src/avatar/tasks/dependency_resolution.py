@@ -14,11 +14,10 @@ from typing import Any, Dict, List, Optional
 
 from .base import AITask
 
-logger = logging.getLogger(__name__)
+# Re-export for backward compatibility (tests import from here)
+from src.store.resolve_config import AI_CONFIDENCE_CEILING  # noqa: F401
 
-# AI confidence ceiling — AI provider cannot exceed TIER-2 (hash-based).
-# Rule-based providers handle TIER-1 (0.90-1.00).
-AI_CONFIDENCE_CEILING = 0.89
+logger = logging.getLogger(__name__)
 
 # Required fields per provider type
 _CIVITAI_REQUIRED = {"display_name", "provider", "model_id", "confidence", "reasoning"}

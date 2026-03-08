@@ -40,11 +40,17 @@ gemini:
 
 claude:
   model: "claude-sonnet-4-5"
-  # permission_mode: "acceptEdits"
-  # allowed_tools:
-  #   - "Read"
-  #   - "Grep"
-  #   - "mcp__synapse-store__*"
+  # Claude requires explicit tool permissions (unlike Gemini/Codex).
+  # bypassPermissions allows MCP tools to run without approval prompts.
+  # WARNING: Only use in trusted environments — skips all tool confirmation dialogs.
+  permission_mode: "bypassPermissions"
+  allowed_tools:
+    - "Read"
+    - "Grep"
+    - "Glob"
+    - "WebFetch"
+    - "WebSearch"
+    - "mcp__synapse-store__*"
   # Additional directories Claude can access (beyond working_dir)
   additional_dirs:
     - "~/.synapse"

@@ -222,7 +222,8 @@ class CivitaiClient:
         if username:
             params["username"] = username
         if types:
-            params["types"] = ",".join(types)
+            # Defensive: handle both list and string inputs
+            params["types"] = types if isinstance(types, str) else ",".join(types)
         if nsfw is not None:
             params["nsfw"] = "true" if nsfw else "false"
         if sort:
@@ -238,7 +239,80 @@ class CivitaiClient:
             params=params
         )
         return response.json()
-    
+
+    # Meilisearch fulltext search (same index as Civitai web UI).
+    # Token is public (extracted from Civitai frontend JS), not a secret.
+    _MEILISEARCH_BASE = "https://search-new.civitai.com"
+    _MEILISEARCH_TOKEN = os.environ.get(
+        "CIVITAI_MEILISEARCH_TOKEN",
+        "8c46eb2508e21db1e9828a97968d91ab1ca1caa5f70a00e88a2ba1e286603b61",
+    )
+    _MEILISEARCH_INDEX = "models_v9"
+
+    def search_meilisearch(
+        self,
+        query: str,
+        types: Optional[List[str]] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Full-text search via Civitai's Meilisearch index.
+
+        Returns a dict with ``items`` key matching the shape of
+        :meth:`search_models` output (id, name, type per item) so callers
+        can use either method interchangeably.
+        """
+        limit = max(1, min(limit, 100))
+
+        filters: list[str] = [
+            "(nsfwLevel=1 OR nsfwLevel=2 OR nsfwLevel=4 OR nsfwLevel=8 OR nsfwLevel=16)"
+        ]
+        if types:
+            if isinstance(types, str):
+                types = [types]
+            type_parts = ", ".join(f"'{t}'" for t in types)
+            filters.append(f"(type IN [{type_parts}])")
+
+        body = {
+            "queries": [
+                {
+                    "q": query,
+                    "indexUid": self._MEILISEARCH_INDEX,
+                    "limit": limit,
+                    "offset": 0,
+                    "filter": filters,
+                }
+            ]
+        }
+        resp = requests.post(
+            f"{self._MEILISEARCH_BASE}/multi-search",
+            json=body,
+            headers={
+                "Authorization": f"Bearer {self._MEILISEARCH_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Normalize to same shape as REST search_models
+        hits = data.get("results", [{}])[0].get("hits", [])
+        items = []
+        for h in hits:
+            # nsfwLevel: int (1=PG, 2=PG13, 4=Mature, 8=X, 16=XXX)
+            nsfw_val = h.get("nsfwLevel", 1)
+            if isinstance(nsfw_val, list):
+                nsfw_val = nsfw_val[0] if nsfw_val else 1
+            items.append({
+                "id": h.get("id"),
+                "name": h.get("name", ""),
+                "type": h.get("type", ""),
+                "nsfw": nsfw_val > 2,
+                # Meilisearch version data (structure may differ from REST)
+                "modelVersions": h.get("version", []) if isinstance(h.get("version"), list) else [],
+            })
+        return {"items": items, "metadata": {"totalItems": len(items)}}
+
     def parse_civitai_url(self, url: str) -> Tuple[int, Optional[int]]:
         """
         Parse a Civitai URL to extract model ID and optional version ID.

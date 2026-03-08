@@ -11,6 +11,9 @@ import { toast } from '@/stores/toastStore'
 import type {
   PackDetail,
   PackBackupStatusResponse,
+  SuggestResult,
+  SuggestOptions,
+  ApplyResult,
 } from '../types'
 import { QUERY_KEYS } from '../constants'
 
@@ -62,6 +65,15 @@ export interface UsePackDataReturn {
 
   resolvePack: () => void
   isResolvingPack: boolean
+
+  suggestResolution: (depId: string, options?: SuggestOptions) => Promise<SuggestResult>
+  isSuggesting: boolean
+
+  applyResolution: (depId: string, candidateId: string, requestId?: string) => Promise<ApplyResult>
+  isApplying: boolean
+
+  applyAndDownload: (depId: string, candidateId: string, requestId?: string) => Promise<void>
+  isApplyingAndDownloading: boolean
 
   generateWorkflow: () => void
   isGeneratingWorkflow: boolean
@@ -349,6 +361,140 @@ export function usePackData({
     },
     onError: (error: Error) => {
       toast.error(`Failed to resolve: ${error.message}`)
+    },
+  })
+
+  // =========================================================================
+  // Suggest Resolution Mutation
+  // =========================================================================
+
+  const suggestResolutionMutation = useMutation({
+    mutationFn: async ({ depId, options }: { depId: string; options?: SuggestOptions }) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/suggest-resolution`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dep_id: depId,
+            include_ai: options?.include_ai ?? false,
+            max_candidates: options?.max_candidates ?? 10,
+          }),
+        }
+      )
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to suggest resolution: ${errText}`)
+      }
+      return res.json() as Promise<SuggestResult>
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to suggest resolution: ${error.message}`)
+    },
+  })
+
+  // =========================================================================
+  // Apply Resolution Mutation
+  // =========================================================================
+
+  const applyResolutionMutation = useMutation({
+    mutationFn: async ({
+      depId,
+      candidateId,
+      requestId,
+    }: {
+      depId: string
+      candidateId: string
+      requestId?: string
+    }) => {
+      const res = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/apply-resolution`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dep_id: depId,
+            candidate_id: candidateId,
+            request_id: requestId,
+          }),
+        }
+      )
+      if (!res.ok) {
+        const errText = await res.text()
+        throw new Error(`Failed to apply resolution: ${errText}`)
+      }
+      return res.json() as Promise<ApplyResult>
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success('Resolution applied')
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to apply resolution: ${error.message}`)
+    },
+  })
+
+  // =========================================================================
+  // Apply & Download Mutation (compound action)
+  // =========================================================================
+
+  const applyAndDownloadMutation = useMutation({
+    mutationFn: async ({
+      depId,
+      candidateId,
+      requestId,
+    }: {
+      depId: string
+      candidateId: string
+      requestId?: string
+    }) => {
+      // Step 1: Apply resolution
+      const applyRes = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/apply-resolution`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dep_id: depId,
+            candidate_id: candidateId,
+            request_id: requestId,
+          }),
+        }
+      )
+      if (!applyRes.ok) {
+        const errText = await applyRes.text()
+        throw new Error(`Failed to apply resolution: ${errText}`)
+      }
+      const result = (await applyRes.json()) as ApplyResult
+      if (!result.success) {
+        throw new Error(result.message || 'Apply failed')
+      }
+
+      // Step 2: Refetch pack to get updated asset info
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+
+      // Step 3: Trigger download via existing download-asset endpoint
+      const downloadRes = await fetch(
+        `/api/packs/${encodeURIComponent(packName)}/download-asset`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset_name: depId }),
+        }
+      )
+      if (!downloadRes.ok) {
+        const errText = await downloadRes.text()
+        throw new Error(`Resolution applied, but download failed: ${errText}`)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
+      queryClient.invalidateQueries({ queryKey: ['packs'] })
+      toast.success('Resolution applied, download started')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
     },
   })
 
@@ -770,6 +916,18 @@ export function usePackData({
 
     resolvePack: () => resolvePackMutation.mutate(),
     isResolvingPack: resolvePackMutation.isPending,
+
+    suggestResolution: (depId, options) =>
+      suggestResolutionMutation.mutateAsync({ depId, options }),
+    isSuggesting: suggestResolutionMutation.isPending,
+
+    applyResolution: (depId, candidateId, requestId) =>
+      applyResolutionMutation.mutateAsync({ depId, candidateId, requestId }),
+    isApplying: applyResolutionMutation.isPending,
+
+    applyAndDownload: (depId, candidateId, requestId) =>
+      applyAndDownloadMutation.mutateAsync({ depId, candidateId, requestId }),
+    isApplyingAndDownloading: applyAndDownloadMutation.isPending,
 
     generateWorkflow: () => generateWorkflowMutation.mutate(),
     isGeneratingWorkflow: generateWorkflowMutation.isPending,

@@ -402,6 +402,7 @@ export interface ModalState {
   editWorkflows: boolean
   uploadWorkflow: boolean
   baseModelResolver: boolean
+  dependencyResolver: boolean
   importModel: boolean
   markdownEditor: boolean
   scriptConsole: boolean
@@ -478,3 +479,77 @@ export type {
   PackBlobStatus,
   PackBackupSummary,
 } from '../inventory/types'
+
+// =============================================================================
+// Resolution Types — suggest/apply dependency resolution
+// =============================================================================
+
+/**
+ * Evidence item from a resolution provider
+ */
+export interface EvidenceItemInfo {
+  source: string
+  description: string
+  confidence: number
+  raw_value?: string
+}
+
+/**
+ * Evidence group with provenance tracking
+ */
+export interface EvidenceGroupInfo {
+  provenance: string
+  items: EvidenceItemInfo[]
+}
+
+/**
+ * A single resolution candidate (from suggest endpoint)
+ */
+export interface ResolutionCandidate {
+  candidate_id: string
+  display_name: string
+  provider: 'civitai' | 'huggingface' | 'local' | string
+  confidence: number
+  tier: number
+  evidence_groups: EvidenceGroupInfo[]
+  selector_strategy: string
+  base_model?: string
+  compatibility_warnings: string[]
+}
+
+/**
+ * Result from suggest-resolution endpoint
+ */
+export interface SuggestResult {
+  request_id: string
+  candidates: ResolutionCandidate[]
+  pack_fingerprint: string
+  warnings: string[]
+}
+
+/**
+ * Options for suggest-resolution request
+ */
+export interface SuggestOptions {
+  include_ai?: boolean
+  max_candidates?: number
+}
+
+/**
+ * Result from apply-resolution endpoint
+ */
+export interface ApplyResult {
+  success: boolean
+  message: string
+  compatibility_warnings: string[]
+}
+
+/**
+ * Confidence tier display configuration
+ */
+export type ConfidenceLevel = 'exact' | 'high' | 'possible' | 'hint'
+
+/**
+ * HuggingFace-eligible asset kinds (matching backend resolve_config)
+ */
+export const HF_ELIGIBLE_KINDS = new Set<AssetType>(['checkpoint', 'vae', 'controlnet'])

@@ -107,10 +107,15 @@ Use `search_huggingface` with the model name or filename.
 - Check architecture compatibility (SDXL LoRA won't work with SD1.5 checkpoint)
 - Architecture-mismatched candidates: OMIT if better-matching candidates exist.
   Only include with confidence ≤ 0.30 and a warning if no matching-architecture candidates found.
-- Do NOT default to the latest version of a model — follow evidence. If expose_filename
-  says "v40" and preview hints say "V4.0", select V4.0 even if V5.0 is the latest.
+- Prefer the version matching the evidence. If expose_filename says "v40" and preview
+  hints say "V4.0", prefer V4.0 even if V5.0 is the latest.
+- If evidence identifies a specific version BUT that version is NOT available online,
+  return the CLOSEST available version of the SAME MODEL with slightly lower confidence
+  (subtract 0.03-0.05). The model identity matters more than an exact version match.
+  Do NOT return empty candidates just because the exact version is missing.
 - If evidence strongly identifies a specific version/variant, do NOT include other
   variants from the same family (e.g., skip "Lightning" if evidence says "V4.0").
+  However, if the specific version is unavailable, include the latest/closest version.
 
 ## Output Format
 

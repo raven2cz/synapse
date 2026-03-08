@@ -49,14 +49,14 @@ function LayoutInner({ children }: LayoutProps) {
     usePageContextStore.getState().setContext(pathname)
   }, [pathname])
 
-  // Check if AI is enabled (master toggle)
+  // Check if AI is available (engine installed, provider ready)
   const { data: avatarStatus } = useQuery({
     queryKey: avatarKeys.status(),
     queryFn: getAvatarStatus,
     staleTime: 60_000,
   })
 
-  const aiEnabled = avatarStatus?.enabled !== false
+  const aiEnabled = avatarStatus?.available === true
 
   // When AI is disabled, render layout without AvatarWidget
   if (!aiEnabled) {

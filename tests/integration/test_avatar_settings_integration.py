@@ -331,7 +331,8 @@ class TestStatusProvidersConsistency:
             mock_detect.return_value = _make_providers(["gemini"])
 
             with patch("src.avatar.routes.AVATAR_ENGINE_AVAILABLE", True), \
-                 patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "0.3.0"):
+                 patch("src.avatar.routes.AVATAR_ENGINE_VERSION", "1.2.0"), \
+                 patch("src.avatar.routes.check_avatar_engine_compat", return_value=True):
                 status_resp = client.get("/api/avatar/status")
                 config_resp = client.get("/api/avatar/config")
 

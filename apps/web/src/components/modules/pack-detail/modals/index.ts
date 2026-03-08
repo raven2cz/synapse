@@ -17,6 +17,9 @@ export { UploadWorkflowModal, type UploadWorkflowModalProps } from './UploadWork
 // Base Model Resolver - multi-source base model selection
 export { BaseModelResolverModal, type BaseModelResolverModalProps } from './BaseModelResolverModal'
 
+// Dependency Resolver - multi-source dependency resolution (Resolve Model)
+export { DependencyResolverModal, type DependencyResolverModalProps } from './DependencyResolverModal'
+
 // Edit Previews - drag & drop preview management (Phase 2)
 export { EditPreviewsModal, type EditPreviewsModalProps } from './EditPreviewsModal'
 
