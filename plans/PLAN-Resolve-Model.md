@@ -894,28 +894,36 @@ je to strukturovana data transformace, ne prompt engineering.
 #### Phase 2 — Poradi implementace (doporucene)
 
 ```
-1. BLOK A: Skill soubor model-resolution.md (spolecne s uzivatelem — prompt design)
-2. BLOK C: AITask rozsireni (base.py, task_service.py, dependency_resolution.py)
-3. BLOK B: search_huggingface MCP tool
-4. BLOK D: AIEvidenceProvider + can_use_ai()
-5. BLOK E: ResolveService AI merge, config, DRY helper
-6. BLOK H: Konfigurace a konstanty
-7. BLOK G: HF backend rozsireni
-8. BLOK F: UI — DependencyResolverModal + inline resolve
+1. ✅ BLOK A: Skill soubory (model-resolution.md, huggingface-integration.md)
+2. ✅ BLOK C: AITask rozsireni (base.py, task_service.py, dependency_resolution.py, registry.py)
+3. ✅ BLOK B: search_huggingface MCP tool + fix analyze_civitai_model
+4. ✅ BLOK D: AIEvidenceProvider rewrite (_build_ai_input, _ai_candidate_to_hit, HF support)
+5. ✅ BLOK E: ResolveService — E1 uz fungovalo (include_ai flag + provider registration). E2-E5 refinementy odlozeny.
+6. ⚠️ BLOK H: Konfigurace a konstanty — AI_CONFIDENCE_CEILING uz existuje. Zbytek odlozen.
+7. ⚠️ BLOK G: HF backend rozsireni — search_huggingface MCP tool hotov. Single-file repo support odlozen.
+8. ❌ BLOK F: UI — DependencyResolverModal + inline resolve
 ```
 
-**POZN:** Bloky A-E jsou backend, testovatelne bez UI. Blok F (UI) je posledni, protoze
-zavisi na vsech backendovych blocich. Blok A (skill soubor) je PRVNI, protoze definuje
-co AI vlastne dela — bez nej nema smysl implementovat zbytek.
+**STAV:** Backend bloky A-E HOTOVY. Celý chain funguje:
+`ResolveService.suggest(include_ai=True)` → `AIEvidenceProvider._build_ai_input()` →
+`AvatarTaskService.execute_task("dependency_resolution", ...)` → skills loaded →
+AvatarEngine + MCP tools → `DependencyResolutionTask.parse_result()` → confidence ceiling →
+`_ai_candidate_to_hit()` (civitai/hf) → `_merge_and_score()` → `SuggestResult`.
 
 ---
 
-#### Phase 2 — Testy
+#### Phase 2 — Testy (aktualni stav)
 
-- Unit: dependency_resolution task, MCP engine, search_huggingface, AIEvidenceProvider, can_use_ai
-- Integration: suggest s AI mock, modal rendering, HF search, import s evidence ladder
-- Smoke: full AI resolve flow, multi-provider fallback, kompletni import z Civitai s resolve
-- Viz detailni test plan v sekci 11o
+| Typ | Pocet | Soubor |
+|-----|-------|--------|
+| Unit: DependencyResolutionTask | 45 | `tests/unit/avatar/test_dependency_resolution_task.py` |
+| Unit: AIEvidenceProvider | 18 | `tests/unit/store/test_evidence_providers.py` (AI section) |
+| Unit: TaskRegistry | 59 total (3 new) | `tests/unit/avatar/test_task_registry.py` |
+| Integration: AI resolve chain | 23 | `tests/integration/test_ai_resolve_integration.py` |
+| Smoke: ResolveService+AI | 7 | `tests/integration/test_ai_resolve_smoke.py` |
+
+**Celkem:** 93 novych testu pro Phase 2 AI resolution.
+Viz detailni test plan v sekci 11o
 
 ### Phase 3: Local binding + background scan + security
 
