@@ -722,44 +722,43 @@ Uzivatel je muze editovat bez zmeny kodu. Custom override: `~/.synapse/avatar/cu
 
 | # | Soubor | Stav | Popis |
 |---|--------|------|-------|
-| A1 | `config/avatar/skills/model-resolution.md` | ❌ NEEXISTUJE | **HLAVNI prompt pro AI dependency resolution.** Viz obsah nize. |
-| A2 | `config/avatar/skills/dependency-resolution.md` | ✅ Existuje (40 radku) | Obecny popis asset dependency modelu. Pouziva se jako reference knowledge. |
-| A3 | `config/avatar/skills/model-types.md` | ✅ Existuje (32 radku) | Base model architectures (SD1.5, SDXL, Flux, Pony). Reference knowledge. |
-| A4 | `config/avatar/skills/civitai-integration.md` | ✅ Existuje (70 radku) | Civitai API docs, CDN patterns. Reference knowledge. |
+| A1 | `config/avatar/skills/model-resolution.md` | ✅ HOTOVO (otestovano) | **HLAVNI prompt pro AI dependency resolution.** ~240 radku. Otestovano na 3 scenarich (Illustrious, RealVisXL, no-match). Review: 6 issues nalezeno a opraveno. |
+| A2 | `config/avatar/skills/dependency-resolution.md` | ✅ Existuje (40 radku) | Obecny popis asset dependency modelu. Pouziva se jako reference knowledge. Bez zmen. |
+| A3 | `config/avatar/skills/model-types.md` | ✅ Existuje (32 radku) | Base model architectures (SD1.5, SDXL, Flux, Pony). Reference knowledge. Bez zmen. |
+| A4 | `config/avatar/skills/civitai-integration.md` | ✅ Existuje (70 radku) | Civitai API docs, CDN patterns. Reference knowledge. Bez zmen. |
+| A5 | `config/avatar/skills/huggingface-integration.md` | ✅ HOTOVO (novy) | HF Hub API reference: search, tree, download URL, LFS hash, repo types, common repos, eligibility matrix. ~95 radku. |
 
-**A1 — `model-resolution.md` MUSI obsahovat:**
+**A1 — `model-resolution.md` — HOTOVO A OTESTOVANO**
 
-```
-1. UCEL: Co AI dela — analyzuje pack metadata + evidence z E1-E6, hleda na Civitai/HF,
-   vraci strukturovane kandidaty s confidence.
+Soubor (~240 radku) obsahuje:
+1. **Ucel a task description** — co AI dela
+2. **Available tools** — 4 MCP tools: `search_civitai`, `analyze_civitai_model`, `search_huggingface`, `find_model_by_hash`
+3. **Input format** — presna struktura vstupu (PACK INFO, DEPENDENCY, EVIDENCE, PREVIEW HINTS)
+4. **4-krokova search strategie** — Analyze → Civitai search → Civitai analyze (version IDs) → HF search → Evaluate
+5. **Output JSON schema** — candidates[] + search_summary, field requirements per provider
+6. **Confidence scoring** — base ranges + adjustments + ceiling rule `min(calc, 0.89)`
+7. **Candidate deduplication** — same model on Civitai+HF = dva separate kandidaty
+8. **10 pravidel** — ceiling, no hallucination, max 5 candidates, max 5 tool calls, etc.
+9. **3 few-shot priklady** — strong match, no match (private), multiple candidates
 
-2. INPUT FORMAT: JSON schema vstupu — pack info, dependency info, existing evidence,
-   preview hints. Presne klice a typy.
+**Testovano na 3 scenarich:**
+- Illustrious LoRA → checkpoint: ✅ spravne nasel Illustrious XL
+- RealVisXL portrait → checkpoint: ✅ V4.0 s version_id+file_id, SD1.5 mismatch omitted
+- Private custom model: ✅ prazdny vysledek, zadna hallucinace
 
-3. INSTRUKCE PRO AI:
-   - Jak interpretovat evidence z E1-E6 (co je silny signal, co slaby)
-   - Jak formulovat search queries pro Civitai/HF MCP tools
-   - Kdy pouzit search_civitai vs search_huggingface (dle AssetKind eligibility tabulky)
-   - Jak cross-referencovat vysledky z vice zdroju
-   - Confidence pravidla: AI ceiling 0.89, jak stanovit confidence dle kvality dukazu
+**Review nalezl 6 issues, vsechny opraveny:**
+1. ✅ version_id/file_id null → pridano Step 2b (analyze_civitai_model)
+2. ✅ search_summary chybi → povinne pole
+3. ✅ confidence math v reasoning → explicitni aritmetika
+4. ✅ ceiling po adjustments → `min(calc, 0.89)` as final step
+5. ✅ architecture mismatch → omit rule
+6. ✅ retry bounds → max 5 tool calls, max 2 retry variace
 
-4. OUTPUT FORMAT: Presny JSON schema vystupu — List[{display_name, provider, strategy,
-   civitai/hf identifikatory, confidence, reasoning}]. Kazde pole vysvetleno.
+**A5 — `huggingface-integration.md` — NOVY SOUBOR**
 
-5. FEW-SHOT PRIKLADY: 2-3 kompletni priklady (input → output):
-   - Priklad 1: LoRA s preview hinting "illustriousXL" → nalezeny checkpoint na Civitai
-   - Priklad 2: Checkpoint bez hints → AI hleda dle popisu, nalezne na HF
-   - Priklad 3: Zadne vysledky → prazdny output, AI nepridava falsepositive
-
-6. PRAVIDLA A OMEZENI:
-   - NIKDY nevracet confidence > 0.89
-   - NIKDY neinventovat vysledky — pokud nenajdes, vrat prazdny seznam
-   - VZDY uvest reasoning proc dany model vybral
-   - Preferovat konkretni signaly (filename, hash) nad obecnymi (base_model kategorie)
-```
-
-**POZN:** Presny obsah tohoto souboru je KRITICKA designova rozhodnuti. Musi byt navrzen
-spolecne s uzivatelem a otestovan na realnych datech pred implementaci dalsich bloku.
+Reference knowledge pro AI (~95 radku): HF Hub API (search, tree, resolve endpoints),
+source identifier schema, repo types (single-file vs diffusers), file format detection,
+LFS hash verification, common model repos tabulka, eligibility per AssetKind.
 
 ##### BLOK B: MCP tools (kod — nastroje, ktere AI pouziva)
 
@@ -800,8 +799,8 @@ Engine vytvaren per-task v `AvatarTaskService._ensure_engine_for_task()`.
 ```python
 class DependencyResolutionTask(AITask):
     task_type = "dependency_resolution"
-    SKILL_NAMES = ("model-resolution", "dependency-resolution", "model-types", "civitai-integration")
-    needs_mcp = True          # AI pouziva search_civitai + search_huggingface MCP tools
+    SKILL_NAMES = ("model-resolution", "dependency-resolution", "model-types", "civitai-integration", "huggingface-integration")
+    needs_mcp = True          # AI pouziva search_civitai + analyze_civitai_model + search_huggingface + find_model_by_hash
     timeout_s = 180           # MCP volani jsou pomalejsi nez pure prompt
 
     def build_system_prompt(self, skills_content: str) -> str:
@@ -1436,7 +1435,7 @@ engine = AvatarEngine(
 # src/avatar/tasks/dependency_resolution.py — novy task:
 class DependencyResolutionTask(AITask):
     task_type = "dependency_resolution"
-    SKILL_NAMES = ("generation-params", "model-resolution")
+    SKILL_NAMES = ("model-resolution", "dependency-resolution", "model-types", "civitai-integration", "huggingface-integration")
     needs_mcp = True
     timeout_s = 180  # MCP volani jsou pomalejsi
 
@@ -1741,7 +1740,8 @@ src/store/resolve_scoring.py           — Noisy-OR, provenance grouping, tier c
 src/store/hash_cache.py                — Persistent hash cache s async computation
 src/utils/preview_meta_extractor.py    — PNG tEXt parser + sidecar .json reader
 src/avatar/tasks/dependency_resolution.py  — AI task pro MCP-backed resolve
-config/avatar/skills/model-resolution.md   — Novy skill pro AI resolve
+config/avatar/skills/model-resolution.md   — Hlavni AI prompt pro resolve (~240 radku, otestovano)
+config/avatar/skills/huggingface-integration.md — HF Hub API reference knowledge (~95 radku)
 
 UPRAVENE SOUBORY:
 src/store/__init__.py                  — +ResolveService, +set_avatar_service, import orchestrace
