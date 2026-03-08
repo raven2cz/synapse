@@ -12,7 +12,7 @@ Your job is to search, cross-reference, and return the best matching candidates.
 
 You have access to MCP tools:
 - `search_civitai(query, types, sort, limit)` — Search Civitai models. Returns model-level data (model_id, version count, base model).
-- `analyze_civitai_model(model_id)` — Get full model details including ALL versions with version_id, file_id, file names, hashes. Use this AFTER search to get version-level IDs.
+- `analyze_civitai_model(url)` — Get full model details including ALL versions with version_id, file_id, file names, SHA256 hashes. Pass Civitai model URL (e.g. "https://civitai.com/models/139562"). Use AFTER search to get version-level IDs.
 - `search_huggingface(query, kind, limit)` — Search HuggingFace models. Returns repo_id, filenames, sizes, tags.
 - `find_model_by_hash(hash_value)` — Find model by SHA256/AutoV2 hash on Civitai. Returns version-level data.
 
@@ -84,8 +84,9 @@ If the first search returns no results, try at most 2 more variations:
 2. Search with just the base model name
 
 ### Step 2b: Get version details
-If search found a promising model, call `analyze_civitai_model(model_id)` to get
-version_id and file_id. These are REQUIRED for Civitai candidates — do not guess them.
+If search found a promising model, call `analyze_civitai_model(url)` with the Civitai
+model URL (e.g. "https://civitai.com/models/139562") to get version_id and file_id.
+These are REQUIRED for Civitai candidates — do not guess them.
 
 ### Step 3: Search HuggingFace (only for eligible kinds)
 
@@ -237,7 +238,7 @@ EXISTING EVIDENCE:
 
 Tool calls:
 1. `search_civitai(query="Illustrious XL", types="Checkpoint")`
-2. `analyze_civitai_model(model_id=795765)` → gets version_id=889818, file_id=795432
+2. `analyze_civitai_model(url="https://civitai.com/models/795765")` → gets version_id=889818, file_id=795432
 
 Output:
 ```json
@@ -315,7 +316,7 @@ PREVIEW HINTS:
 
 Tool calls:
 1. `search_civitai(query="RealVisXL V4.0", types="Checkpoint")` → found model 139562
-2. `analyze_civitai_model(model_id=139562)` → version V4.0: id=789012, file_id=456789
+2. `analyze_civitai_model(url="https://civitai.com/models/139562")` → version V4.0: id=789012, file_id=456789
 3. `search_huggingface(query="realvisxl checkpoint", kind="checkpoint")` → SG161222/RealVisXL_V4.0
 
 Output:

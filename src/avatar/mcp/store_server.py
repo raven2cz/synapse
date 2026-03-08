@@ -691,9 +691,15 @@ def _analyze_civitai_model_impl(
                 lines.append(f"    Files: {len(files)}, Total: {_format_size(int(total_size * 1024))}")
                 for f in files:
                     f_name = f.get("name", "")
+                    f_id = f.get("id", 0)
                     f_size = f.get("sizeKB", 0)
                     primary = " [primary]" if f.get("primary") else ""
-                    lines.append(f"      - {f_name} ({_format_size(int(f_size * 1024))}){primary}")
+                    lines.append(f"      - {f_name} (file_id: {f_id}, {_format_size(int(f_size * 1024))}){primary}")
+                    f_hashes = f.get("hashes", {})
+                    if f_hashes.get("SHA256"):
+                        lines.append(f"        SHA256: {f_hashes['SHA256']}")
+                    if f_hashes.get("AutoV2"):
+                        lines.append(f"        AutoV2: {f_hashes['AutoV2']}")
             if trained_words:
                 lines.append(f"    Trigger Words: {', '.join(trained_words)}")
 
@@ -1204,6 +1210,122 @@ def _suggest_asset_sources_impl(
         return f"Error: {e}"
 
 
+def _search_huggingface_impl(
+    query: str = "",
+    kind: str = "",
+    limit: int = 5,
+) -> str:
+    """Search for models on HuggingFace Hub and list their files."""
+    try:
+        if not query:
+            return "Error: query is required."
+
+        import requests as _requests
+
+        limit = max(1, min(limit, 10))
+
+        # Step 1: Search HF Hub API
+        params: dict = {"search": query, "limit": limit}
+        if kind:
+            # Map Synapse kind to HF pipeline_tag where applicable
+            kind_to_pipeline = {
+                "checkpoint": "text-to-image",
+                "controlnet": "text-to-image",  # ControlNets also tagged text-to-image
+            }
+            pipeline = kind_to_pipeline.get(kind.lower())
+            if pipeline:
+                params["pipeline_tag"] = pipeline
+
+        resp = _requests.get(
+            "https://huggingface.co/api/models",
+            params=params,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        models = resp.json()
+
+        if not models:
+            return f"No models found on HuggingFace matching '{query}'."
+
+        lines = [f"Found {len(models)} model{'s' if len(models) != 1 else ''} on HuggingFace:", ""]
+
+        for i, model in enumerate(models, 1):
+            repo_id = model.get("id", "")
+            downloads = model.get("downloads", 0)
+            pipeline_tag = model.get("pipeline_tag", "")
+            tags = model.get("tags", [])
+            last_modified = model.get("lastModified", "")
+
+            lines.append(f"{i}. {repo_id}")
+            info_parts = []
+            if downloads:
+                info_parts.append(f"Downloads: {downloads:,}")
+            if pipeline_tag:
+                info_parts.append(f"Pipeline: {pipeline_tag}")
+            if last_modified:
+                info_parts.append(f"Updated: {last_modified[:10]}")
+            if info_parts:
+                lines.append(f"   {', '.join(info_parts)}")
+
+            # Show relevant tags (skip generic ones)
+            skip_tags = {"diffusers", "safetensors", "region:us", "endpoints_compatible"}
+            relevant_tags = [t for t in tags if t not in skip_tags and not t.startswith("diffusers:")]
+            if relevant_tags:
+                lines.append(f"   Tags: {', '.join(relevant_tags[:8])}")
+
+            # Step 2: Fetch file listing for each repo (top-level only)
+            try:
+                tree_resp = _requests.get(
+                    f"https://huggingface.co/api/models/{repo_id}/tree/main",
+                    timeout=10,
+                )
+                tree_resp.raise_for_status()
+                tree = tree_resp.json()
+
+                # Filter to model files (safetensors, ckpt, bin, pt)
+                model_exts = {".safetensors", ".ckpt", ".bin", ".pt"}
+                model_files = [
+                    f for f in tree
+                    if f.get("type") == "file"
+                    and any(f.get("path", "").endswith(ext) for ext in model_exts)
+                ]
+
+                if model_files:
+                    lines.append(f"   Model files ({len(model_files)}):")
+                    for mf in model_files[:5]:
+                        path = mf.get("path", "")
+                        size = mf.get("size", 0)
+                        lfs = mf.get("lfs")
+                        sha256 = ""
+                        if lfs and isinstance(lfs, dict):
+                            sha256 = lfs.get("oid", "") or lfs.get("sha256", "")
+
+                        size_str = _format_size(size) if size else "?"
+                        lines.append(f"     - {path} ({size_str})")
+                        if sha256:
+                            lines.append(f"       SHA256: {sha256}")
+                    if len(model_files) > 5:
+                        lines.append(f"     ... and {len(model_files) - 5} more files")
+                else:
+                    # Check if it's a diffusers-format repo
+                    has_model_index = any(
+                        f.get("path") == "model_index.json" for f in tree
+                    )
+                    if has_model_index:
+                        lines.append("   Format: diffusers pipeline (multi-file, not single checkpoint)")
+                    else:
+                        lines.append("   No model files found in root")
+            except Exception:
+                lines.append("   (could not fetch file listing)")
+
+            lines.append("")  # blank line between results
+
+        return "\n".join(lines)
+    except Exception as e:
+        logger.error("search_huggingface failed: %s", e, exc_info=True)
+        return f"Error: {e}"
+
+
 # =============================================================================
 # MCP Tool registration (only when mcp is available)
 # =============================================================================
@@ -1342,5 +1464,11 @@ if MCP_AVAILABLE:
         """Suggest download sources for model files. Provide comma-separated asset names (e.g. 'model.safetensors, vae.safetensors')."""
         _log_tool_call("suggest_asset_sources", asset_names=asset_names)
         return _suggest_asset_sources_impl(asset_names=asset_names)
+
+    @mcp.tool()
+    def search_huggingface(query: str, kind: str = "", limit: int = 5) -> str:
+        """Search for models on HuggingFace Hub. Returns repo IDs, file listings with SHA256 hashes, and download counts. Filter by kind (checkpoint, vae, controlnet)."""
+        _log_tool_call("search_huggingface", query=query, kind=kind, limit=limit)
+        return _search_huggingface_impl(query=query, kind=kind, limit=limit)
 else:
     mcp = None
