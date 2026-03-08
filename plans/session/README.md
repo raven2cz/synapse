@@ -15,6 +15,16 @@ project session directory for Synapse, including:
 - Work: Phase 1 complete (committed), Phase 2 PLAN detailed, ready for Block A (skill design)
 - Context: Resolve Model Redesign — AI-enhanced dependency resolution
 
+## Memory files (standalone backup)
+
+Memory files are also stored separately in this directory for easy access
+without extracting the full archive:
+
+- `MEMORY.md` — main auto-memory (critical rules, active specs, workflows)
+- `download-system.md` — download system architecture reference
+
+These are the same files as in the archive under `memory/`.
+
 ## How to restore on another machine
 
 ### 1. Extract the archive
@@ -40,6 +50,20 @@ you need to rename the extracted directory:
 # Example: if your repo is at /home/alice/projects/synapse
 cd ~/.claude/projects
 mv ./-home-box-git-github-synapse ./-home-alice-projects-synapse
+```
+
+### 2b. Restore memory files (if NOT extracting the full archive)
+
+If you only want memory continuity without full session history:
+
+```bash
+# Create the project memory directory
+PROJECT_DIR=$(echo "$PWD" | sed 's|/|-|g; s|^|/|; s|^/|-|')
+mkdir -p ~/.claude/projects/${PROJECT_DIR}/memory
+
+# Copy memory files
+cp plans/session/MEMORY.md ~/.claude/projects/${PROJECT_DIR}/memory/
+cp plans/session/download-system.md ~/.claude/projects/${PROJECT_DIR}/memory/
 ```
 
 ### 3. Resume the session
