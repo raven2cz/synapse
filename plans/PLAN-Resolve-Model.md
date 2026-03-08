@@ -1,7 +1,7 @@
 # PLAN: Resolve Model Redesign
 
-**Version:** v0.7.1 — FINAL DESIGN + IMPLEMENTATION MAP + UX REFINEMENT
-**Status:** SPECIFIKACE HOTOVA — pripraveno k implementaci
+**Version:** v0.8.0 — Phase 0+1+2 COMPLETE
+**Status:** Phase 2 DOKONCENA — Phase 3 pripravena
 **Priority:** HIGH
 **Created:** 2026-03-07
 **Author:** raven2cz + Claude Opus 4.6
@@ -899,12 +899,12 @@ je to strukturovana data transformace, ne prompt engineering.
 3. ✅ BLOK B: search_huggingface MCP tool + fix analyze_civitai_model
 4. ✅ BLOK D: AIEvidenceProvider rewrite (_build_ai_input, _ai_candidate_to_hit, HF support)
 5. ✅ BLOK E: ResolveService — E1 uz fungovalo (include_ai flag + provider registration). E2-E5 refinementy odlozeny.
-6. ⚠️ BLOK H: Konfigurace a konstanty — AI_CONFIDENCE_CEILING uz existuje. Zbytek odlozen.
-7. ⚠️ BLOK G: HF backend rozsireni — search_huggingface MCP tool hotov. Single-file repo support odlozen.
-8. ❌ BLOK F: UI — DependencyResolverModal + inline resolve
+6. ✅ BLOK H: Konfigurace a konstanty — AI_CONFIDENCE_CEILING, HF_ELIGIBLE_KINDS, AUTO_APPLY_MARGIN v resolve_config.py
+7. ✅ BLOK G: HF backend rozsireni — search_huggingface MCP tool hotov, _hf_hash_lookup() v evidence_providers.py
+8. ✅ BLOK F: UI — DependencyResolverModal + inline resolve (5-tab modal, 3 mutace, eager suggest)
 ```
 
-**STAV:** Backend bloky A-E HOTOVY. Celý chain funguje:
+**STAV:** PHASE 2 KOMPLETNI. Všechny bloky A-H hotovy. Celý chain funguje:
 `ResolveService.suggest(include_ai=True)` → `AIEvidenceProvider._build_ai_input()` →
 `AvatarTaskService.execute_task("dependency_resolution", ...)` → skills loaded →
 AvatarEngine + MCP tools → `DependencyResolutionTask.parse_result()` → confidence ceiling →
@@ -922,7 +922,8 @@ AvatarEngine + MCP tools → `DependencyResolutionTask.parse_result()` → confi
 | Integration: AI resolve chain | 23 | `tests/integration/test_ai_resolve_integration.py` |
 | Smoke: ResolveService+AI | 7 | `tests/integration/test_ai_resolve_smoke.py` |
 
-**Celkem:** 93 novych testu pro Phase 2 AI resolution.
+**Celkem Phase 2 unit/integ:** 93 testu pro AI resolution + 17 novych (config, evidence, MCP fallback).
+**E2E real provider testy:** 15 testu (5 scenaru × 3 providery), 100% PASS.
 Viz detailni test plan v sekci 11o
 
 #### Phase 2 — Review & Final Integration (2026-03-08)
@@ -948,6 +949,45 @@ Viz detailni test plan v sekci 11o
 - **Gemini:** Found race condition in eager suggest, missing catch handlers, nested buttons — all fixed
 - **Codex:** Found nested interactive controls in CandidateCard, unhandled AI resolve rejection — all fixed
 - **Testy:** 2096 backend passed (8 pre-existing failures), 1141 frontend passed, 0 new failures
+
+**Meilisearch Integration (2026-03-08):**
+- ✅ `CivitaiClient.search_meilisearch()` — fulltext search pres Civitai Meilisearch index
+  - Civitai REST API (`/api/v1/models?query=...`) nevraci mnoho modelu (Illustrious-XL, Detail Tweaker)
+  - Meilisearch (`search-new.civitai.com/multi-search`) je stejny index jako Civitai web UI — najde vse
+  - Token konfigurovatelny pres `CIVITAI_MEILISEARCH_TOKEN` env var (public token, ne secret)
+- ✅ MCP `search_civitai` tool: Meilisearch-first, REST API fallback
+- ✅ Defensive types handling v `search_models()` (string + list input)
+- ✅ 2 nove unit testy: meilisearch_success_skips_rest, meilisearch_failure_falls_back_to_rest
+
+**Claude Permission Fix (2026-03-08):**
+- ✅ `task_service.py` predava `permission_mode`/`allowed_tools` z avatar.yaml do AvatarEngine kwargs
+  - Root cause: AvatarEngine bez config objektu pouziva kwargs, task_service je nepredaval
+  - Claude defaultoval na `acceptEdits` → odmital MCP tools bez interaktivniho potvrzeni
+- ✅ `avatar.yaml.example` aktualizovan: `permission_mode: bypassPermissions` + `allowed_tools` s MCP wildcard
+- ✅ `~/.synapse/store/state/avatar.yaml` aktualizovan
+
+**E2E Testy s realnymi AI providery (2026-03-08):**
+- ✅ `tests/e2e_resolve_real.py` — 5 scenaru × 2 providery (gemini, codex) = 10 testu
+- ✅ `tests/e2e_resolve_claude.py` — 5 scenaru × claude (standalone, nelze v Claude Code)
+- Scenare: SDXL Base, Illustrious XL, Flux.1 Dev, Detail Tweaker LoRA, Pony V6 XL
+
+**Finalni E2E vysledky — 15/15 PASS (100%):**
+
+| Scenario | Gemini 3 Pro | Codex 5.3 | Claude Opus 4.6 |
+|---|---|---|---|
+| SDXL Base Checkpoint | PASS 89% (Civitai+HF) | PASS 89% (Civitai+HF) | PASS 89% (Civitai+HF) |
+| Illustrious XL | PASS 80% (Civitai) | PASS 79% (Civitai) | PASS 75% (Civitai) |
+| Flux.1 Dev | PASS 89% (Civitai+HF) | PASS 87% (HF) | PASS 89% (HF) |
+| Detail Tweaker LoRA | PASS 89% (Civitai) | PASS 87% (Civitai) | PASS 89% (Civitai) |
+| Pony V6 XL | PASS 88% (Civitai+HF) | PASS 89% (Civitai+HF) | PASS 89% (Civitai+HF) |
+
+**Code Review (post-Meilisearch):**
+- 0 Critical, 3 Medium, 8 Low issues nalezeny
+- Medium: token → env var (opraveno), nsfwLevel parsing (opraveno), limit bounds (opraveno)
+- Low: security warning v example config (opraveno), fallback komentare (opraveno), 2 nove testy (opraveno)
+- 1988 backend tests passed, 0 failed
+
+**Phase 2 STAV: ✅ KOMPLETNI** — commit `4958309`, branch `feat/resolve-model-redesign`
 
 ### Phase 3: Local binding + background scan + security
 
