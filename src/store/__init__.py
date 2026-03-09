@@ -602,8 +602,8 @@ class Store:
                 if fname:
                     preview_filenames.append(fname)
 
-            pack_path = self.layout.pack_path(pack.name)
-            hints = extract_preview_hints(pack_path, preview_filenames) if preview_filenames else []
+            previews_path = self.layout.pack_previews_path(pack.name)
+            hints = extract_preview_hints(previews_path, preview_filenames) if preview_filenames else []
 
             for dep in pack.dependencies:
                 # Skip deps that already have a concrete pinned selector
@@ -633,11 +633,20 @@ class Store:
                         margin = 1.0
 
                     if margin >= 0.15:
-                        self.resolve_service.apply(pack.name, dep.id, top.candidate_id)
-                        logger.info(
-                            "[post-import] Auto-applied %s for dep '%s' (tier=%d, confidence=%.2f)",
-                            top.display_name, dep.id, top.tier, top.confidence,
+                        apply_result = self.resolve_service.apply(
+                            pack.name, dep.id, top.candidate_id,
+                            request_id=result.request_id,
                         )
+                        if apply_result.success:
+                            logger.info(
+                                "[post-import] Auto-applied %s for dep '%s' (tier=%d, confidence=%.2f)",
+                                top.display_name, dep.id, top.tier, top.confidence,
+                            )
+                        else:
+                            logger.warning(
+                                "[post-import] Apply failed for dep '%s': %s",
+                                dep.id, apply_result.message,
+                            )
 
                 except Exception as e:
                     logger.warning("[post-import] Resolve failed for dep '%s': %s", dep.id, e)

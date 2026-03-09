@@ -525,6 +525,7 @@ export interface SuggestResult {
   candidates: ResolutionCandidate[]
   pack_fingerprint: string
   warnings: string[]
+  preview_hints?: PreviewModelHintInfo[]
 }
 
 /**
@@ -553,3 +554,44 @@ export type ConfidenceLevel = 'exact' | 'high' | 'possible' | 'hint'
  * HuggingFace-eligible asset kinds (matching backend resolve_config)
  */
 export const HF_ELIGIBLE_KINDS = new Set<AssetType>(['checkpoint', 'vae', 'controlnet'])
+
+// =============================================================================
+// Preview Analysis Types
+// =============================================================================
+
+/**
+ * Model hint extracted from a preview image
+ */
+export interface PreviewModelHintInfo {
+  filename: string
+  kind: string | null
+  source_type: 'api_meta' | 'png_embedded'
+  raw_value: string
+  resolvable: boolean
+  hash?: string | null
+  weight?: number | null
+}
+
+/**
+ * Single preview image with extracted hints and generation params
+ */
+export interface PreviewAnalysisItem {
+  filename: string
+  url?: string | null
+  thumbnail_url?: string | null
+  media_type: 'image' | 'video' | 'unknown'
+  width?: number | null
+  height?: number | null
+  nsfw: boolean
+  hints: PreviewModelHintInfo[]
+  generation_params?: Record<string, any> | null
+}
+
+/**
+ * Response from preview-analysis endpoint
+ */
+export interface PreviewAnalysisResponse {
+  pack_name: string
+  previews: PreviewAnalysisItem[]
+  total_hints: number
+}

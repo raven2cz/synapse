@@ -989,6 +989,45 @@ Viz detailni test plan v sekci 11o
 
 **Phase 2 STAV: ✅ KOMPLETNI** — commit `4958309`, branch `feat/resolve-model-redesign`
 
+---
+
+#### Phase 2.5: Preview Enrichment + Bug Fixes (2026-03-09)
+
+**Cil:** Odstranit `model_id=0` placeholder gap — preview/file hinty ted resolvuji skutecne Civitai IDs.
+
+**Problem:**
+- `PreviewMetaEvidenceProvider` a `FileMetaEvidenceProvider` vytvarily kandidaty s `model_id=0`
+- `resolve_validation.py` odmitalo `model_id=0` jako "invalid zero value"
+- `_post_import_resolve()` nekontrolovala `ApplyResult.success` — false "Auto-applied" log
+- Celkove: preview hinty nikdy nevedly k realnym downloadable kandidatum bez AI provideru
+
+**Reseni: Enrichment v PreviewMetaEvidenceProvider** (stejny pattern jako HashEvidenceProvider):
+1. ✅ Provider prijima `pack_service_getter` → pristup k Civitai klientu
+2. ✅ Hash lookup: `civitai.get_model_by_hash(hint.hash)` → realne `model_id/version_id/file_id`
+3. ✅ Name search fallback: `search_meilisearch(stem)` → name+kind matching → `get_model()` pro latest
+4. ✅ Hash cache pro deduplikaci API callu v ramci jednoho `suggest()`
+5. ✅ Confidence boost +0.05 pro enriched kandidaty
+6. ✅ Backward compatible: bez `pack_service_getter` funguje v placeholder modu
+
+**Bug fixy:**
+- ✅ `_post_import_resolve()` ted kontroluje `apply_result.success` + predava `request_id`
+- ✅ Apply failure se loguje jako warning, ne false success
+
+**Zmeny:**
+| Soubor | Zmena |
+|--------|-------|
+| `src/store/evidence_providers.py` | PreviewMetaEvidenceProvider enrichment (hash+name), helpers |
+| `src/store/resolve_service.py:160` | Wiring: `PreviewMetaEvidenceProvider(ps_getter)` |
+| `src/store/__init__.py:635` | Bug fix: check `apply_result.success` |
+| `tests/unit/store/test_evidence_providers.py` | +10 testu (TestPreviewMetaEnrichment) |
+| `tests/unit/store/test_phase1_import_pipeline.py` | +1 test, 1 fix |
+
+**Testy:** 1827 backend + 1153 frontend = 2980 passed, 0 failed
+
+**Identifikace problemu:** Analyze Claude + Explore agent + Codex 5.4 (3 nezavisle analyzy)
+
+---
+
 ### Phase 3: Local binding + background scan + security
 
 **Cil:** Lokalni modely vsech typu. Plny background scan service. Security hardening.
@@ -2052,5 +2091,45 @@ class TestResolveRoundtrip:
 
 ---
 
+---
+
+#### Preview Analysis Tab — Full Implementation (2026-03-08)
+
+**Block F placeholder → full implementation.**
+
+**Backend:**
+- ✅ BUG 7 fix: Sidecar format — `_parse_sidecar_meta()` now supports both flat and wrapped formats
+- ✅ BUG 8 fix: Sidecar path — `extract_preview_hints()` now uses `pack_previews_path()` not `pack_path()`
+- ✅ Enhanced sidecar parsing: `hash`, `weight` fields on `PreviewModelHint`; LoRA tags from prompt text
+- ✅ `PreviewAnalysisResult` model: filename, url, media_type, hints, generation_params
+- ✅ `analyze_pack_previews()` — full preview analysis function
+- ✅ ComfyUI node registry: `ComfyUINodeDef` dataclass + `COMFYUI_NODE_REGISTRY` dict (20 node types)
+  - Multi-model node support (DualCLIPLoader → 2 hints)
+  - New nodes: UNETLoader, DiffControlNetLoader, IPAdapterModelLoader, StyleModelLoader, etc.
+- ✅ `GET /api/packs/{pack}/preview-analysis` endpoint
+- ✅ `SuggestResult.preview_hints` extension
+
+**Frontend:**
+- ✅ `PreviewAnalysisTab.tsx` — ~350 line component with:
+  - Responsive thumbnail grid (5-8 columns)
+  - Click-to-select with metadata panel
+  - Model hints with kind badges, hash, weight display
+  - "Use" button → cross-references existing candidates, switches to Candidates tab
+  - Generation params display (sampler, steps, CFG, seed, prompt, negative)
+  - Copy-to-clipboard for prompts
+  - Loading, error, empty states
+- ✅ `usePreviewAnalysis` hook (React Query, 5min staleTime)
+- ✅ `PreviewModelHintInfo`, `PreviewAnalysisItem`, `PreviewAnalysisResponse` types
+- ✅ Integrated into DependencyResolverModal (replaced placeholder)
+
+**Tests:**
+- 65 unit tests: `tests/unit/utils/test_preview_meta_extractor.py`
+  - BUG 7 format tests (6), enhanced parsing (10), real data (5), ComfyUI registry (14)
+  - analyze_pack_previews (5), generation params (4), existing tests preserved (21)
+- 5 API tests: `tests/store/test_api_preview_analysis.py`
+- 12 frontend tests: `apps/web/src/__tests__/preview-analysis.test.ts`
+
+**Review:** Claude review completed — 4 MEDIUM issues found and fixed (bounds check, clipboard error handling, misleading docstring, unused prop). Pre-existing Layout.tsx TS errors not related to changes.
+
 *Created: 2026-03-07*
-*Last Updated: 2026-03-07*
+*Last Updated: 2026-03-08*

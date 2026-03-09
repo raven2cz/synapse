@@ -134,16 +134,30 @@ class HashEvidenceProvider:
 
 
 class PreviewMetaEvidenceProvider:
-    """E2+E3: Preview metadata (PNG embedded + API sidecar). Tier 2."""
+    """E2+E3: Preview metadata (PNG embedded + API sidecar). Tier 2.
+
+    Enriches preview hints with real Civitai model IDs via:
+    1. Hash lookup (get_model_by_hash) — most reliable
+    2. Name search (meilisearch/search_models) — fallback
+    3. Placeholder (model_id=0) — last resort for AI/manual resolution
+    """
 
     tier = 2
+
+    def __init__(self, pack_service_getter: Optional[Callable] = None):
+        self._ps = pack_service_getter
 
     def supports(self, ctx: ResolveContext) -> bool:
         return bool(ctx.preview_hints)
 
     def gather(self, ctx: ResolveContext) -> ProviderResult:
-        """Convert preview hints to evidence hits with provenance grouping."""
+        """Convert preview hints to evidence hits, enriching with real IDs."""
         hits = []
+        warnings = []
+
+        civitai = self._get_civitai()
+        # Cache resolved hashes to avoid duplicate API calls within one suggest
+        hash_cache: dict[str, Optional[dict]] = {}
 
         for hint in ctx.preview_hints:
             if not hint.resolvable:
@@ -153,15 +167,36 @@ class PreviewMetaEvidenceProvider:
             source = ("preview_embedded" if hint.source_type == "png_embedded"
                       else "preview_api_meta")
 
-            seed = CandidateSeed(
-                key=f"preview:{hint.filename}",
-                selector=DependencySelector(
-                    strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
-                    civitai=CivitaiSelector(model_id=0),  # Placeholder, needs search
-                ),
-                display_name=hint.filename,
-                provider_name="civitai",
-            )
+            # Try to resolve real Civitai IDs
+            resolved = self._resolve_hint(hint, civitai, hash_cache, warnings)
+
+            if resolved:
+                model_id, version_id, file_id, display_name = resolved
+                seed = CandidateSeed(
+                    key=f"civitai:{model_id}:{version_id}",
+                    selector=DependencySelector(
+                        strategy=SelectorStrategy.CIVITAI_FILE,
+                        civitai=CivitaiSelector(
+                            model_id=model_id,
+                            version_id=version_id,
+                            file_id=file_id,
+                        ),
+                    ),
+                    display_name=display_name,
+                    provider_name="civitai",
+                )
+                # Boost confidence when we have real IDs
+                confidence = min(confidence + 0.05, 0.90)
+            else:
+                seed = CandidateSeed(
+                    key=f"preview:{hint.filename}",
+                    selector=DependencySelector(
+                        strategy=SelectorStrategy.CIVITAI_MODEL_LATEST,
+                        civitai=CivitaiSelector(model_id=0),  # Unresolved
+                    ),
+                    display_name=hint.filename,
+                    provider_name="civitai",
+                )
 
             hits.append(EvidenceHit(
                 candidate=seed,
@@ -174,7 +209,146 @@ class PreviewMetaEvidenceProvider:
                 ),
             ))
 
-        return ProviderResult(hits=hits)
+        return ProviderResult(hits=hits, warnings=warnings)
+
+    def _get_civitai(self) -> Any:
+        """Get Civitai client from pack_service, or None."""
+        if self._ps is None:
+            return None
+        ps = self._ps()
+        if ps is None:
+            return None
+        return getattr(ps, "civitai", None)
+
+    def _resolve_hint(
+        self,
+        hint: PreviewModelHint,
+        civitai: Any,
+        hash_cache: dict,
+        warnings: list,
+    ) -> Optional[tuple]:
+        """Try to resolve a hint to (model_id, version_id, file_id, display_name).
+
+        Strategy:
+        1. Hash lookup (most reliable, single API call)
+        2. Name search via Meilisearch (fallback)
+        """
+        if civitai is None:
+            return None
+
+        # 1. Hash lookup
+        if hint.hash:
+            result = self._lookup_by_hash(hint.hash, civitai, hash_cache, warnings)
+            if result:
+                return result
+
+        # 2. Name search fallback
+        return self._search_by_name(hint, civitai, warnings)
+
+    def _lookup_by_hash(
+        self,
+        hash_value: str,
+        civitai: Any,
+        hash_cache: dict,
+        warnings: list,
+    ) -> Optional[tuple]:
+        """Look up model by hash, with caching."""
+        if hash_value in hash_cache:
+            cached = hash_cache[hash_value]
+            if cached is None:
+                return None
+            return cached
+
+        try:
+            result = civitai.get_model_by_hash(hash_value)
+            if result:
+                # CivitaiModelVersion is a dataclass — use attrs, not .get()
+                model_id = getattr(result, "model_id", None)
+                version_id = getattr(result, "id", None)
+                display_name = getattr(result, "name", "Unknown")
+                file_id = _extract_file_id_from_version(result, hash_value)
+
+                if model_id and version_id:
+                    resolved = (model_id, version_id, file_id, display_name)
+                    hash_cache[hash_value] = resolved
+                    return resolved
+
+            hash_cache[hash_value] = None
+        except Exception as e:
+            warnings.append(f"Preview hash lookup failed for {hash_value[:10]}: {e}")
+            hash_cache[hash_value] = None
+
+        return None
+
+    def _search_by_name(
+        self,
+        hint: PreviewModelHint,
+        civitai: Any,
+        warnings: list,
+    ) -> Optional[tuple]:
+        """Search Civitai by model name extracted from hint."""
+        # Build search query from filename stem
+        stem = _extract_stem(hint.filename)
+        if not stem or len(stem) < 3:
+            return None
+
+        try:
+            # Prefer Meilisearch (faster, better fuzzy matching)
+            search_fn = getattr(civitai, "search_meilisearch", None)
+            if search_fn is None:
+                search_fn = getattr(civitai, "search_models", None)
+            if search_fn is None:
+                return None
+
+            results = search_fn(query=stem, limit=5)
+            items = results.get("items", []) if isinstance(results, dict) else []
+
+            if not items:
+                return None
+
+            # Find best match: prefer exact name match, then kind match
+            for item in items:
+                item_name = (item.get("name") or "").lower()
+                item_type = (item.get("type") or "").lower()
+                model_id = item.get("id")
+
+                if not model_id:
+                    continue
+
+                # Check kind compatibility
+                if hint.kind and not _kind_matches_civitai_type(hint.kind, item_type):
+                    continue
+
+                # Check name similarity (normalize underscores/spaces for comparison)
+                stem_norm = stem.lower().replace("_", " ").replace("-", " ")
+                name_norm = item_name.replace("_", " ").replace("-", " ")
+                if stem_norm not in name_norm and name_norm not in stem_norm:
+                    continue
+
+                # Get latest version from model details
+                version_id = None
+                file_id = None
+                try:
+                    model_data = civitai.get_model(model_id)
+                    if model_data:
+                        versions = model_data.get("modelVersions", [])
+                        if versions:
+                            latest = versions[0]
+                            version_id = latest.get("id")
+                            files = latest.get("files", [])
+                            if files:
+                                file_id = files[0].get("id")
+                except Exception:
+                    pass
+
+                if version_id:
+                    display_name = item.get("name", stem)
+                    return (model_id, version_id, file_id, display_name)
+
+        except Exception as e:
+            logger.debug("[preview-provider] Name search failed for '%s': %s", stem, e)
+
+        return None
 
 
 class FileMetaEvidenceProvider:
@@ -377,6 +551,43 @@ def _extract_file_id(version_data: dict, sha256: str) -> Optional[int]:
         if hashes.get("SHA256", "").lower() == sha256.lower():
             return f.get("id")
     return None
+
+
+def _extract_first_file_id(version_data: dict) -> Optional[int]:
+    """Extract file_id of the primary (first) file from version data."""
+    files = version_data.get("files", [])
+    if files:
+        return files[0].get("id")
+    return None
+
+
+def _extract_file_id_from_version(version_obj: Any, hash_value: str) -> Optional[int]:
+    """Extract file_id from CivitaiModelVersion dataclass by matching hash."""
+    files = getattr(version_obj, "files", [])
+    for f in files:
+        if isinstance(f, dict):
+            hashes = f.get("hashes", {})
+            for h in hashes.values():
+                if isinstance(h, str) and h.lower() == hash_value.lower():
+                    return f.get("id")
+    # Fallback: return first file id
+    if files and isinstance(files[0], dict):
+        return files[0].get("id")
+    return None
+
+
+def _kind_matches_civitai_type(kind: AssetKind, civitai_type: str) -> bool:
+    """Check if an AssetKind matches a Civitai model type string."""
+    kind_to_types = {
+        AssetKind.CHECKPOINT: {"checkpoint", "model"},
+        AssetKind.LORA: {"lora", "locon"},
+        AssetKind.VAE: {"vae"},
+        AssetKind.CONTROLNET: {"controlnet"},
+        AssetKind.EMBEDDING: {"textualinversion", "embedding"},
+        AssetKind.UPSCALER: {"upscaler"},
+    }
+    allowed = kind_to_types.get(kind, set())
+    return civitai_type.lower() in allowed
 
 
 def _hf_hash_lookup(

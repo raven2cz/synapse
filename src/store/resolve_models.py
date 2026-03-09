@@ -99,6 +99,21 @@ class PreviewModelHint(BaseModel):
     source_type: Literal["api_meta", "png_embedded"]
     raw_value: str             # Raw value for debugging
     resolvable: bool = True    # False if private/unknown format
+    hash: Optional[str] = None         # Short SHA hash if available
+    weight: Optional[float] = None     # LoRA weight if available
+
+
+class PreviewAnalysisResult(BaseModel):
+    """Preview image with extracted hints + raw generation params."""
+    filename: str
+    url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    media_type: Literal["image", "video", "unknown"] = "image"
+    width: Optional[int] = None
+    height: Optional[int] = None
+    nsfw: bool = False
+    hints: List[PreviewModelHint] = Field(default_factory=list)
+    generation_params: Optional[Dict[str, Any]] = None
 
 
 # --- Provider result ---
@@ -126,6 +141,7 @@ class SuggestResult(BaseModel):
     candidates: List[ResolutionCandidate] = Field(default_factory=list)
     pack_fingerprint: str = ""  # SHA hash of pack.json for stale detection
     warnings: List[str] = Field(default_factory=list)
+    preview_hints: List[PreviewModelHint] = Field(default_factory=list)
 
 
 class ApplyResult(BaseModel):

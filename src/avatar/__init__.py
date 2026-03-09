@@ -13,7 +13,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-AVATAR_ENGINE_MIN_VERSION = "1.2.0"
+AVATAR_ENGINE_MIN_VERSION = "1.3.0"
 
 # Check avatar-engine availability at import time
 try:

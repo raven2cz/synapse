@@ -27,6 +27,10 @@ export {
   useAvatarAvailable,
 } from './useAvatarAvailable'
 
+export {
+  usePreviewAnalysis,
+} from './usePreviewAnalysis'
+
 // Future hooks:
 // export { usePackPlugin, type UsePackPluginReturn } from './usePackPlugin'
 // export { useMarkdownEditor } from './useMarkdownEditor'

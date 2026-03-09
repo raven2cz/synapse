@@ -157,7 +157,7 @@ class ResolveService:
         layout_getter = lambda: self._layout
         self._providers = {
             "hash_match": HashEvidenceProvider(ps_getter),
-            "preview_meta": PreviewMetaEvidenceProvider(),
+            "preview_meta": PreviewMetaEvidenceProvider(ps_getter),
             "file_meta": FileMetaEvidenceProvider(),
             "alias": AliasEvidenceProvider(layout_getter),
             "source_meta": SourceMetaEvidenceProvider(),
@@ -248,6 +248,7 @@ class ResolveService:
             candidates=candidates[:options.max_candidates],
             pack_fingerprint=fingerprint,
             warnings=warnings,
+            preview_hints=preview_hints,
         )
 
         # Cache for apply

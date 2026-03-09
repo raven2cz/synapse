@@ -291,9 +291,10 @@ class TestPostImportResolve:
             with patch(PATCH_EXTRACT, return_value=[]):
                 store._post_import_resolve(pack)
 
-            store.resolve_service.apply.assert_called_once_with(
-                "single-dep", "base_checkpoint", top.candidate_id,
-            )
+            store.resolve_service.apply.assert_called_once()
+            call_args = store.resolve_service.apply.call_args
+            assert call_args[0] == ("single-dep", "base_checkpoint", top.candidate_id)
+            assert "request_id" in call_args[1]
 
     def test_no_auto_apply_tier3(self):
         """Do NOT auto-apply when best candidate is TIER-3."""
@@ -486,6 +487,50 @@ class TestPostImportResolve:
             call_args = store.resolve_service.suggest.call_args
             options = call_args[0][2]  # 3rd positional arg
             assert options.include_ai is False
+
+    def test_apply_failure_does_not_log_as_success(self):
+        """When apply() returns success=False, it must not be logged as applied."""
+        from src.store import Store
+
+        with patch.object(Store, "__init__", lambda self, **kw: None):
+            store = Store.__new__(Store)
+            store.resolve_service = MagicMock()
+            store.layout = MagicMock()
+            store.layout.pack_path.return_value = Path("/tmp/test-pack")
+
+            top = _make_candidate(confidence=0.95, tier=1, name="placeholder")
+            store.resolve_service.suggest.return_value = SuggestResult(
+                candidates=[top],
+            )
+            store.resolve_service.apply.return_value = ApplyResult(
+                success=False,
+                message="Selector validation failed: Missing required field: Civitai model ID (invalid zero value)",
+            )
+
+            pack = Pack(
+                name="fail-pack",
+                pack_type=AssetKind.LORA,
+                source=PackSource(provider=ProviderName.CIVITAI, model_id=1),
+                base_model="SDXL",
+                dependencies=[
+                    PackDependency(
+                        id="base_checkpoint",
+                        kind=AssetKind.CHECKPOINT,
+                        required=False,
+                        selector=DependencySelector(
+                            strategy=SelectorStrategy.BASE_MODEL_HINT,
+                            base_model="SDXL",
+                        ),
+                        expose=ExposeConfig(filename="SDXL.safetensors"),
+                    ),
+                ],
+            )
+
+            with patch(PATCH_EXTRACT, return_value=[]):
+                store._post_import_resolve(pack)
+
+            # apply was called but returned failure
+            store.resolve_service.apply.assert_called_once()
 
 
 # =============================================================================

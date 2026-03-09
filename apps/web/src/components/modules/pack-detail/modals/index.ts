@@ -20,6 +20,9 @@ export { BaseModelResolverModal, type BaseModelResolverModalProps } from './Base
 // Dependency Resolver - multi-source dependency resolution (Resolve Model)
 export { DependencyResolverModal, type DependencyResolverModalProps } from './DependencyResolverModal'
 
+// Preview Analysis Tab - extracted for reuse/testing
+export { PreviewAnalysisTab, type PreviewAnalysisTabProps } from './PreviewAnalysisTab'
+
 // Edit Previews - drag & drop preview management (Phase 2)
 export { EditPreviewsModal, type EditPreviewsModalProps } from './EditPreviewsModal'
 

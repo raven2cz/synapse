@@ -2525,6 +2525,33 @@ class ManualApplyRequest(BaseModel):
     display_name: Optional[str] = None
 
 
+@v2_packs_router.get("/{pack_name}/preview-analysis")
+def get_preview_analysis(
+    pack_name: str,
+    store=Depends(require_initialized),
+):
+    """Extract model hints and generation params from pack preview images."""
+    try:
+        pack = store.get_pack(pack_name)
+        if not pack:
+            raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
+        from src.utils.preview_meta_extractor import analyze_pack_previews
+        previews_path = store.layout.pack_previews_path(pack_name)
+        results = analyze_pack_previews(previews_path, pack.previews or [])
+
+        return {
+            "pack_name": pack_name,
+            "previews": [r.model_dump() for r in results],
+            "total_hints": sum(len(r.hints) for r in results),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[preview-analysis] Error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @v2_packs_router.post("/{pack_name}/suggest-resolution")
 def suggest_resolution(
     pack_name: str,
@@ -2548,6 +2575,7 @@ def suggest_resolution(
             "candidates": [c.model_dump() for c in result.candidates],
             "pack_fingerprint": result.pack_fingerprint,
             "warnings": result.warnings,
+            "preview_hints": [h.model_dump() for h in result.preview_hints],
         }
     except HTTPException:
         raise

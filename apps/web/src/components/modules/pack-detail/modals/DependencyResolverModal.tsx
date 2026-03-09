@@ -50,6 +50,7 @@ import type {
 } from '../types'
 import { HF_ELIGIBLE_KINDS } from '../types'
 import { ANIMATION_PRESETS } from '../constants'
+import { PreviewAnalysisTab } from './PreviewAnalysisTab'
 
 // =============================================================================
 // Types
@@ -317,7 +318,7 @@ function EvidenceGroupCard({ group }: { group: EvidenceGroupInfo }) {
 export function DependencyResolverModal({
   isOpen,
   onClose,
-  packName: _packName,
+  packName,
   depId: _depId,
   depName,
   kind,
@@ -501,31 +502,15 @@ export function DependencyResolverModal({
 
           {/* Preview Analysis Tab */}
           {tab === 'preview' && (
-            <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <Image className="w-10 h-10 text-text-muted/50" />
-              <p className="text-text-muted text-center">
-                {t(
-                  'pack.resolve.previewAnalysis',
-                  'Preview metadata analysis shows model references found in preview images.'
-                )}
-              </p>
-              {candidates.filter((c) =>
-                c.evidence_groups.some((g) =>
-                  g.items.some(
-                    (i) =>
-                      i.source === 'preview_embedded' || i.source === 'preview_api_meta'
-                  )
-                )
-              ).length > 0 ? (
-                <p className="text-sm text-synapse">
-                  {t('pack.resolve.previewFound', 'Preview evidence found — see Candidates tab.')}
-                </p>
-              ) : (
-                <p className="text-sm text-text-muted">
-                  {t('pack.resolve.noPreviewData', 'No preview metadata available for this dependency.')}
-                </p>
-              )}
-            </div>
+            <PreviewAnalysisTab
+              packName={packName}
+              depKind={kind}
+              candidates={candidates}
+              onSelectCandidate={(candidateId) => {
+                setSelectedCandidateId(candidateId)
+                setTab('candidates')
+              }}
+            />
           )}
 
           {/* AI Resolve Tab */}

@@ -316,6 +316,243 @@ class TestPreviewMetaEvidenceProvider:
         assert result.hits == []
 
 
+class TestPreviewMetaEnrichment:
+    """Tests for preview hint → real Civitai ID enrichment."""
+
+    def _make_civitai_version(self, model_id=1001, version_id=2001, name="TestModel"):
+        """Create a mock CivitaiModelVersion dataclass."""
+        v = MagicMock()
+        v.model_id = model_id
+        v.id = version_id
+        v.name = name
+        v.files = [{"id": 3001, "hashes": {"SHA256": "aabb1122"}}]
+        return v
+
+    def test_hash_lookup_resolves_real_ids(self):
+        """When hint has a hash, provider resolves via get_model_by_hash."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = self._make_civitai_version()
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="juggernaut_xl.safetensors",
+                kind=AssetKind.CHECKPOINT,
+                source_image="001.png",
+                source_type="api_meta",
+                raw_value="juggernaut_xl",
+                hash="aabb1122",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        hit = result.hits[0]
+        assert hit.candidate.selector.strategy == SelectorStrategy.CIVITAI_FILE
+        assert hit.candidate.selector.civitai.model_id == 1001
+        assert hit.candidate.selector.civitai.version_id == 2001
+        assert "civitai:1001:2001" in hit.candidate.key
+        civitai.get_model_by_hash.assert_called_once_with("aabb1122")
+
+    def test_hash_miss_falls_back_to_name_search(self):
+        """When hash lookup fails, provider tries name search."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+        civitai.search_meilisearch.return_value = {
+            "items": [{"id": 5001, "name": "Juggernaut XL", "type": "Checkpoint"}],
+        }
+        civitai.get_model.return_value = {
+            "modelVersions": [{"id": 6001, "files": [{"id": 7001}]}],
+        }
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="juggernaut_xl.safetensors",
+                kind=AssetKind.CHECKPOINT,
+                source_image="001.png",
+                source_type="api_meta",
+                raw_value="juggernaut_xl",
+                hash="deadbeef",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        hit = result.hits[0]
+        assert hit.candidate.selector.civitai.model_id == 5001
+        assert hit.candidate.selector.civitai.version_id == 6001
+
+    def test_no_civitai_client_keeps_placeholder(self):
+        """Without civitai client, hints keep model_id=0 placeholder."""
+        p = PreviewMetaEvidenceProvider(lambda: None)
+        hints = [
+            PreviewModelHint(
+                filename="model.safetensors",
+                source_image="001.png",
+                source_type="api_meta",
+                raw_value="model",
+                hash="aabb",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        assert result.hits[0].candidate.selector.civitai.model_id == 0
+
+    def test_hash_cache_dedup(self):
+        """Same hash is only looked up once via API."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = self._make_civitai_version()
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="model_a.safetensors", source_image="001.png",
+                source_type="api_meta", raw_value="a", hash="samehash",
+            ),
+            PreviewModelHint(
+                filename="model_b.safetensors", source_image="002.png",
+                source_type="api_meta", raw_value="b", hash="samehash",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 2
+        # Both resolved, but only one API call
+        civitai.get_model_by_hash.assert_called_once_with("samehash")
+        for hit in result.hits:
+            assert hit.candidate.selector.civitai.model_id == 1001
+
+    def test_name_search_filters_by_kind(self):
+        """Name search skips results with wrong model type."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+        civitai.search_meilisearch.return_value = {
+            "items": [
+                {"id": 100, "name": "Test LoRA", "type": "LORA"},
+                {"id": 200, "name": "Test Checkpoint", "type": "Checkpoint"},
+            ],
+        }
+        civitai.get_model.return_value = {
+            "modelVersions": [{"id": 201, "files": [{"id": 301}]}],
+        }
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="test.safetensors",
+                kind=AssetKind.CHECKPOINT,
+                source_image="001.png",
+                source_type="api_meta",
+                raw_value="test",
+                hash="deadbeef",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        # Should pick Checkpoint (id=200), not LoRA (id=100)
+        assert result.hits[0].candidate.selector.civitai.model_id == 200
+
+    def test_enriched_confidence_boost(self):
+        """Resolved hints get a confidence boost over placeholders."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = self._make_civitai_version()
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="model.safetensors", source_image="001.png",
+                source_type="api_meta", raw_value="model", hash="aabb1122",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        # Base confidence 0.82 + 0.05 boost = 0.87
+        assert result.hits[0].item.confidence == 0.87
+
+    def test_hash_lookup_exception_handled(self):
+        """API errors don't crash provider, hint falls back to placeholder."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.side_effect = ConnectionError("timeout")
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="model.safetensors", source_image="001.png",
+                source_type="api_meta", raw_value="model", hash="aabb",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        assert result.hits[0].candidate.selector.civitai.model_id == 0
+        assert any("hash lookup failed" in w for w in result.warnings)
+
+    def test_no_pack_service_getter_keeps_placeholder(self):
+        """Provider without pack_service_getter still works (placeholder mode)."""
+        p = PreviewMetaEvidenceProvider()  # No getter
+        hints = [
+            PreviewModelHint(
+                filename="model.safetensors", source_image="001.png",
+                source_type="api_meta", raw_value="model",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        assert len(result.hits) == 1
+        assert result.hits[0].candidate.selector.civitai.model_id == 0
+
+    def test_short_stem_skips_name_search(self):
+        """Stems < 3 chars skip name search to avoid noisy results."""
+        civitai = MagicMock()
+        civitai.get_model_by_hash.return_value = None
+
+        ps = MagicMock()
+        ps.civitai = civitai
+
+        p = PreviewMetaEvidenceProvider(lambda: ps)
+        hints = [
+            PreviewModelHint(
+                filename="ab.safetensors", source_image="001.png",
+                source_type="api_meta", raw_value="ab",
+            ),
+        ]
+        ctx = _make_context(preview_hints=hints)
+        result = p.gather(ctx)
+
+        # Should keep placeholder, no search attempted
+        assert result.hits[0].candidate.selector.civitai.model_id == 0
+        civitai.search_meilisearch.assert_not_called()
+
+
 class TestFileMetaEvidenceProvider:
     def test_tier_is_3(self):
         assert FileMetaEvidenceProvider().tier == 3
