@@ -457,7 +457,60 @@ Jednodušší úlohy (tagging, překlad) mohou preferovat Ollama, složitější
 
 ---
 
-## 7. Shrnutí
+## 7. Future: Enriched AI Context (z PLAN-Resolve-Model.md bod 5)
+
+**Status:** ⚠️ ODLOZENO — popsano zde pro budouci implementaci.
+
+**Motivace:** `extract_parameters(description)` nyni dostava pouze textovy popis modelu.
+Pri importu z Civitai mame k dispozici dalsi metadata, ktera by AI mohla vyuzit
+pro presnejsi extrakci:
+
+| Pole | Zdroj | Priklad |
+|------|-------|---------|
+| `base_model` | Civitai API `baseModel` | "SDXL", "SD 1.5" |
+| `tags` | Civitai model tags | ["anime", "realistic", "sdxl"] |
+| `trigger_words` | Civitai `trainedWords` | ["ohwx", "1girl"] |
+| `type` | Civitai model type | "LORA", "Checkpoint" |
+
+**Navrhovana zmena API:**
+```python
+# Soucasne:
+extract_parameters(description: str, use_cache: bool = True) -> TaskResult
+
+# Navrzene rozsireni:
+extract_parameters(
+    description: str,
+    use_cache: bool = True,
+    metadata_context: Optional[Dict[str, Any]] = None,  # NEW
+) -> TaskResult
+```
+
+`metadata_context` by se pripojil k promptu jako strukturovany kontext:
+```
+## Additional Metadata
+- Base Model: SDXL
+- Type: LORA
+- Tags: anime, realistic
+- Trigger Words: ohwx, 1girl
+```
+
+**Proc odlozeno:**
+- AvatarTaskService.execute_task() pouziva task registry s fixnim vstupnim formatem
+- Zmena vyzaduje upravu `ParameterExtractionTask` v `src/avatar/tasks/`
+- Prompt V2 by se musel rozsirit o sekci pro metadata
+- Cache klice by musely zahrnout metadata hash (ne jen description hash)
+- Funkcni i bez toho — AI extrahuje z popisu, metadata jen zvysi presnost
+
+**Implementacni kroky (az bude potreba):**
+1. Pridat `metadata_context: Optional[Dict]` do `AvatarTaskService.extract_parameters()`
+2. Pridat kontext do promptu v `ParameterExtractionTask`
+3. Upravit cache klic: `sha256(description + json(metadata_context))`
+4. Propagovat metadata z `PackService.import_from_civitai()` do `extract_parameters()`
+5. Benchmark: merit zda metadata zvysi kvalitu extrakce
+
+---
+
+## 8. Shrnutí
 
 | Rozhodnutí | Volba | Důvod |
 |------------|-------|-------|

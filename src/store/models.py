@@ -240,6 +240,12 @@ class BackupConfig(BaseModel):
     warn_before_delete_last_copy: bool = True  # Warn when deleting last copy
 
 
+class ResolveConfig(BaseModel):
+    """Configuration for dependency resolution."""
+    auto_apply_margin: float = Field(default=0.15, ge=0.0, le=1.0)  # Min confidence gap for auto-apply
+    enable_ai: bool = True  # Enable AI-assisted resolution (E7 provider)
+
+
 class StoreConfig(BaseModel):
     """Main store configuration (state/config.json)."""
     schema_: str = Field(default="synapse.config.v2", alias="schema")
@@ -248,6 +254,7 @@ class StoreConfig(BaseModel):
     providers: Dict[str, ProviderConfig] = Field(default_factory=dict)
     base_model_aliases: Dict[str, BaseModelAlias] = Field(default_factory=dict)
     backup: BackupConfig = Field(default_factory=BackupConfig)
+    resolve: ResolveConfig = Field(default_factory=ResolveConfig)
 
     model_config = {"populate_by_name": True}
     

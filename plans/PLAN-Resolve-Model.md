@@ -574,7 +574,7 @@ INLINE RESOLVE (progressive disclosure):
 **Konfigurace:** ✅ IMPL
 5. ✅ Compatibility matrix — `src/store/resolve_config.py` (AssetKindConfig, TIER_CONFIGS, COMPATIBILITY_RULES)
 6. ✅ Validation matrix — `src/store/resolve_validation.py` (STRATEGY_REQUIREMENTS, validate_candidate, validate_before_apply)
-7. ⚠️ base_model_aliases — AliasEvidenceProvider cteni z store.yaml IMPL, config yaml vzor zatim ne
+7. ✅ base_model_aliases — AliasEvidenceProvider cte z config.json pres layout.load_config() (Phase 6)
 
 **Scoring:** ✅ IMPL
 - ✅ `src/store/resolve_scoring.py` — Noisy-OR, provenance grouping, tier ceiling
@@ -601,14 +601,42 @@ INLINE RESOLVE (progressive disclosure):
    - ✅ VYSLEDEK: CDN servíruje JPEG/WebP, NE originální PNG
    - ✅ E2 (PNG embedded) degradováno na "best effort"
    - ✅ E3 (API meta ze sidecar .json) je PRIMARY zdroj preview evidence
-10. ⚠️ **Confidence calibration** — odlozeno na Phase 1 (vyzaduje import flow s realnymi daty)
+10. ⚠️ **Confidence calibration** — odlozeno (vyzaduje import flow s realnymi daty)
+
+    **Postup pro budouci kalibraci s realnymi daty:**
+
+    A. **Sber dat (1-2 hodiny):**
+       1. Vybrat 20-30 packu s ruznymi typy (checkpoint, LoRA, embedding)
+       2. Pro kazdy: `store.suggest(pack, dep_id)` → ulozit candidates + confidence
+       3. Rucne oznacit spravny vysledek (ground truth)
+       4. Ulozit do `tests/calibration/calibration_data.json`
+
+    B. **Analyza (skript):**
+       ```python
+       # Pro kazdy provider zvlast:
+       # 1. Precision@1: kolik top-1 candidates je spravnych?
+       # 2. Tier distribuce: kolik spravnych je v T1 vs T2 vs T3?
+       # 3. Margin distribuce: jake jsou gapy mezi top-1 a top-2?
+       # 4. False positive rate: kolik T1 candidates je spatnych?
+       ```
+
+    C. **Parametry k ladeni:**
+       - `AUTO_APPLY_MARGIN` (0.15) — zvysit pokud false positive rate > 5%
+       - `AI_CONFIDENCE_CEILING` (0.89) — snizit pokud AI casto chybuje v T1
+       - Per-provider confidence v `ASSET_KIND_CONFIG` — hlavne hash (0.95) vs name (0.70)
+       - `COMPATIBILITY_RULES` — pridat chybejici base_model kombinace
+
+    D. **Metriky pro uspech:**
+       - Auto-apply accuracy > 95% (zneho co auto-apply vybere, 95%+ musi byt spravne)
+       - Recall > 80% (80%+ deps s BASE_MODEL_HINT musi dostat alespon 1 spravny candidate)
+       - False T1 rate < 3% (max 3% T1 candidates je spatnych)
 
 **Hash cache zaklady (G1):** ✅ IMPL
 11. ✅ Hash cache modul — `src/store/hash_cache.py`
     - ✅ Cache structure: `{ path: { sha256, mtime, size, computed_at } }`
     - ✅ Persistence: `data/registry/local_model_hashes.json`
     - ✅ Invalidace: mtime+size change → rehash
-    - ⚠️ Async hash computation — zatim sync, async az Phase 3
+    - ✅ Async hash computation — compute_sha256_async() v hash_cache.py (Phase 5)
 
 **API:** ✅ IMPL+INTEG (Phase 1)
 12. ✅ Suggest/Apply endpointy — 3 API endpointy v `api.py`: suggest-resolution, apply-resolution, apply-manual-resolution
@@ -639,8 +667,8 @@ INLINE RESOLVE (progressive disclosure):
 - ✅ Phase 1 Block C (16): SuggestOptions hints override, ResolveService suggest s override, post-import resolve orchestrace, Store delegate metody, auto-apply logika
 - ✅ Phase 1 Block D (11): model_tagging rule-based, migration helper dry-run/apply/skip/error
 - ✅ Calibration: CDN PNG metadata (2, external)
-- ⚠️ Integration testy (import s evidence ladder) — az po Phase 1 review
-- ⚠️ Smoke testy (kompletni import z Civitai s resolve) — az po Phase 1 review
+- ✅ Integration testy — test_resolve_integration.py (17 testu, Phase 6)
+- ✅ Smoke testy — test_resolve_smoke.py (10 testu, Phase 6)
 
 **Phase 1 Review cyklus:** ✅ DOKONCEN
 - ✅ Claude review: overeni vsech zmen, konzistence s planem
@@ -681,7 +709,7 @@ INLINE RESOLVE (progressive disclosure):
    - ✅ Krok 3: analyze preview metadata (sidecar .json, dle calibration PNG tez)
    - ✅ Krok 4: suggest_resolution() s evidence ladder E1-E6
    - ✅ Krok 5: auto-apply dle tier pravidel (TIER-1/2, margin 0.15)
-   - ⚠️ Konfigurovatelny threshold v store.yaml — az Phase 2 (hard-coded 0.15 margin)
+   - ✅ Konfigurovatelny threshold — ResolveConfig.auto_apply_margin v config.json (Phase 6)
 
 5. ⚠️ Enriched AI context pro extract_parameters() — odlozeno (vyzaduje zmenu AvatarTaskService API)
 
@@ -839,7 +867,7 @@ je to strukturovana data transformace, ne prompt engineering.
 | # | Soubor | Stav | Zmena |
 |---|--------|------|-------|
 | D1 | `src/store/evidence_providers.py` | ✅ HOTOVO | `AIEvidenceProvider` prepsany: `_build_ai_input()` formatuje strukturovany text, `_ai_candidate_to_hit()` mapuje civitai+hf kandidaty na EvidenceHit, spravne pouziva `TaskResult` (ne raw dict) |
-| D2 | `can_use_ai()` gate funkce | ⚠️ ODLOZENO na Phase 2 UI | Zatim `supports()` kontroluje jen `avatar is not None`. Full gate s config flagy az pri UI integraci (Block F). |
+| D2 | `can_use_ai()` gate funkce | ✅ Phase 6 | `AIEvidenceProvider.supports()` kontroluje `is_ai_enabled(config)` + avatar dostupnost. Config: `resolve.enable_ai: bool`. |
 
 **D1 — AIEvidenceProvider opravy (vs. puvodni stub):**
 - `execute_task()` prijima string, ne dict → `_build_ai_input(ctx)` formatuje PACK INFO + DEPENDENCY + PREVIEW HINTS
@@ -1268,6 +1296,43 @@ Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF
 - evidence_providers.py: `.get()` na CivitaiModelVersion dataclass → `getattr()` (tichy pad Tier-1 evidence)
 - huggingface_client.py: HFFileInfo LFS OID cteni z top-level → `lfs.oid` s `sha256:` prefix strip
 - Testy aktualizovany na dataclass-like mocky
+
+### Phase 6: Final polish — config, aliases, tests, AI gate ✅ DOKONCENO (2026-03-10)
+
+**Cil:** Posledni odlozene body — konfigurovatelny resolve, alias bugfix, chybejici testy, AI gate.
+**Status:** ✅ DOKONCENO — vsech 5 bodu implementovano, 27 novych testu, 3-tier review
+
+#### 6.1 Fix _read_aliases() — cte store.yaml misto config.json
+- **Problem:** `evidence_providers.py:677` cte `store.yaml` ale config je `config.json`
+- **Fix:** Pouzit `layout.load_config()` → `config.base_model_aliases`
+- **Soucasny stav:** AliasEvidenceProvider NIKDY nenajde aliasy (soubor neexistuje)
+
+#### 6.2 Konfigurovatelny AUTO_APPLY_MARGIN
+- **Problem:** Konstanta v kodu, uzivatel nemuze zmenit
+- **Fix:** Pridat `ResolveConfig` model do `models.py`, field `auto_apply_margin: float = 0.15`
+- **Cteni:** `resolve_config.py` funkce `get_auto_apply_margin(config)` s fallback na 0.15
+- **Pouziti:** `__init__.py` _post_import_resolve + migrate_resolve_deps
+
+#### 6.3 can_use_ai() gate
+- **Problem:** `AIEvidenceProvider.supports()` jen kontroluje `avatar is not None`
+- **Fix:** Pridat `resolve.enable_ai: bool = True` do `ResolveConfig`
+- **Pouziti:** `supports()` zkontroluje config flag + avatar dostupnost
+
+#### 6.4 Integration testy — import s evidence ladder
+- **Pattern:** Realny ResolveService + mock PackService + FakeCivitai
+- **Scenare:** suggest→apply lifecycle, multi-provider merge, stale fingerprint
+
+#### 6.5 Smoke testy — kompletni import z Civitai s resolve
+- **Pattern:** Realny Store (tmp_path) + FakeCivitai + mock HTTP
+- **Scenare:** import→suggest→auto-apply, migration helper, error recovery
+
+**Soubory:**
+- `src/store/models.py` — ResolveConfig model
+- `src/store/resolve_config.py` — get_auto_apply_margin(), get_resolve_config()
+- `src/store/evidence_providers.py` — fix _read_aliases(), can_use_ai
+- `src/store/__init__.py` — pouzit konfigurovatelny margin
+- `tests/integration/test_resolve_integration.py` — NEW
+- `tests/integration/test_resolve_smoke.py` — NEW
 
 ---
 

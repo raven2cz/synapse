@@ -18,7 +18,7 @@ import logging
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from .models import AssetKind, DependencySelector, SelectorStrategy, CivitaiSelector
-from .resolve_config import AI_CONFIDENCE_CEILING, get_kind_config
+from .resolve_config import AI_CONFIDENCE_CEILING, get_kind_config, is_ai_enabled
 from .resolve_models import (
     CandidateSeed,
     EvidenceHit,
@@ -503,10 +503,16 @@ class AIEvidenceProvider:
 
     tier = 2  # AI can reach up to Tier 2
 
-    def __init__(self, avatar_getter: Callable):
+    def __init__(self, avatar_getter: Callable, config_getter: Optional[Callable] = None):
         self._get_avatar = avatar_getter
+        self._get_config = config_getter
 
     def supports(self, ctx: ResolveContext) -> bool:
+        # Check config flag first
+        if self._get_config is not None:
+            config = self._get_config()
+            if not is_ai_enabled(config):
+                return False
         return self._get_avatar() is not None
 
     def gather(self, ctx: ResolveContext) -> ProviderResult:
@@ -527,6 +533,7 @@ class AIEvidenceProvider:
 
             output = task_result.output
             if not isinstance(output, dict):
+                logger.debug("[ai_provider] Non-dict output: %s", type(output).__name__)
                 return ProviderResult(warnings=["AI returned non-dict output"])
 
             candidates = output.get("candidates", [])
@@ -550,13 +557,21 @@ class AIEvidenceProvider:
 
 # --- Helpers ---
 
-def _extract_file_id(version_data: dict, sha256: str) -> Optional[int]:
-    """Extract file_id from Civitai version data by matching hash."""
-    files = version_data.get("files", [])
+def _extract_file_id(version_data: Any, sha256: str) -> Optional[int]:
+    """Extract file_id from Civitai version data by matching hash.
+
+    Handles both dict and dataclass (CivitaiModelVersion) inputs.
+    """
+    files = getattr(version_data, "files", None)
+    if files is None and isinstance(version_data, dict):
+        files = version_data.get("files", [])
+    if not files:
+        return None
     for f in files:
-        hashes = f.get("hashes", {})
-        if hashes.get("SHA256", "").lower() == sha256.lower():
-            return f.get("id")
+        if isinstance(f, dict):
+            hashes = f.get("hashes", {})
+            if hashes.get("SHA256", "").lower() == sha256.lower():
+                return f.get("id")
     return None
 
 
@@ -675,25 +690,31 @@ def _extract_stem(filename: str) -> Optional[str]:
 
 
 def _read_aliases(layout: Any) -> dict:
-    """Read base_model_aliases from store config."""
-    config_path = getattr(layout, "config_path", None)
-    if not config_path:
+    """Read base_model_aliases from store config (config.json)."""
+    load_config = getattr(layout, "load_config", None)
+    if load_config is None:
         return {}
 
     try:
-        import yaml
-        config_file = config_path / "store.yaml"
-        if not config_file.exists():
+        config = load_config()
+        aliases = getattr(config, "base_model_aliases", {})
+        if not aliases:
             return {}
-        config = yaml.safe_load(config_file.read_text(encoding="utf-8"))
-        return config.get("base_model_aliases", {})
-    except Exception:
+        # Convert Pydantic models to dicts for _alias_to_hit()
+        result = {}
+        for k, v in aliases.items():
+            result[k] = v.model_dump() if hasattr(v, "model_dump") else v
+        return result
+    except Exception as e:
+        logger.debug("[alias_provider] Failed to read aliases from config: %s", e)
         return {}
 
 
 def _alias_to_hit(alias_key: str, alias_target: dict) -> Optional[EvidenceHit]:
     """Convert an alias mapping to an EvidenceHit."""
-    civitai = alias_target.get("civitai")
+    # Support both flat {"civitai": ...} and nested {"selector": {"civitai": ...}}
+    selector = alias_target.get("selector", alias_target)
+    civitai = selector.get("civitai") if isinstance(selector, dict) else None
     if civitai and isinstance(civitai, dict):
         model_id = civitai.get("model_id")
         if model_id:
@@ -717,7 +738,7 @@ def _alias_to_hit(alias_key: str, alias_target: dict) -> Optional[EvidenceHit]:
                 ),
             )
 
-    hf = alias_target.get("huggingface")
+    hf = selector.get("huggingface") if isinstance(selector, dict) else None
     if hf and isinstance(hf, dict):
         repo_id = hf.get("repo_id")
         if repo_id:

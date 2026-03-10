@@ -134,12 +134,14 @@ class ResolveService:
         avatar_getter: Callable[[], Any] = lambda: None,
         providers: Optional[Dict[str, Any]] = None,
         candidate_cache: Optional[CandidateCacheStore] = None,
+        config_getter: Optional[Callable[[], Any]] = None,
     ):
         self._layout = layout
         self._pack_service = pack_service
         self._avatar_getter = avatar_getter
         self._providers = providers
         self._cache = candidate_cache or InMemoryCandidateCache()
+        self._config_getter = config_getter
 
     def _ensure_providers(self) -> None:
         """Lazy init. Providers use getters, not direct references."""
@@ -161,7 +163,7 @@ class ResolveService:
             "file_meta": FileMetaEvidenceProvider(),
             "alias": AliasEvidenceProvider(layout_getter),
             "source_meta": SourceMetaEvidenceProvider(),
-            "ai": AIEvidenceProvider(self._avatar_getter),
+            "ai": AIEvidenceProvider(self._avatar_getter, config_getter=self._config_getter),
         }
 
     def suggest(

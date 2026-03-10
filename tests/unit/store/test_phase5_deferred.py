@@ -118,13 +118,12 @@ class TestAutoApplyMargin:
         from src.store.resolve_config import AUTO_APPLY_MARGIN
         assert AUTO_APPLY_MARGIN == 0.15
 
-    def test_post_import_resolve_uses_constant(self):
-        """__init__.py should import AUTO_APPLY_MARGIN, not hardcode 0.15."""
+    def test_post_import_resolve_uses_config_function(self):
+        """__init__.py should use get_auto_apply_margin(), not hardcode 0.15."""
         source = (Path(__file__).parent.parent.parent.parent / "src" / "store" / "__init__.py").read_text()
-        assert "AUTO_APPLY_MARGIN" in source
+        assert "get_auto_apply_margin" in source
         # The hardcoded 0.15 should not appear in margin comparison
         import re
-        # Find lines with "margin >= " — should use AUTO_APPLY_MARGIN
         margin_checks = re.findall(r"margin >= (.+)", source)
         for check in margin_checks:
             assert "0.15" not in check, f"Found hardcoded 0.15 in margin check: {check}"

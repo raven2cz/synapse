@@ -7,7 +7,7 @@ Based on PLAN-Resolve-Model.md v0.7.1 sections 2b, 2c, 2h, 4, 5.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Optional, Set
+from typing import Any, Dict, FrozenSet, Optional, Set
 
 from .models import AssetKind
 
@@ -133,6 +133,36 @@ HF_ELIGIBLE_KINDS: FrozenSet[AssetKind] = frozenset(
 # for automatic resolution during import. Candidates within this margin
 # are presented to user for manual selection.
 AUTO_APPLY_MARGIN = 0.15
+
+
+def get_auto_apply_margin(config: Any = None) -> float:
+    """Get auto-apply margin from config, falling back to default constant."""
+    try:
+        if config is not None:
+            resolve = getattr(config, "resolve", None)
+            if resolve is not None:
+                val = getattr(resolve, "auto_apply_margin", None)
+                if isinstance(val, (int, float)):
+                    return float(val)
+    except (AttributeError, TypeError, ValueError) as e:
+        import logging
+        logging.getLogger(__name__).debug("Failed to read auto_apply_margin from config: %s", e)
+    return AUTO_APPLY_MARGIN
+
+
+def is_ai_enabled(config: Any = None) -> bool:
+    """Check if AI-assisted resolution is enabled in config."""
+    try:
+        if config is not None:
+            resolve = getattr(config, "resolve", None)
+            if resolve is not None:
+                val = getattr(resolve, "enable_ai", None)
+                if isinstance(val, bool):
+                    return val
+    except (AttributeError, TypeError) as e:
+        import logging
+        logging.getLogger(__name__).debug("Failed to read enable_ai from config: %s", e)
+    return True
 
 
 # =============================================================================

@@ -271,6 +271,7 @@ class Store:
         self.resolve_service = ResolveService(
             layout=self.layout,
             pack_service=self.pack_service,
+            config_getter=lambda: self._try_load_config(),
         )
         # HashCache — persistent SHA256 cache for local model files
         self.hash_cache = HashCache(self.layout.registry_path)
@@ -593,6 +594,13 @@ class Store:
 
         return pack
 
+    def _try_load_config(self) -> Any:
+        """Load store config, returning None on failure."""
+        try:
+            return self.layout.load_config()
+        except Exception:
+            return None
+
     def _post_import_resolve(self, pack: Pack) -> None:
         """Run suggest/auto-apply for pack dependencies after import.
 
@@ -636,14 +644,15 @@ class Store:
                     if top.tier > 2:
                         continue
 
-                    # Check margin: no other candidate within AUTO_APPLY_MARGIN
-                    from .resolve_config import AUTO_APPLY_MARGIN
+                    # Check margin: no other candidate within auto_apply_margin
+                    from .resolve_config import get_auto_apply_margin
+                    auto_margin = get_auto_apply_margin(self._try_load_config())
                     if len(result.candidates) > 1:
                         margin = top.confidence - result.candidates[1].confidence
                     else:
                         margin = 1.0
 
-                    if margin >= AUTO_APPLY_MARGIN:
+                    if margin >= auto_margin:
                         apply_result = self.resolve_service.apply(
                             pack.name, dep.id, top.candidate_id,
                             request_id=result.request_id,
@@ -767,12 +776,13 @@ class Store:
                         ]
 
                         if top.tier <= 2:
-                            from .resolve_config import AUTO_APPLY_MARGIN
+                            from .resolve_config import get_auto_apply_margin
+                            auto_margin = get_auto_apply_margin(self._try_load_config())
                             margin = 1.0
                             if len(result.candidates) > 1:
                                 margin = top.confidence - result.candidates[1].confidence
 
-                            if margin >= AUTO_APPLY_MARGIN:
+                            if margin >= auto_margin:
                                 if dry_run:
                                     entry["action"] = "would_apply"
                                     entry["would_apply"] = top.display_name
