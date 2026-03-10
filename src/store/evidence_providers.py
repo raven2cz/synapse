@@ -91,17 +91,17 @@ class HashEvidenceProvider:
             try:
                 result = civitai.get_model_by_hash(sha256)
                 if result:
-                    model_id = result.get("modelId") or result.get("model_id")
-                    version_id = result.get("id") or result.get("version_id")
+                    # CivitaiModelVersion is a dataclass — use getattr, not .get()
+                    model_id = getattr(result, "model_id", None) or getattr(result, "modelId", None)
+                    version_id = getattr(result, "id", None)
                     file_id = _extract_file_id(result, sha256)
-                    display_name = result.get("model", {}).get("name", "Unknown")
+                    display_name = getattr(result, "name", "Unknown")
 
                     if model_id and version_id:
                         # Extract base_model from Civitai API response
                         candidate_base_model = (
-                            result.get("baseModel")
-                            or result.get("base_model")
-                            or (result.get("model", {}) or {}).get("baseModel")
+                            getattr(result, "base_model", None)
+                            or getattr(result, "baseModel", None)
                         )
                         seed = CandidateSeed(
                             key=f"civitai:{model_id}:{version_id}",

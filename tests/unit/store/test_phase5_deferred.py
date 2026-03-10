@@ -64,20 +64,20 @@ class TestCandidateBaseModel:
         assert data["base_model"] == "Flux"
 
     def test_hash_provider_extracts_base_model(self):
-        """HashEvidenceProvider should extract baseModel from Civitai response."""
+        """HashEvidenceProvider should extract baseModel from CivitaiModelVersion dataclass."""
         from src.store.evidence_providers import HashEvidenceProvider
         from src.store.resolve_models import ResolveContext
 
-        # Mock pack_service with civitai client
+        # Mock pack_service with civitai client returning dataclass-like object
         mock_ps = MagicMock()
         mock_civitai = MagicMock()
-        mock_civitai.get_model_by_hash.return_value = {
-            "modelId": 123,
-            "id": 456,
-            "baseModel": "SDXL",
-            "model": {"name": "TestModel"},
-            "files": [],
-        }
+        mock_version = MagicMock()
+        mock_version.model_id = 123
+        mock_version.id = 456
+        mock_version.base_model = "SDXL"
+        mock_version.name = "TestModel"
+        mock_version.files = []
+        mock_civitai.get_model_by_hash.return_value = mock_version
         mock_ps.civitai = mock_civitai
 
         provider = HashEvidenceProvider(pack_service_getter=lambda: mock_ps)
@@ -97,8 +97,9 @@ class TestCandidateBaseModel:
         )
 
         result = provider.gather(ctx)
-        if result.hits:
-            assert result.hits[0].candidate.base_model == "SDXL"
+        assert len(result.hits) == 1
+        assert result.hits[0].candidate.base_model == "SDXL"
+        assert result.hits[0].candidate.display_name == "TestModel"
 
 
 # =============================================================================
@@ -307,6 +308,33 @@ class TestHuggingFaceClientSearch:
             client.search_models("test", limit=100)
             call_args = mock_get.call_args
             assert call_args[1]["params"]["limit"] == 20  # capped
+
+    def test_hf_file_info_extracts_lfs_oid(self):
+        """HFFileInfo should extract SHA256 from lfs.oid field."""
+        from src.clients.huggingface_client import HFFileInfo
+
+        # Real HF tree API response format
+        data = {
+            "path": "model.safetensors",
+            "size": 1234567,
+            "lfs": {
+                "oid": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                "size": 1234567,
+            },
+            "type": "file",
+        }
+        info = HFFileInfo.from_api_response(data)
+        assert info.sha256 == "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        assert info.lfs is True
+
+    def test_hf_file_info_no_lfs(self):
+        """Non-LFS files should have sha256=None."""
+        from src.clients.huggingface_client import HFFileInfo
+
+        data = {"path": "README.md", "size": 100, "type": "file"}
+        info = HFFileInfo.from_api_response(data)
+        assert info.sha256 is None
+        assert info.lfs is False
 
 
 # =============================================================================

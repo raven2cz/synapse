@@ -34,11 +34,17 @@ class HFFileInfo:
     
     @classmethod
     def from_api_response(cls, data: Dict[str, Any]) -> 'HFFileInfo':
+        lfs_info = data.get("lfs")
+        sha256 = None
+        if isinstance(lfs_info, dict):
+            oid = lfs_info.get("oid", "")
+            # HF LFS OID format: "sha256:<hex>" — strip prefix
+            sha256 = oid.split(":", 1)[-1] if oid else None
         return cls(
             filename=data.get("path", ""),
             size=data.get("size", 0),
-            sha256=data.get("oid") if data.get("lfs") else None,  # LFS OID is SHA256
-            lfs=data.get("lfs") is not None,
+            sha256=sha256,
+            lfs=lfs_info is not None,
         )
 
 

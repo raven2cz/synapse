@@ -86,13 +86,15 @@ class TestHashEvidenceProvider:
         dep.lock = MagicMock()
         dep.lock.sha256 = "abc123def456"
 
+        # CivitaiModelVersion is a dataclass — mock with attributes
         civitai = MagicMock()
-        civitai.get_model_by_hash.return_value = {
-            "modelId": 100,
-            "id": 200,
-            "model": {"name": "Test Model"},
-            "files": [{"id": 300, "hashes": {"SHA256": "abc123def456"}}],
-        }
+        mock_version = MagicMock()
+        mock_version.model_id = 100
+        mock_version.id = 200
+        mock_version.name = "Test Model"
+        mock_version.base_model = "SDXL"
+        mock_version.files = [{"id": 300, "hashes": {"SHA256": "abc123def456"}}]
+        civitai.get_model_by_hash.return_value = mock_version
 
         ps = MagicMock()
         ps.civitai = civitai
