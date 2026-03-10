@@ -1264,6 +1264,11 @@ Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF
 - Codex: base_model propagace fix — prefer seed s base_model v _merge_and_score
 - Codex: local_file_service.py ted predava hf_client do enrich_file()
 
+**Pre-existing bugfixes (nalezene pri review, commit `e3fcba3`):**
+- evidence_providers.py: `.get()` na CivitaiModelVersion dataclass → `getattr()` (tichy pad Tier-1 evidence)
+- huggingface_client.py: HFFileInfo LFS OID cteni z top-level → `lfs.oid` s `sha256:` prefix strip
+- Testy aktualizovany na dataclass-like mocky
+
 ---
 
 ## 11. Implementation Design — presna mapa napojeni (v2)
