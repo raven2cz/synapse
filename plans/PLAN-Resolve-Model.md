@@ -1,7 +1,7 @@
 # PLAN: Resolve Model Redesign
 
-**Version:** v0.10.0 — Phase 0+1+2+2.5+3 COMPLETE
-**Status:** Phase 3 DOKONCENA — Phase 4 pripravena
+**Version:** v0.11.0 — Phase 0+1+2+2.5+3+4 COMPLETE
+**Status:** Phase 4 DOKONCENA — cleanup + validace hotovo
 **Priority:** HIGH
 **Created:** 2026-03-07
 **Author:** raven2cz + Claude Opus 4.6
@@ -1162,15 +1162,51 @@ Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF
 ### Phase 4: Provider polish + download + cleanup
 
 **Cil:** Typed payloady, cleanup, download napojeni.
+**Status:** ✅ DOKONCENO (2026-03-10) — 2 commity: `8b0b910`, `6cf7db1`
 
 **Deliverables:**
 
-1. Typed provider payloady end-to-end — odmitat nekompletni
-2. Audit Civitai/HF search endpointu
-3. Resolution → Download explicitne oddeleno, napojeni na download system
-4. Cleanup: smazat stary endpoint /resolve-base-model, BaseModelResolverModal, ~~extractBaseModelHint~~ (uz smazano)
+1. ✅ Typed provider payloady end-to-end — odmitat nekompletni
+   - `apply-manual-resolution` endpoint rejects incomplete payloads per strategy (422)
+   - Civitai: requires `civitai_model_id` + `civitai_version_id`
+   - HuggingFace: requires `hf_repo_id` + `hf_filename`
+   - Local: requires `local_path`
+   - URL: requires `url`
+2. ✅ Audit resolve endpointu — validace vstupu
+   - `suggest-resolution`: validates dep_id exists in pack (404), max_candidates capped at 50
+   - `apply-resolution`: validates pack exists (404)
+   - `apply_manual()`: loads pack for cross-kind validation (was missing)
+3. ~~Resolution → Download napojeni~~ — DEFERRED (download system uz funguje pres existing `download-asset` endpoint, neni treba nove napojeni)
+4. ✅ Cleanup: smazat stary endpoint /resolve-base-model, BaseModelResolverModal, ~~extractBaseModelHint~~ (uz smazano)
+   - Smazano 1289 radku deprecated kodu
+   - `BaseModelResolverModal.tsx` (749 radku) — DELETED
+   - `/resolve-base-model` endpoint + `ResolveBaseModelRequest` — REMOVED from api.py
+   - `resolveBaseModelMutation` — REMOVED from usePackData.ts
+   - `baseModelResolver` — REMOVED from ModalState, DEFAULT_MODAL_STATE, types.ts, constants.ts
+   - PackDependenciesSection redirected to DependencyResolverModal
+   - PackDetailPage cleaned (removed useQuery, QUERY_KEYS unused imports)
+   - i18n keys removed from en.json, cs.json
+   - Tests updated: test_api_v2_critical.py, test_phase1_bug_fixes.py, test_api_critical.py, test_architecture.py
+   - Frontend tests updated: pack-data-invalidation.test.ts, pack-detail-hooks.test.ts
 
-**Testy**
+**Testy:** 2203 backend + frontend all passed, 7 new validation tests added
+
+**Zmenene soubory (Phase 4):**
+- `src/store/api.py` — removed endpoint, added validation
+- `src/store/resolve_service.py` — apply_manual cross-kind validation
+- `apps/web/src/components/modules/PackDetailPage.tsx` — cleanup
+- `apps/web/src/components/modules/pack-detail/hooks/usePackData.ts` — removed mutation
+- `apps/web/src/components/modules/pack-detail/modals/BaseModelResolverModal.tsx` — DELETED
+- `apps/web/src/components/modules/pack-detail/modals/index.ts` — removed export
+- `apps/web/src/components/modules/pack-detail/sections/PackDependenciesSection.tsx` — redirect
+- `apps/web/src/components/modules/pack-detail/types.ts` — removed baseModelResolver
+- `apps/web/src/components/modules/pack-detail/constants.ts` — removed default
+- `apps/web/src/i18n/locales/{en,cs}.json` — removed keys
+- `tests/unit/store/test_resolve_validation.py` — 7 new tests
+- `tests/store/test_api_v2_critical.py` — removed deprecated tests
+- `tests/unit/store/test_phase1_bug_fixes.py` — removed BUG4 tests
+- `tests/store/test_api_critical.py` — updated assertions
+- `tests/lint/test_architecture.py` — removed endpoint requirement
 
 ---
 
