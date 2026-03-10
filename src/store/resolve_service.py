@@ -353,8 +353,18 @@ class ResolveService:
             canonical_source=manual.canonical_source,
         )
 
-        # Validate fields
-        validation = validate_selector_fields(selector)
+        # Load pack and dep for cross-kind validation
+        pack = self._pack_service.layout.load_pack(pack_name) if hasattr(self._pack_service, "layout") else None
+        dep = _find_dependency(pack, dep_id) if pack else None
+        kind = getattr(dep, "kind", AssetKind.UNKNOWN) if dep else AssetKind.UNKNOWN
+        pack_base_model = getattr(pack, "base_model", None) if pack else None
+
+        # Full validation (fields + cross-kind compatibility)
+        validation = validate_before_apply(
+            selector, kind,
+            pack_base_model=pack_base_model,
+            candidate_base_model=None,
+        )
         if not validation.success:
             return validation
 
@@ -369,7 +379,11 @@ class ResolveService:
                     lock_entry=None,
                     display_name=manual.display_name,
                 )
-            return ApplyResult(success=True, message="Manual resolution applied")
+            return ApplyResult(
+                success=True,
+                message="Manual resolution applied",
+                compatibility_warnings=validation.compatibility_warnings or [],
+            )
         except Exception as e:
             return ApplyResult(success=False, message=f"Apply failed: {e}")
 

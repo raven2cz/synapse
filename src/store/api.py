@@ -2311,10 +2311,18 @@ def suggest_resolution(
         if not pack:
             raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
 
+        # Validate dep_id exists in pack
+        dep_ids = [d.id for d in (pack.dependencies or [])]
+        if request.dep_id not in dep_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dependency '{request.dep_id}' not found in pack '{pack_name}'",
+            )
+
         from .resolve_models import SuggestOptions
         options = SuggestOptions(
             include_ai=request.include_ai,
-            max_candidates=request.max_candidates,
+            max_candidates=min(request.max_candidates or 20, 50),
         )
         result = store.resolve_service.suggest(pack, request.dep_id, options)
         return {
@@ -2339,6 +2347,10 @@ def apply_resolution(
 ):
     """Apply a previously suggested resolution candidate."""
     try:
+        pack = store.get_pack(pack_name)
+        if not pack:
+            raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
         result = store.resolve_service.apply(
             pack_name=pack_name,
             dep_id=request.dep_id,
@@ -2367,6 +2379,32 @@ def apply_manual_resolution(
         from .resolve_models import ManualResolveData
 
         strategy = SelectorStrategy(request.strategy)
+
+        # Validate strategy-specific required fields at API boundary
+        if strategy == SelectorStrategy.CIVITAI_FILE:
+            if not request.civitai_model_id or not request.civitai_version_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Civitai strategy requires civitai_model_id and civitai_version_id",
+                )
+        elif strategy == SelectorStrategy.HUGGINGFACE_FILE:
+            if not request.hf_repo_id or not request.hf_filename:
+                raise HTTPException(
+                    status_code=422,
+                    detail="HuggingFace strategy requires hf_repo_id and hf_filename",
+                )
+        elif strategy == SelectorStrategy.LOCAL_FILE:
+            if not request.local_path:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Local file strategy requires local_path",
+                )
+        elif strategy == SelectorStrategy.URL_DOWNLOAD:
+            if not request.url:
+                raise HTTPException(
+                    status_code=422,
+                    detail="URL download strategy requires url",
+                )
 
         civitai = None
         if request.civitai_model_id:
