@@ -1,7 +1,7 @@
 # PLAN: Resolve Model Redesign
 
-**Version:** v0.8.0 — Phase 0+1+2 COMPLETE
-**Status:** Phase 2 DOKONCENA — Phase 3 pripravena
+**Version:** v0.9.0 — Phase 0+1+2+2.5 COMPLETE
+**Status:** Phase 2.5 DOKONCENA — Phase 3 pripravena
 **Priority:** HIGH
 **Created:** 2026-03-07
 **Author:** raven2cz + Claude Opus 4.6
@@ -1028,30 +1028,68 @@ Viz detailni test plan v sekci 11o
 
 ---
 
-### Phase 3: Local binding + background scan + security
+### Phase 3: Local Resolve — import lokalnich souboru
 
-**Cil:** Lokalni modely vsech typu. Plny background scan service. Security hardening.
+**Cil:** Uzivatel muze resolvovat dependenci z lokalniho souboru misto stahovani.
+Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF.
+
+**Tri scenare:**
+
+**A) Dep uz ma remote zdroj (Civitai/HF):**
+- Dep je resolved na civitai_file(model_id=123, sha256=abc...) ale soubor neni stazeny
+- Uzivatel otevre Local tab, zvoli slozku
+- System porovna SHA256/filename → doporuci konkretni soubor ("tohle vypada jako ten spravny")
+- Uzivatel potvrdi → copy do blob store, dep resolvovana
+
+**B) Dep nema remote zdroj, enrichment pres hash:**
+- Custom pack, dep ma jen nazev (napr. `juggernaut_xl.safetensors`)
+- Uzivatel vybere soubor → system hashuje (SHA256)
+- Hash → Civitai by-hash API → najde model_id, version_id, canonical_source
+- Hash → HuggingFace lookup (pokud Civitai nevi)
+- Dep je plne enrichovana + soubor v blob store
+
+**C) Hash nic nenajde, enrichment pres jmeno:**
+- Hash nenajde nic na Civitai ani HF
+- Filename stem (napr. `juggernaut_xl_v9` → "juggernaut xl v9") → name search na Civitai/HF
+- Pokud najde → doplni canonical_source, metadata
+- Pokud nenajde → ulozi jako LOCAL_FILE strategie s display_name z filename
+- Vzdy se ulozi aspon: sha256, file size, display_name z filename
 
 **Deliverables:**
 
-1. **Background Scan & Hash service** — `src/store/hash_service.py`
-   - Pouziva hash_cache z Phase 0
-   - Full async scan service (ne jen cache)
-   - API: POST /api/store/hash/scan, GET /api/store/hash/status
-   - UI: progress bar, cancel
+1. **Backend: Directory browsing** — `GET /api/store/browse-local`
+   - Parametry: `path` (adresar), `kind` (AssetKind pro filtraci pripon)
+   - Vraci seznam souboru: name, size, mtime, extension
+   - Security: path traversal prevence, allowlisted extensions (.safetensors, .ckpt, .pt, .bin, .pth, .onnx)
+   - SSRF prevence — zadne symlinky do citlivych adresaru
 
-2. Canonical path resolution — ComfyUI/Forge/A1111 support
-3. Scan dle AssetKind — compatibility matrix
-4. AI-assisted canonical_source lookup (hash → find_model_by_hash na Civitai + HF LFS)
-5. Bez AI: local_path + sha256, bez canonical_source
+2. **Backend: Import local file** — `POST /api/store/import-local-file`
+   - Parametry: pack_name, dep_id, file_path
+   - Flow: validate path → SHA256 hash → copy do blob store → resolve dep
+   - Enrichment: hash lookup (Civitai by-hash + HF) → name search fallback
+   - Progress: streaming response pro hash + copy progress (velke soubory)
 
-6. **Security hardening (z Phase 1 odlozene):**
-   - URL validace v apply-manual-resolution — scheme/host allowlist, SSRF prevence (Codex P1 #1)
-   - HF file loading race condition fix v BaseModelResolverModal (Codex P1 #5, pre-existing)
+3. **Backend: Smart file recommendation** (Scenar A)
+   - Pokud dep ma known SHA256 nebo filename → scan adresar a doporucit match
+   - Poradi: exact SHA256 match > filename+size match > filename stem match
 
-**Testy**
+4. **Frontend: Local tab v DependencyResolverModal**
+   - Input na cestu (string) + browse endpoint pro listing
+   - Seznam souboru (nazev, velikost, datum) s doporucenim (pokud scenar A)
+   - "Use this file" → backend hashuje + kopiruje
+   - Progress bar (hashovani + kopie velkych souboru, muze trvat desitky sekund)
 
-### Phase 4: Provider polish + download
+5. **Security hardening:**
+   - Path validace — zadne `..`, zadne symlinky mimo povolene adresare
+   - Extension allowlist
+   - URL validace v apply-manual-resolution — scheme/host allowlist (Codex P1 #1)
+
+**Testy:**
+- Unit: path validace, extension filtering, SSRF prevence, filename stem extraction
+- Integration: hash + copy do blob store + resolve dep + enrichment
+- Smoke: cely flow od browse → select → hash → copy → resolved dep
+
+### Phase 4: Provider polish + download + cleanup
 
 **Cil:** Typed payloady, cleanup, download napojeni.
 

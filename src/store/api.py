@@ -2657,6 +2657,204 @@ def apply_manual_resolution(
 
 
 # =============================================================================
+# Local File Import Endpoints
+# =============================================================================
+
+_active_imports: Dict[str, dict] = {}
+_import_executor = None  # Lazy-init ThreadPoolExecutor
+
+MAX_CONCURRENT_IMPORTS = 2
+MAX_IMPORT_HISTORY = 50
+
+
+def _get_import_executor():
+    """Get or create import thread pool (max 2 concurrent imports)."""
+    global _import_executor
+    if _import_executor is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _import_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_IMPORTS, thread_name_prefix="import")
+    return _import_executor
+
+
+def _cleanup_old_imports():
+    """Remove old completed/failed imports to prevent memory leak."""
+    if len(_active_imports) <= MAX_IMPORT_HISTORY:
+        return
+    completed = [
+        (k, v) for k, v in _active_imports.items()
+        if v.get("status") in ("completed", "failed")
+    ]
+    completed.sort(key=lambda x: x[1].get("_finished_at", 0))
+    to_remove = len(_active_imports) - MAX_IMPORT_HISTORY
+    for k, _ in completed[:to_remove]:
+        del _active_imports[k]
+
+
+class ImportLocalRequest(BaseModel):
+    """Request to import a local file as a resolved dependency."""
+    dep_id: str
+    file_path: str
+    skip_enrichment: bool = False
+
+
+@store_router.get("/browse-local")
+def browse_local_directory(
+    path: str = Query(..., description="Directory path to browse"),
+    kind: Optional[str] = Query(None, description="Filter by AssetKind"),
+    store=Depends(require_initialized),
+):
+    """List model files in a local directory."""
+    from .models import AssetKind as AK
+    kind_enum = None
+    if kind:
+        try:
+            kind_enum = AK(kind)
+        except ValueError:
+            pass
+    return store.local_file_service.browse(path, kind_enum).model_dump()
+
+
+@v2_packs_router.get("/{pack_name}/recommend-local")
+def recommend_local_files(
+    pack_name: str,
+    dep_id: str = Query(...),
+    directory: str = Query(...),
+    store=Depends(require_initialized),
+):
+    """Scan directory and recommend files matching a dependency."""
+    from .models import AssetKind as AK
+    pack = store.get_pack(pack_name)
+    if not pack:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
+    dep = None
+    for d in pack.dependencies:
+        if d.id == dep_id:
+            dep = d
+            break
+    if not dep:
+        raise HTTPException(status_code=404, detail=f"Dependency not found: {dep_id}")
+
+    kind = getattr(dep, "kind", None)
+    recommendations = store.local_file_service.recommend(directory, dep, kind)
+
+    return {
+        "recommendations": [
+            {
+                "file": {
+                    "name": r.file.name,
+                    "path": r.file.path,
+                    "size": r.file.size,
+                    "mtime": r.file.mtime,
+                    "extension": r.file.extension,
+                    "cached_hash": r.file.cached_hash,
+                },
+                "match_type": r.match_type,
+                "confidence": r.confidence,
+                "reason": r.reason,
+            }
+            for r in recommendations
+        ]
+    }
+
+
+@v2_packs_router.post("/{pack_name}/import-local")
+async def import_local_file(
+    pack_name: str,
+    request: ImportLocalRequest,
+    background_tasks: BackgroundTasks,
+    store=Depends(require_initialized),
+):
+    """Import a local file into blob store and resolve dependency.
+
+    For large files, runs hashing/copying in a background thread.
+    Returns import_id for progress tracking.
+    """
+    import uuid
+    import threading
+
+    pack = store.get_pack(pack_name)
+    if not pack:
+        raise HTTPException(status_code=404, detail=f"Pack not found: {pack_name}")
+
+    # Validate file path early
+    from .local_file_service import validate_path, PathValidationError
+    try:
+        resolved = validate_path(request.file_path)
+        file_size = resolved.stat().st_size
+    except PathValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    import_id = str(uuid.uuid4())[:8]
+    _active_imports[import_id] = {
+        "import_id": import_id,
+        "pack_name": pack_name,
+        "dep_id": request.dep_id,
+        "filename": resolved.name,
+        "file_size": file_size,
+        "status": "pending",
+        "stage": "",
+        "progress": 0.0,
+        "result": None,
+    }
+
+    def progress_callback(stage: str, progress: float):
+        if import_id in _active_imports:
+            _active_imports[import_id]["stage"] = stage
+            _active_imports[import_id]["progress"] = progress
+            _active_imports[import_id]["status"] = "importing"
+
+    def run_import():
+        import time as _time
+        try:
+            _active_imports[import_id]["status"] = "importing"
+            result = store.local_file_service.import_file(
+                file_path=request.file_path,
+                pack_name=pack_name,
+                dep_id=request.dep_id,
+                skip_enrichment=request.skip_enrichment,
+                progress_callback=progress_callback,
+            )
+            if import_id in _active_imports:
+                _active_imports[import_id]["status"] = "completed" if result.success else "failed"
+                _active_imports[import_id]["progress"] = 1.0
+                _active_imports[import_id]["result"] = result.model_dump()
+                _active_imports[import_id]["_finished_at"] = _time.time()
+        except Exception as e:
+            logger.error("[import-local] Error: %s", e, exc_info=True)
+            if import_id in _active_imports:
+                _active_imports[import_id]["status"] = "failed"
+                _active_imports[import_id]["result"] = {"success": False, "message": str(e)}
+                _active_imports[import_id]["_finished_at"] = _time.time()
+
+    _cleanup_old_imports()
+    _get_import_executor().submit(run_import)
+
+    return {
+        "import_id": import_id,
+        "pack_name": pack_name,
+        "dep_id": request.dep_id,
+        "filename": resolved.name,
+        "file_size": file_size,
+        "status": "pending",
+    }
+
+
+@store_router.get("/imports")
+def get_active_imports():
+    """Get all active/recent imports."""
+    return list(_active_imports.values())
+
+
+@store_router.get("/imports/{import_id}")
+def get_import_status(import_id: str):
+    """Get status of a specific import."""
+    if import_id not in _active_imports:
+        raise HTTPException(status_code=404, detail=f"Import not found: {import_id}")
+    return _active_imports[import_id]
+
+
+# =============================================================================
 # Download Endpoints (v2 implementation)
 # =============================================================================
 

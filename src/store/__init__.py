@@ -99,6 +99,8 @@ from .backup_service import BackupService, BackupError, BackupNotConnectedError,
 from .civitai_update_provider import CivitaiUpdateProvider
 from .inventory_service import InventoryService
 from .pack_service import PackService
+from .hash_cache import HashCache
+from .local_file_service import LocalFileService
 from .resolve_models import ApplyResult, SuggestOptions, SuggestResult
 from .resolve_service import ResolveService
 from .profile_service import ProfileService
@@ -269,6 +271,14 @@ class Store:
         self.resolve_service = ResolveService(
             layout=self.layout,
             pack_service=self.pack_service,
+        )
+        # HashCache — persistent SHA256 cache for local model files
+        self.hash_cache = HashCache(self.layout.registry_path)
+        # LocalFileService — 10th service, browse/import local model files
+        self.local_file_service = LocalFileService(
+            hash_cache=self.hash_cache,
+            blob_store=self.blob_store,
+            pack_service_getter=lambda: self.pack_service,
         )
         # Set backup service on profile service for auto-restore
         self.profile_service.set_backup_service(self.backup_service)

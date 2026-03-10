@@ -37,6 +37,7 @@ import {
   ShieldAlert,
   Download,
   Info,
+  HardDrive,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { Button } from '@/components/ui/Button'
@@ -51,12 +52,13 @@ import type {
 import { HF_ELIGIBLE_KINDS } from '../types'
 import { ANIMATION_PRESETS } from '../constants'
 import { PreviewAnalysisTab } from './PreviewAnalysisTab'
+import { LocalResolveTab } from './LocalResolveTab'
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type ResolverTab = 'candidates' | 'preview' | 'ai-resolve' | 'civitai' | 'huggingface'
+type ResolverTab = 'candidates' | 'preview' | 'local' | 'ai-resolve' | 'civitai' | 'huggingface'
 
 export interface DependencyResolverModalProps {
   isOpen: boolean
@@ -319,7 +321,7 @@ export function DependencyResolverModal({
   isOpen,
   onClose,
   packName,
-  depId: _depId,
+  depId,
   depName,
   kind,
   baseModelHint,
@@ -344,6 +346,7 @@ export function DependencyResolverModal({
   const tabs: TabDef[] = [
     { id: 'candidates', label: 'Candidates', icon: <Search className="w-4 h-4" />, visible: true },
     { id: 'preview', label: 'Preview', icon: <Image className="w-4 h-4" />, visible: true },
+    { id: 'local', label: 'Local File', icon: <HardDrive className="w-4 h-4" />, visible: true },
     { id: 'ai-resolve', label: 'AI Resolve', icon: <Sparkles className="w-4 h-4" />, visible: avatarAvailable },
     { id: 'civitai', label: 'Civitai', icon: <Globe className="w-4 h-4" />, visible: true },
     { id: 'huggingface', label: 'HuggingFace', icon: <Database className="w-4 h-4" />, visible: HF_ELIGIBLE_KINDS.has(kind) },
@@ -510,6 +513,17 @@ export function DependencyResolverModal({
                 setSelectedCandidateId(candidateId)
                 setTab('candidates')
               }}
+            />
+          )}
+
+          {/* Local File Tab */}
+          {tab === 'local' && (
+            <LocalResolveTab
+              packName={packName}
+              depId={depId}
+              depName={depName}
+              kind={kind}
+              onResolved={onClose}
             />
           )}
 

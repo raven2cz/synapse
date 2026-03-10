@@ -342,6 +342,65 @@ export interface HuggingFaceFile {
 }
 
 // =============================================================================
+// Local File Import
+// =============================================================================
+
+/**
+ * A model file found during local directory browsing
+ */
+export interface LocalFileInfo {
+  name: string
+  path: string
+  size: number
+  mtime: number
+  extension: string
+  cached_hash: string | null
+}
+
+/**
+ * File recommendation with match scoring
+ */
+export interface FileRecommendation {
+  file: LocalFileInfo
+  match_type: 'sha256_exact' | 'filename_exact' | 'filename_stem' | 'size_match' | 'none'
+  confidence: number
+  reason: string
+}
+
+/**
+ * Browse result from the backend
+ */
+export interface BrowseLocalResult {
+  directory: string
+  files: LocalFileInfo[]
+  total_count: number
+  error: string | null
+}
+
+/**
+ * Import progress tracking
+ */
+export interface LocalImportStatus {
+  import_id: string
+  pack_name: string
+  dep_id: string
+  filename: string
+  file_size: number
+  status: 'pending' | 'importing' | 'completed' | 'failed'
+  stage: string
+  progress: number
+  result: {
+    success: boolean
+    sha256?: string
+    file_size?: number
+    display_name?: string
+    enrichment_source?: string
+    canonical_source?: Record<string, unknown>
+    message: string
+  } | null
+}
+
+// =============================================================================
 // Edit Mode Types
 // =============================================================================
 

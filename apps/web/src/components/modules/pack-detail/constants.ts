@@ -334,4 +334,7 @@ export const QUERY_KEYS = {
   localModels: (type: string) => ['local-models', type] as const,
   baseModelSearch: (source: string, query: string) => ['base-model-search', source, query] as const,
   downloads: ['downloads'] as const,
+  localBrowse: (path: string) => ['local-browse', path] as const,
+  localRecommend: (packName: string, depId: string, dir: string) => ['local-recommend', packName, depId, dir] as const,
+  localImport: (importId: string) => ['local-import', importId] as const,
 } as const
