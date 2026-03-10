@@ -728,7 +728,6 @@ describe('Modal State Logic', () => {
         editPreviews: false,
         editDependencies: false,
         uploadWorkflow: false,
-        baseModelResolver: false,
         pullConfirm: false,
         pushConfirm: false,
       }

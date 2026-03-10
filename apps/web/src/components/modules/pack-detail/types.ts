@@ -460,7 +460,6 @@ export interface ModalState {
   editDependencies: boolean
   editWorkflows: boolean
   uploadWorkflow: boolean
-  baseModelResolver: boolean
   dependencyResolver: boolean
   importModel: boolean
   markdownEditor: boolean

@@ -171,7 +171,6 @@ def test_v2_api_has_required_endpoints():
         '@v2_packs_router.post("/{pack_name}/download-asset"', # download asset
         '@v2_packs_router.get("/downloads/active"',          # active downloads
         '@v2_packs_router.delete("/downloads/completed"',    # clear downloads
-        '@v2_packs_router.post("/{pack_name}/resolve-base-model"', # resolve base model
         '@v2_packs_router.patch("/{pack_name}/parameters"',  # update parameters
         '@v2_packs_router.post("/{pack_name}/generate-workflow"', # generate workflow
         '@v2_packs_router.post("/{pack_name}/workflow/upload-file"', # upload workflow

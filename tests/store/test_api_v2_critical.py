@@ -2,11 +2,10 @@
 Critical tests for v2 API endpoints.
 
 Tests ensure:
-1. resolve-base-model endpoint works correctly
-2. parameters endpoint saves and loads correctly
-3. download-asset endpoint uses correct v2 models
-4. get_pack returns all required fields including all_installed
-5. No v1 code is used in production paths
+1. parameters endpoint saves and loads correctly
+2. download-asset endpoint uses correct v2 models
+3. get_pack returns all required fields including all_installed
+4. No v1 code is used in production paths
 """
 
 import pytest
@@ -15,67 +14,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import tempfile
 import shutil
-
-
-class TestResolveBaseModel:
-    """Tests for POST /packs/{pack_name}/resolve-base-model endpoint."""
-    
-    def test_resolve_base_model_request_validation(self):
-        """Test that ResolveBaseModelRequest model accepts valid data."""
-        from src.store.api import ResolveBaseModelRequest
-        
-        # Test with download_url
-        req = ResolveBaseModelRequest(
-            download_url="https://huggingface.co/test/model/resolve/main/model.safetensors",
-            source="huggingface",
-            file_name="model.safetensors",
-            size_kb=1024
-        )
-        assert req.download_url == "https://huggingface.co/test/model/resolve/main/model.safetensors"
-        assert req.source == "huggingface"
-        assert req.file_name == "model.safetensors"
-        assert req.size_kb == 1024
-        
-        # Test with model_path
-        req2 = ResolveBaseModelRequest(
-            model_path="/path/to/model.safetensors"
-        )
-        assert req2.model_path == "/path/to/model.safetensors"
-        assert req2.download_url is None
-    
-    def test_resolve_base_model_creates_dependency_if_missing(self):
-        """Test that resolve-base-model creates base_checkpoint dependency if not exists."""
-        from src.store.models import (
-            Pack, PackDependency, DependencySelector, SelectorStrategy,
-            AssetKind, UpdatePolicy, ExposeConfig, PackSource, ProviderName
-        )
-        
-        # Create a pack without base_checkpoint dependency
-        pack = Pack(
-            name="test-pack",
-            pack_type=AssetKind.LORA,
-            dependencies=[],
-            source=PackSource(provider=ProviderName.CIVITAI),
-        )
-        
-        assert len(pack.dependencies) == 0
-        
-        # Simulate adding dependency (as resolve-base-model would do)
-        base_dep = PackDependency(
-            id="base_checkpoint",
-            kind=AssetKind.CHECKPOINT,
-            required=True,
-            selector=DependencySelector(
-                strategy=SelectorStrategy.HUGGINGFACE_FILE,
-                url="https://huggingface.co/test/model.safetensors",
-            ),
-            update_policy=UpdatePolicy(),
-            expose=ExposeConfig(filename="model.safetensors"),
-        )
-        pack.dependencies.append(base_dep)
-        
-        assert len(pack.dependencies) == 1
-        assert pack.dependencies[0].id == "base_checkpoint"
 
 
 class TestParameters:
@@ -381,14 +319,6 @@ class TestAPIEndpointsExist:
         assert hasattr(api, 'v2_packs_router'), "v2_packs_router should be exported"
         assert hasattr(api, 'store_router'), "store_router should be exported"
         assert hasattr(api, 'profiles_router'), "profiles_router should be exported"
-    
-    def test_v2_api_has_resolve_base_model(self):
-        """Test that v2 API has resolve-base-model endpoint."""
-        from src.store.api import v2_packs_router
-        
-        routes = [r.path for r in v2_packs_router.routes]
-        assert any("resolve-base-model" in r for r in routes), \
-            "v2_packs_router should have resolve-base-model endpoint"
     
     def test_v2_api_has_parameters_endpoints(self):
         """Test that v2 API has parameters endpoints."""

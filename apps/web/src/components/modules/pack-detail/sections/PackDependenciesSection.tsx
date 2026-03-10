@@ -81,7 +81,7 @@ export interface PackDependenciesSectionProps {
   onDownloadAsset: (asset: AssetInfo) => void
   onRestoreFromBackup: (asset: AssetInfo) => Promise<void>
   onDeleteResource: (assetName: string) => void
-  onOpenBaseModelResolver: () => void
+
   onResolvePack: () => void
   onOpenDependencyResolver?: (asset: AssetInfo) => void
   onSetAsBaseModel?: (asset: AssetInfo) => void
@@ -330,7 +330,7 @@ interface AssetRowProps {
   onDownloadAsset: (asset: AssetInfo) => void
   onRestoreFromBackup: (asset: AssetInfo) => Promise<void>
   onDeleteResource: (assetName: string) => void
-  onOpenBaseModelResolver: () => void
+
   onResolvePack: () => void
   onOpenDependencyResolver?: (asset: AssetInfo) => void
   onSetAsBaseModel?: (asset: AssetInfo) => void
@@ -347,7 +347,7 @@ function AssetRow({
   onDownloadAsset,
   onRestoreFromBackup,
   onDeleteResource,
-  onOpenBaseModelResolver,
+
   onResolvePack,
   onOpenDependencyResolver,
   onSetAsBaseModel,
@@ -491,10 +491,10 @@ function AssetRow({
             <Loader2 className="w-5 h-5 text-synapse animate-spin" />
           )}
 
-          {/* Select Model (base model) */}
+          {/* Select Model (base model) — uses DependencyResolverModal */}
           {isBaseModel && !isInstalled && !canDownload && (
             <button
-              onClick={onOpenBaseModelResolver}
+              onClick={() => onOpenDependencyResolver ? onOpenDependencyResolver(asset) : onResolvePack()}
               className="px-3 py-1.5 bg-amber-500/30 text-amber-300 rounded-lg text-sm font-medium hover:bg-amber-500/40 transition-all duration-200"
             >
               {t('pack.dependencies.selectModel')}
@@ -526,10 +526,10 @@ function AssetRow({
             <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
           )}
 
-          {/* Change base model */}
+          {/* Change base model — uses DependencyResolverModal */}
           {isBaseModel && isInstalled && !needsResolve && (
             <button
-              onClick={onOpenBaseModelResolver}
+              onClick={() => onOpenDependencyResolver ? onOpenDependencyResolver(asset) : onResolvePack()}
               className="p-2 bg-slate-mid text-text-muted rounded-lg hover:text-amber-400 hover:bg-slate-mid/80 transition-all duration-200"
               title={t('pack.dependencies.changeBaseModel')}
             >
@@ -604,7 +604,7 @@ export function PackDependenciesSection({
   onDownloadAsset,
   onRestoreFromBackup,
   onDeleteResource,
-  onOpenBaseModelResolver,
+
   onResolvePack,
   onOpenDependencyResolver,
   onSetAsBaseModel,
@@ -673,7 +673,7 @@ export function PackDependenciesSection({
               onDownloadAsset={onDownloadAsset}
               onRestoreFromBackup={onRestoreFromBackup}
               onDeleteResource={onDeleteResource}
-              onOpenBaseModelResolver={onOpenBaseModelResolver}
+
               onResolvePack={onResolvePack}
               onOpenDependencyResolver={onOpenDependencyResolver}
               onSetAsBaseModel={onSetAsBaseModel}
@@ -705,7 +705,7 @@ export function PackDependenciesSection({
                   onDownloadAsset={onDownloadAsset}
                   onRestoreFromBackup={onRestoreFromBackup}
                   onDeleteResource={onDeleteResource}
-                  onOpenBaseModelResolver={onOpenBaseModelResolver}
+    
                   onResolvePack={onResolvePack}
                   onOpenDependencyResolver={onOpenDependencyResolver}
                   onSetAsBaseModel={onSetAsBaseModel}

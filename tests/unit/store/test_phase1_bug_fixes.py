@@ -110,50 +110,6 @@ class TestBug3BaseModelNotOverwritten:
 
 
 # =============================================================================
-# BUG 4: typed API IDs
-# =============================================================================
-
-class TestBug4TypedApiIds:
-    """BUG 4: resolve-base-model should accept typed IDs, not just URLs."""
-
-    def test_request_model_accepts_typed_ids(self):
-        """ResolveBaseModelRequest schema includes model_id, version_id, repo_id."""
-        from src.store.api import ResolveBaseModelRequest
-
-        req = ResolveBaseModelRequest(
-            source="civitai",
-            download_url="https://civitai.com/api/download/models/357609",
-            file_name="juggernautXL.safetensors",
-            model_id=133005,
-            version_id=357609,
-        )
-        assert req.model_id == 133005
-        assert req.version_id == 357609
-
-    def test_request_model_accepts_hf_repo_id(self):
-        from src.store.api import ResolveBaseModelRequest
-        req = ResolveBaseModelRequest(
-            source="huggingface",
-            download_url="https://huggingface.co/stabilityai/sdxl/resolve/main/model.safetensors",
-            file_name="model.safetensors",
-            repo_id="stabilityai/sdxl",
-        )
-        assert req.repo_id == "stabilityai/sdxl"
-
-    def test_request_model_backward_compatible(self):
-        """Old requests without typed IDs still work."""
-        from src.store.api import ResolveBaseModelRequest
-
-        req = ResolveBaseModelRequest(
-            source="civitai",
-            download_url="https://civitai.com/api/download/models/357609",
-            file_name="juggernautXL.safetensors",
-        )
-        assert req.model_id is None
-        assert req.version_id is None
-
-
-# =============================================================================
 # PackService.apply_dependency_resolution()
 # =============================================================================
 

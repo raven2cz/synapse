@@ -299,7 +299,6 @@ export const DEFAULT_MODAL_STATE = {
   editDependencies: false,
   editWorkflows: false,
   uploadWorkflow: false,
-  baseModelResolver: false,
   dependencyResolver: false,
   importModel: false,
   markdownEditor: false,

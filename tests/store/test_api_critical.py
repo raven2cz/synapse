@@ -571,33 +571,31 @@ class TestV2APIFlow:
         v1_endpoints = [
             "/api/packs/",
             "/api/packs/{pack_name}",
-            "/api/packs/{pack_name}/resolve-base-model",
             "/api/packs/{pack_name}/download-asset",
             "/api/packs/{pack_name}/download-all",
             "/api/packs/{pack_name}/repair-urls",
         ]
-        
+
         for endpoint in v1_endpoints:
             assert endpoint in routes, f"Missing V1 endpoint: {endpoint}"
-    
+
     def test_v1_compatibility_endpoints_exist(self):
         """Verify v1 compatibility endpoints exist for legacy UI support."""
         import sys
         from pathlib import Path
-        
+
         project_root = Path(__file__).parent.parent.parent
         if str(project_root) not in sys.path:
             sys.path.insert(0, str(project_root))
-        
+
         from apps.api.src.main import app
-        
+
         routes = [route.path for route in app.routes if hasattr(route, 'path')]
-        
+
         # These v1 compatibility endpoints SHOULD exist for frontend support
         compatibility_endpoints = [
             "/api/packs/{pack_name}/download-asset",
             "/api/packs/{pack_name}/download-all",
-            "/api/packs/{pack_name}/resolve-base-model",
             "/api/packs/{pack_name}/repair-urls",
         ]
         
@@ -629,8 +627,9 @@ class TestV2APIFlow:
         if not content:
             pytest.skip("Frontend source not available in test environment")
 
-        # Should have these v1 endpoints for base model resolution
-        assert "/resolve-base-model" in content, "Frontend must use /resolve-base-model for base model resolution"
+        # Should use suggest-resolution/apply-resolution for dependency resolution
+        assert "suggest-resolution" in content or "apply-resolution" in content, \
+            "Frontend must use suggest-resolution/apply-resolution for dependency resolution"
     
     def test_browse_page_uses_v1_import(self):
         """Verify BrowsePage uses /api/packs/import/url (V1 API)."""

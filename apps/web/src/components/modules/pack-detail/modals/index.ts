@@ -14,9 +14,6 @@ export { EditParametersModal, type EditParametersModalProps } from './EditParame
 // Upload Workflow - ComfyUI workflow upload
 export { UploadWorkflowModal, type UploadWorkflowModalProps } from './UploadWorkflowModal'
 
-// Base Model Resolver - multi-source base model selection
-export { BaseModelResolverModal, type BaseModelResolverModalProps } from './BaseModelResolverModal'
-
 // Dependency Resolver - multi-source dependency resolution (Resolve Model)
 export { DependencyResolverModal, type DependencyResolverModalProps } from './DependencyResolverModal'
 

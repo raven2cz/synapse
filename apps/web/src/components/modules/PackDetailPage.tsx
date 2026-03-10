@@ -6,7 +6,7 @@
  * ARCHITECTURE:
  * - Hooks: usePackData, usePackDownloads, usePackEdit, usePackPlugin
  * - Sections: PackHeader, PackGallery, PackInfoSection, etc.
- * - Modals: EditPackModal, BaseModelResolverModal, etc.
+ * - Modals: EditPackModal, DependencyResolverModal, etc.
  * - Plugins: CivitaiPlugin, CustomPlugin, InstallPlugin
  *
  * This file is the orchestrator - it connects hooks to components.
@@ -14,7 +14,6 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 
@@ -44,7 +43,6 @@ import {
   EditPackModal,
   EditParametersModal,
   UploadWorkflowModal,
-  BaseModelResolverModal,
   DependencyResolverModal,
   EditPreviewsModal,
   DescriptionEditorModal,
@@ -52,9 +50,6 @@ import {
   ErrorBoundary,
   SectionErrorBoundary,
   // Types
-  type LocalModel,
-  type BaseModelSearchResponse,
-  type HuggingFaceFile,
   type AssetInfo,
   type AssetType,
   type ModalState,
@@ -62,7 +57,6 @@ import {
   type SuggestResult,
   // Constants
   DEFAULT_MODAL_STATE,
-  QUERY_KEYS,
 } from './pack-detail'
 
 // Legacy components still used
@@ -238,72 +232,6 @@ function PackDetailPageContent() {
   // Base Model Resolver State
   // ==========================================================================
 
-  const [resolverTab, setResolverTab] = useState<'local' | 'civitai' | 'huggingface'>('local')
-  const [searchTrigger, setSearchTrigger] = useState('')
-
-  // Local models from ComfyUI
-  const { data: localModels = [], isLoading: isLoadingLocalModels } = useQuery<LocalModel[]>({
-    queryKey: QUERY_KEYS.localModels('checkpoints'),
-    queryFn: async () => {
-      const res = await fetch('/api/comfyui/models/checkpoints')
-      if (!res.ok) return []
-      const data = await res.json()
-      return (data || []).map((m: { name: string; path: string; size?: number }) => ({
-        name: m.name,
-        path: m.path,
-        type: 'checkpoint',
-        size: m.size,
-      }))
-    },
-    enabled: modals.baseModelResolver,
-  })
-
-  // Remote search (Civitai/HuggingFace)
-  const { data: searchResponse, isLoading: isSearching } = useQuery<BaseModelSearchResponse>({
-    queryKey: QUERY_KEYS.baseModelSearch(resolverTab, searchTrigger),
-    queryFn: async () => {
-      if (!searchTrigger || searchTrigger.length < 2) {
-        return { results: [], total_found: 0, source: resolverTab, search_query: '' }
-      }
-      if (resolverTab !== 'civitai' && resolverTab !== 'huggingface') {
-        return { results: [], total_found: 0, source: resolverTab, search_query: '' }
-      }
-
-      const params = new URLSearchParams({
-        query: searchTrigger,
-        source: resolverTab,
-        limit: '30',
-        max_batches: '3',
-      })
-      const res = await fetch(`/api/browse/base-models/search?${params}`)
-      if (!res.ok) throw new Error('Search failed')
-      return res.json()
-    },
-    enabled:
-      modals.baseModelResolver &&
-      (resolverTab === 'civitai' || resolverTab === 'huggingface') &&
-      searchTrigger.length >= 2,
-    staleTime: 60000,
-  })
-
-  const handleBaseModelSearch = useCallback(
-    (query: string, source: 'civitai' | 'huggingface') => {
-      setResolverTab(source)
-      setSearchTrigger(query)
-    },
-    []
-  )
-
-  const handleFetchHfFiles = useCallback(async (repoId: string): Promise<HuggingFaceFile[]> => {
-    try {
-      const res = await fetch(`/api/browse/huggingface/files?repo_id=${encodeURIComponent(repoId)}`)
-      if (!res.ok) return []
-      return res.json()
-    } catch {
-      return []
-    }
-  }, [])
-
   // ==========================================================================
   // Handlers
   // ==========================================================================
@@ -445,7 +373,7 @@ function PackDetailPageContent() {
           onDownloadAsset={downloads.downloadAsset}
           onRestoreFromBackup={handleRestoreFromBackup}
           onDeleteResource={packData.deleteResource}
-          onOpenBaseModelResolver={() => openModal('baseModelResolver')}
+
           onResolvePack={packData.resolvePack}
           onOpenDependencyResolver={handleOpenDependencyResolver}
           onSetAsBaseModel={(asset) => packData.setAsBaseModel(asset.name)}
@@ -585,25 +513,6 @@ function PackDetailPageContent() {
         }}
         onClose={() => closeModal('uploadWorkflow')}
         isUploading={packData.isUploadingWorkflow}
-      />
-
-      {/* Base Model Resolver Modal */}
-      <BaseModelResolverModal
-        isOpen={modals.baseModelResolver}
-        packDescription={pack.description}
-        baseModel={pack.pack?.base_model}
-        localModels={localModels}
-        isLoadingLocalModels={isLoadingLocalModels}
-        searchResponse={searchResponse}
-        isSearching={isSearching}
-        onSearch={handleBaseModelSearch}
-        onFetchHfFiles={handleFetchHfFiles}
-        onResolve={(data) => {
-          packData.resolveBaseModel(data)
-          closeModal('baseModelResolver')
-        }}
-        onClose={() => closeModal('baseModelResolver')}
-        isResolving={packData.isResolvingBaseModel}
       />
 
       {/* Dependency Resolver Modal */}

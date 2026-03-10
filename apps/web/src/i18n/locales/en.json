@@ -65,7 +65,6 @@
         "unresolved": "Unresolved",
         "missing": "Missing"
       },
-      "resolveBaseModel": "Resolve Base Model",
       "availableOnBackup": "Available on backup storage",
       "readyToDownload": "Ready to download",
       "backupRestore": "Available on backup - click cloud to restore",

@@ -54,14 +54,6 @@ export interface UsePackDataReturn {
   updateParameters: (data: Record<string, unknown>) => void
   isUpdatingParameters: boolean
 
-  resolveBaseModel: (data: {
-    model_path?: string
-    download_url?: string
-    source?: string
-    file_name?: string
-    size_kb?: number
-  }) => void
-  isResolvingBaseModel: boolean
 
   resolvePack: () => void
   isResolvingPack: boolean
@@ -302,39 +294,6 @@ export function usePackData({
     },
     onError: (error: Error) => {
       toast.error(`Failed to update parameters: ${error.message}`)
-    },
-  })
-
-  // =========================================================================
-  // Resolve Base Model Mutation
-  // =========================================================================
-
-  const resolveBaseModelMutation = useMutation({
-    mutationFn: async (data: {
-      model_path?: string
-      download_url?: string
-      source?: string
-      file_name?: string
-      size_kb?: number
-    }) => {
-      const res = await fetch(`/api/packs/${encodeURIComponent(packName)}/resolve-base-model`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pack_name: packName, ...data }),
-      })
-      if (!res.ok) {
-        const errText = await res.text()
-        throw new Error(`Failed to resolve base model: ${errText}`)
-      }
-      return res.json()
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pack(packName) })
-      queryClient.invalidateQueries({ queryKey: ['packs'] })
-      toast.success('Base model resolved')
-    },
-    onError: (error: Error) => {
-      toast.error(`Failed to resolve base model: ${error.message}`)
     },
   })
 
@@ -910,9 +869,6 @@ export function usePackData({
 
     updateParameters: (data) => updateParametersMutation.mutate(data),
     isUpdatingParameters: updateParametersMutation.isPending,
-
-    resolveBaseModel: (data) => resolveBaseModelMutation.mutate(data),
-    isResolvingBaseModel: resolveBaseModelMutation.isPending,
 
     resolvePack: () => resolvePackMutation.mutate(),
     isResolvingPack: resolvePackMutation.isPending,

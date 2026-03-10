@@ -78,8 +78,6 @@ const MUST_INVALIDATE_PACKS = [
   'deleteMutation',
   // Changes user_tags shown on list cards
   'updatePackMutation',
-  // Resolves base model → changes has_unresolved
-  'resolveBaseModelMutation',
   // Resolves all deps → changes has_unresolved
   'resolvePackMutation',
   // Deletes resource → can change has_unresolved
