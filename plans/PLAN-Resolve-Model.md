@@ -1,7 +1,7 @@
 # PLAN: Resolve Model Redesign
 
-**Version:** v0.9.0 — Phase 0+1+2+2.5 COMPLETE
-**Status:** Phase 2.5 DOKONCENA — Phase 3 pripravena
+**Version:** v0.10.0 — Phase 0+1+2+2.5+3 COMPLETE
+**Status:** Phase 3 DOKONCENA — Phase 4 pripravena
 **Priority:** HIGH
 **Created:** 2026-03-07
 **Author:** raven2cz + Claude Opus 4.6
@@ -1028,66 +1028,136 @@ Viz detailni test plan v sekci 11o
 
 ---
 
-### Phase 3: Local Resolve — import lokalnich souboru
+### Phase 3: Local Resolve — import lokalnich souboru ✅ KOMPLETNI
 
 **Cil:** Uzivatel muze resolvovat dependenci z lokalniho souboru misto stahovani.
 Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF.
 
+**Stav:** ✅ KOMPLETNI — commit `6f8b485` (2026-03-10), branch `feat/resolve-model-redesign`
+
 **Tri scenare:**
 
-**A) Dep uz ma remote zdroj (Civitai/HF):**
+**A) Dep uz ma remote zdroj (Civitai/HF):** ✅ IMPL+INTEG
 - Dep je resolved na civitai_file(model_id=123, sha256=abc...) ale soubor neni stazeny
 - Uzivatel otevre Local tab, zvoli slozku
 - System porovna SHA256/filename → doporuci konkretni soubor ("tohle vypada jako ten spravny")
 - Uzivatel potvrdi → copy do blob store, dep resolvovana
+- **Implementace:** `LocalFileService.recommend()` s confidence scoring:
+  sha256_exact (1.0) > filename_exact (0.85) > filename_stem (0.6) > none (0.0)
 
-**B) Dep nema remote zdroj, enrichment pres hash:**
+**B) Dep nema remote zdroj, enrichment pres hash:** ✅ IMPL+INTEG
 - Custom pack, dep ma jen nazev (napr. `juggernaut_xl.safetensors`)
 - Uzivatel vybere soubor → system hashuje (SHA256)
 - Hash → Civitai by-hash API → najde model_id, version_id, canonical_source
-- Hash → HuggingFace lookup (pokud Civitai nevi)
+- ~~Hash → HuggingFace lookup (pokud Civitai nevi)~~ (HF enrichment az Phase 4)
 - Dep je plne enrichovana + soubor v blob store
+- **Overeno na realnych datech:** 4 soubory (add-detail-xl, ponyDiffusionV6XL, frostbitev2, pixel_art_style) — vsechny uspesne enrichovany z Civitai
 
-**C) Hash nic nenajde, enrichment pres jmeno:**
+**C) Hash nic nenajde, enrichment pres jmeno:** ✅ IMPL+INTEG
 - Hash nenajde nic na Civitai ani HF
-- Filename stem (napr. `juggernaut_xl_v9` → "juggernaut xl v9") → name search na Civitai/HF
+- Filename stem (napr. `juggernaut_xl_v9` → "juggernaut xl v9") → name search na Civitai (Meilisearch)
 - Pokud najde → doplni canonical_source, metadata
 - Pokud nenajde → ulozi jako LOCAL_FILE strategie s display_name z filename
 - Vzdy se ulozi aspon: sha256, file size, display_name z filename
+- **Overeno na realnych datech:** ltx-2-19b-lora-camera-control-dolly-left.safetensors → filename_only fallback
 
 **Deliverables:**
 
-1. **Backend: Directory browsing** — `GET /api/store/browse-local`
+1. ✅ **Backend: Directory browsing** — `GET /api/store/browse-local`
    - Parametry: `path` (adresar), `kind` (AssetKind pro filtraci pripon)
-   - Vraci seznam souboru: name, size, mtime, extension
-   - Security: path traversal prevence, allowlisted extensions (.safetensors, .ckpt, .pt, .bin, .pth, .onnx)
-   - SSRF prevence — zadne symlinky do citlivych adresaru
+   - Vraci seznam souboru: name, size, mtime, extension, cached_hash
+   - Security: path traversal prevence, allowlisted extensions (.safetensors, .ckpt, .pt, .bin, .pth, .onnx, .sft, .gguf)
+   - Regular file check (no symlinks, no devices)
+   - **Implementace:** `store_router.get("/browse-local")` → `LocalFileService.browse()`
 
-2. **Backend: Import local file** — `POST /api/store/import-local-file`
-   - Parametry: pack_name, dep_id, file_path
-   - Flow: validate path → SHA256 hash → copy do blob store → resolve dep
-   - Enrichment: hash lookup (Civitai by-hash + HF) → name search fallback
-   - Progress: streaming response pro hash + copy progress (velke soubory)
+2. ✅ **Backend: Import local file** — `POST /api/packs/{pack_name}/import-local`
+   - Parametry: pack_name, dep_id, file_path, skip_enrichment
+   - Flow: validate path → SHA256 hash (s cache) → atomic copy do blob store → enrich → apply resolution
+   - Enrichment pipeline: `enrich_file()` → hash lookup (Civitai) → name search (Meilisearch) → filename_only fallback
+   - Background import: `ThreadPoolExecutor(max_workers=2)`, `_cleanup_old_imports(MAX_IMPORT_HISTORY=50)`
+   - Progress polling: `GET /api/store/imports/{import_id}` (1000ms interval)
+   - **Implementace:** `v2_packs_router.post("/{pack_name}/import-local")` → `_active_imports` dict + polling
 
-3. **Backend: Smart file recommendation** (Scenar A)
+3. ✅ **Backend: Smart file recommendation** — `GET /api/packs/{pack_name}/recommend-local`
+   - Parametry: pack_name, dep_id, directory
    - Pokud dep ma known SHA256 nebo filename → scan adresar a doporucit match
-   - Poradi: exact SHA256 match > filename+size match > filename stem match
+   - Poradi: exact SHA256 match (1.0) > filename exact (0.85) > filename stem (0.6) > none (0.0)
+   - **Implementace:** `v2_packs_router.get("/{pack_name}/recommend-local")` → `LocalFileService.recommend()`
 
-4. **Frontend: Local tab v DependencyResolverModal**
-   - Input na cestu (string) + browse endpoint pro listing
-   - Seznam souboru (nazev, velikost, datum) s doporucenim (pokud scenar A)
-   - "Use this file" → backend hashuje + kopiruje
-   - Progress bar (hashovani + kopie velkych souboru, muze trvat desitky sekund)
+4. ✅ **Frontend: Local File tab v DependencyResolverModal**
+   - 4 stavy: browse → importing → success → error
+   - Browse: directory input, recent paths (localStorage), file listing s recommendations
+   - Importing: progress bar s gradient, stage indicators (hashing → copying → enriching → applying)
+   - Success: checkmark, file details, enrichment info (civitai_hash / civitai_name / filename_only)
+   - Error: error message s retry
+   - **Implementace:** `LocalResolveTab.tsx` (~530 radku), integrovano v `DependencyResolverModal.tsx`
 
-5. **Security hardening:**
-   - Path validace — zadne `..`, zadne symlinky mimo povolene adresare
-   - Extension allowlist
-   - URL validace v apply-manual-resolution — scheme/host allowlist (Codex P1 #1)
+5. ✅ **Security hardening:**
+   - Path validace: absolute path required, no `..` traversal, resolved path check
+   - Extension allowlist: `.safetensors`, `.ckpt`, `.pt`, `.bin`, `.pth`, `.onnx`, `.sft`, `.gguf`
+   - Regular file check (stat.S_ISREG) — no symlinks, directories, devices
+   - TOCTOU prevence: fstat na otevreny handle
+   - Atomic blob copy: UUID-based `.tmp` → `os.replace()` (race condition safe)
+   - Copy strategies: reflink (zero-copy, Btrfs/XFS) → hardlink (same FS) → shutil.copy2 (fallback)
 
-**Testy:**
-- Unit: path validace, extension filtering, SSRF prevence, filename stem extraction
-- Integration: hash + copy do blob store + resolve dep + enrichment
-- Smoke: cely flow od browse → select → hash → copy → resolved dep
+6. ✅ **Shared enrichment module** — `src/store/enrichment.py` (267 radku)
+   - `enrich_by_hash()` — SHA256 lookup na Civitai (get_model_by_hash)
+   - `enrich_by_name()` — Filename stem search na Civitai (Meilisearch-first, REST fallback)
+   - `enrich_file()` — Pipeline: hash → name → filename_only fallback (vzdy vraci vysledek)
+   - `extract_stem()` — Clean model name z filename
+   - Helpers: `_normalize_name()`, `_kind_matches_civitai_type()`, `_extract_file_id_from_version()`, `_get_latest_version()`
+   - Sdileno s `PreviewMetaEvidenceProvider` (Phase 2.5) a `LocalFileService` (Phase 3)
+
+**Store integrace:** ✅
+- `LocalFileService` jako 10. sluzba v `Store.__init__()` (DI pattern)
+- Pristup k `HashCache`, `BlobStore`, `PackService` pres gettery (lazy, no circular deps)
+- `_apply_resolution()` buduje `ManualResolveData` dle enrichment strategie (CIVITAI_FILE / HUGGINGFACE_FILE / LOCAL_FILE)
+- Deleguje na `resolve_service.apply_manual()` nebo `pack_service.apply_dependency_resolution()` (fallback)
+
+**Testy:** ✅ 57 NOVYCH TESTU
+- Unit enrichment (26): `tests/unit/store/test_enrichment.py`
+  - TestExtractStem (7), TestNormalizeName (3), TestKindMatchesCivitaiType (6)
+  - TestEnrichByHash (4), TestEnrichByName (3), TestEnrichFile (3)
+- Unit local_file_service (31): `tests/unit/store/test_local_file_service.py`
+  - TestValidatePath (9), TestValidateDirectory (5), TestBrowse (7)
+  - TestRecommend (5), TestImportFile (4), TestEnrichment (1)
+
+**Real-world testovani (2026-03-10):** ✅ OVERENO
+- Legacy repo: `/home/box/.synapse/repo-legacy/` (492 GB, 94 souboru)
+- Browse checkpoints: 7 souboru, Browse loras: 19 souboru
+- Import `tifa_lockhart_offset.safetensors` (302 MB) — skip_enrichment=True → OK
+- Import `add-detail-xl.safetensors` (218 MB) — civitai_hash match → model 122359 "Detail Tweaker XL"
+- Import `ponyDiffusionV6XL.safetensors` (6.4 GB) — civitai_hash match → model 257749 "Pony Diffusion V6 XL" (6.7s)
+- Import `frostbitev2_Illu_dwnsty.safetensors` (109 MB) — civitai_hash match → model 947081
+- Import `ltx-2-19b-lora-camera-control-dolly-left.safetensors` (312 MB) — filename_only fallback (ne na Civitai)
+- API flow: browse-local (200 OK), recommend-local (200 OK), import-local + polling (completed)
+- `pixel_art_style_z_image_turbo.safetensors` — API import+polling: civitai_hash → model 1770073
+
+**Bug nalezeny a opraveny behem implementace:**
+- `v2_store_router` neexistoval v `api.py` → opraveno na `store_router` (3 vyskyty)
+- `CanonicalSource(type="civitai")` → `provider="civitai"` (Pydantic field je `provider`, ne `type`)
+- Test `test_rejects_directory` — directory fails on extension check first, not regular file check
+
+**Review:** ✅ 2 kola
+- **Round 1:** Memory leak (MAX_IMPORT_HISTORY), unbounded threads (ThreadPoolExecutor), race condition (atomic write), polling too fast (500→1000ms)
+- **Round 2:** Deterministic tmp collision (UUID-based), polling double-click guard, model_dump() false positive
+
+**Zmeny v souborech:**
+| Soubor | Zmena |
+|--------|-------|
+| `src/store/enrichment.py` | **NOVY** — shared enrichment module (267 radku) |
+| `src/store/local_file_service.py` | **NOVY** — LocalFileService: browse, recommend, import_file (~450 radku) |
+| `src/store/__init__.py` | +HashCache init, +LocalFileService jako 10. sluzba |
+| `src/store/api.py` | +5 endpointu (browse-local, recommend-local, import-local, imports, imports/{id}), ThreadPoolExecutor |
+| `apps/web/.../modals/LocalResolveTab.tsx` | **NOVY** — Local File tab s 4 stavy (~530 radku) |
+| `apps/web/.../modals/DependencyResolverModal.tsx` | +Local File tab integrace, +HardDrive icon |
+| `apps/web/.../types.ts` | +LocalFileInfo, FileRecommendation, BrowseLocalResult, LocalImportStatus |
+| `apps/web/.../constants.ts` | +localBrowse, localRecommend, localImport query keys |
+| `plans/SPEC-Local-Resolve.md` | **NOVY** — full specifikace (architektura, security, API, UX, testy) |
+| `tests/unit/store/test_enrichment.py` | **NOVY** — 26 testu |
+| `tests/unit/store/test_local_file_service.py` | **NOVY** — 31 testu |
+
+**Celkem testy po Phase 3:** 2131 backend + frontend passed, 0 failed
 
 ### Phase 4: Provider polish + download + cleanup
 
@@ -1116,7 +1186,7 @@ Synapse pouziva konzistentni vzory, do kterych se MUSIME napojit:
 
 | Vzor | Kde pouzivan | Jak rozsirime |
 |------|-------------|--------------|
-| **Store = Facade** | `__init__.py` drzi 8 sluzeb, constructor DI | Pridat `resolve_service` jako 9. sluzbu |
+| **Store = Facade** | `__init__.py` drzi 8 sluzeb, constructor DI | Pridat `resolve_service` jako 9. sluzbu, `local_file_service` jako 10. |
 | **Protocol-based registry** | `DependencyResolver` protocol, `_ensure_resolvers()` lazy init | `EvidenceProvider` protocol, `_ensure_providers()` lazy init |
 | **AITask ABC + TaskRegistry** | `tasks/base.py`, `tasks/registry.py`, auto-discovered | Pridat `DependencyResolutionTask` do registry |
 | **Shared services** | DownloadService, BlobStore sdilene pres Store | ResolveService dostane sdilene sluzby |
@@ -1846,7 +1916,7 @@ useEffect(() => {
 ### 11m. Soubory — kompletni seznam
 
 ```
-NOVE SOUBORY:
+NOVE SOUBORY (Phase 0-2):
 src/store/resolve_service.py           — ResolveService (suggest/apply orchestrace)
 src/store/resolve_models.py            — Vsechny DTO (CandidateSeed, EvidenceHit, ProviderResult, ...)
 src/store/evidence_providers.py        — 6 evidence provideru (Strategy pattern)
@@ -1859,7 +1929,15 @@ src/avatar/tasks/dependency_resolution.py  — AI task pro MCP-backed resolve
 config/avatar/skills/model-resolution.md   — Hlavni AI prompt pro resolve (~240 radku, otestovano)
 config/avatar/skills/huggingface-integration.md — HF Hub API reference knowledge (~95 radku)
 
-UPRAVENE SOUBORY:
+NOVE SOUBORY (Phase 3):
+src/store/enrichment.py                — Shared enrichment: hash/name lookup, enrich_file() pipeline (267 radku)
+src/store/local_file_service.py        — LocalFileService: browse, recommend, import_file (~450 radku)
+apps/web/.../modals/LocalResolveTab.tsx — Local File tab: 4-state UI (browse/importing/success/error, ~530 radku)
+plans/SPEC-Local-Resolve.md            — Full specifikace (architektura, security, API, UX, testy)
+tests/unit/store/test_enrichment.py    — 26 testu (extract_stem, normalize, kind_match, enrich)
+tests/unit/store/test_local_file_service.py — 31 testu (validate, browse, recommend, import)
+
+UPRAVENE SOUBORY (Phase 0-2):
 src/store/__init__.py                  — +ResolveService, +set_avatar_service, import orchestrace
 src/store/pack_service.py              — +apply_dependency_resolution() write metoda
 src/store/models.py                    — +CanonicalSource (s subfolder), rozsireni DependencySelector
@@ -1872,12 +1950,19 @@ apps/web/.../modals/DependencyResolverModal.tsx  — NOVY (nahrazuje BaseModelRe
 apps/web/.../sections/PackDependenciesSection.tsx — +inline resolve UI, +Apply & Download
 apps/web/.../PackDetailPage.tsx        — orchestrace apply+download, eager suggest
 apps/web/src/lib/avatar/api.ts         — +incompatible stav v TS union
+
+UPRAVENE SOUBORY (Phase 3):
+src/store/__init__.py                  — +HashCache init, +LocalFileService jako 10. sluzba
+src/store/api.py                       — +5 local resolve endpointu, ThreadPoolExecutor, import polling
+apps/web/.../modals/DependencyResolverModal.tsx — +Local File tab integrace, +HardDrive icon
+apps/web/.../types.ts                  — +LocalFileInfo, FileRecommendation, BrowseLocalResult, LocalImportStatus
+apps/web/.../constants.ts              — +localBrowse, localRecommend, localImport query keys
 ```
 
 ### 11n. Dependency graf — cilovy stav
 
 ```
-Store (Facade) — 9 sluzeb, JEDNOSMERNY tok
+Store (Facade) — 10 sluzeb, JEDNOSMERNY tok
 │
 ├── [1-8] existujici sluzby beze zmeny
 │
@@ -1895,6 +1980,23 @@ Store (Facade) — 9 sluzeb, JEDNOSMERNY tok
 │   ├── ResolveScoring → Noisy-OR, tier ceiling
 │   ├── ResolveValidation → per-strategy min fields, cross-kind
 │   └── CandidateCacheStore → InMemoryCandidateCache (injectable)
+│
+├── [10] LocalFileService (NOVY — Phase 3)
+│   ├── HashCache (shared — persistent SHA256 cache)
+│   ├── BlobStore (shared — blob storage)
+│   ├── pack_service_getter: Callable → PackService (lazy, no circular deps)
+│   ├── enrichment.py (shared modul):
+│   │   ├── enrich_by_hash() → Civitai hash lookup
+│   │   ├── enrich_by_name() → Meilisearch name search
+│   │   └── enrich_file() → pipeline: hash → name → filename_only
+│   ├── browse(directory, kind?) → BrowseResult
+│   ├── recommend(directory, dep, kind?) → List[FileRecommendation]
+│   └── import_file(path, pack, dep, skip_enrichment?) → LocalImportResult
+│       ├── validate_path() → security checks
+│       ├── SHA256 hash (with HashCache)
+│       ├── Atomic blob copy (reflink → hardlink → shutil.copy2)
+│       ├── enrich_file() → EnrichmentResult
+│       └── _apply_resolution() → ManualResolveData → resolve_service.apply_manual()
 │
 ├── Store.import_civitai() orchestruje:
 │   1. pack_service.import_from_civitai() → Pack
@@ -1915,6 +2017,8 @@ tests/unit/store/test_resolve_scoring.py
 tests/unit/store/test_resolve_validation.py
 tests/unit/store/test_resolve_models.py
 tests/unit/store/test_hash_cache.py
+tests/unit/store/test_enrichment.py                  — Phase 3: shared enrichment module (26 testu)
+tests/unit/store/test_local_file_service.py           — Phase 3: browse, recommend, import (31 testu)
 tests/unit/utils/test_preview_meta_extractor.py
 tests/unit/avatar/test_dependency_resolution_task.py
 tests/store/test_resolve_api.py
