@@ -636,13 +636,14 @@ class Store:
                     if top.tier > 2:
                         continue
 
-                    # Check margin: no other candidate within 0.15
+                    # Check margin: no other candidate within AUTO_APPLY_MARGIN
+                    from .resolve_config import AUTO_APPLY_MARGIN
                     if len(result.candidates) > 1:
                         margin = top.confidence - result.candidates[1].confidence
                     else:
                         margin = 1.0
 
-                    if margin >= 0.15:
+                    if margin >= AUTO_APPLY_MARGIN:
                         apply_result = self.resolve_service.apply(
                             pack.name, dep.id, top.candidate_id,
                             request_id=result.request_id,
@@ -766,21 +767,26 @@ class Store:
                         ]
 
                         if top.tier <= 2:
+                            from .resolve_config import AUTO_APPLY_MARGIN
                             margin = 1.0
                             if len(result.candidates) > 1:
                                 margin = top.confidence - result.candidates[1].confidence
 
-                            if margin >= 0.15:
+                            if margin >= AUTO_APPLY_MARGIN:
                                 if dry_run:
                                     entry["action"] = "would_apply"
                                     entry["would_apply"] = top.display_name
                                 else:
-                                    self.resolve_service.apply(
+                                    apply_result = self.resolve_service.apply(
                                         pack_name, dep.id, top.candidate_id,
                                         request_id=result.request_id,
                                     )
-                                    entry["action"] = "applied"
-                                    entry["applied"] = top.display_name
+                                    if apply_result.success:
+                                        entry["action"] = "applied"
+                                        entry["applied"] = top.display_name
+                                    else:
+                                        entry["action"] = "apply_failed"
+                                        entry["error"] = apply_result.message
                             else:
                                 entry["action"] = "ambiguous"
                         else:

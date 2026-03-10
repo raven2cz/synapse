@@ -64,6 +64,7 @@ class CandidateSeed(BaseModel):
     display_name: str
     display_description: Optional[str] = None
     provider_name: Optional[Literal["civitai", "huggingface", "local", "url"]] = None
+    base_model: Optional[str] = None  # e.g. "SDXL", "SD 1.5" — for cross-kind check
 
 
 class EvidenceHit(BaseModel):
@@ -86,6 +87,7 @@ class ResolutionCandidate(BaseModel):
     display_name: str = ""
     display_description: Optional[str] = None
     provider: Optional[Literal["civitai", "huggingface", "local", "url"]] = None
+    base_model: Optional[str] = None  # e.g. "SDXL", "SD 1.5"
     compatibility_warnings: List[str] = Field(default_factory=list)
 
 

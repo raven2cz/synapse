@@ -163,29 +163,140 @@ def enrich_by_name(
     return None
 
 
+def enrich_by_hf(
+    filename_stem: str,
+    hf_client: Any,
+    kind: Optional[AssetKind] = None,
+) -> Optional[EnrichmentResult]:
+    """Search HuggingFace Hub by filename stem. Returns enrichment or None.
+
+    Searches for model repos matching the filename, then checks for
+    matching safetensors/ckpt files with LFS SHA256 hashes.
+    """
+    if hf_client is None or not filename_stem or len(filename_stem) < 3:
+        return None
+
+    search_fn = getattr(hf_client, "search_models", None)
+    if search_fn is None:
+        return None
+
+    try:
+        results = search_fn(query=filename_stem, limit=5)
+        if not results:
+            return None
+
+        stem_norm = _normalize_name(filename_stem)
+
+        # Limit to top 2 repos to avoid excessive blocking network calls
+        for model in results[:2]:
+            repo_id = model.get("id", "")
+            if not repo_id:
+                continue
+
+            model_name = repo_id.split("/")[-1] if "/" in repo_id else repo_id
+            name_norm = _normalize_name(model_name)
+
+            if stem_norm not in name_norm and name_norm not in stem_norm:
+                continue
+
+            # Found a matching repo — try to get file list
+            get_files_fn = getattr(hf_client, "get_repo_files", None)
+            if get_files_fn is None:
+                # Return with just repo_id, no filename
+                return EnrichmentResult(
+                    source="huggingface",
+                    strategy=SelectorStrategy.HUGGINGFACE_FILE,
+                    huggingface=HuggingFaceSelector(
+                        repo_id=repo_id,
+                        filename="",
+                    ),
+                    display_name=model_name,
+                    base_model=_extract_hf_base_model(model),
+                )
+
+            try:
+                repo_info = get_files_fn(repo_id)
+                files = getattr(repo_info, "files", [])
+                # Find best matching safetensors file
+                for f in files:
+                    fname = getattr(f, "filename", "")
+                    if not fname.endswith((".safetensors", ".ckpt", ".pt")):
+                        continue
+                    return EnrichmentResult(
+                        source="huggingface",
+                        strategy=SelectorStrategy.HUGGINGFACE_FILE,
+                        canonical_source=CanonicalSource(
+                            provider="huggingface",
+                            sha256=getattr(f, "sha256", None),
+                        ),
+                        huggingface=HuggingFaceSelector(
+                            repo_id=repo_id,
+                            filename=fname,
+                        ),
+                        display_name=model_name,
+                        base_model=_extract_hf_base_model(model),
+                    )
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.debug("[enrichment] HF search failed for '%s': %s", filename_stem, e)
+
+    return None
+
+
+# Shared base model tag mapping — used by enrichment and MCP tools
+HF_BASE_MODEL_TAGS: dict[str, str] = {
+    "stable-diffusion-xl": "SDXL",
+    "sdxl": "SDXL",
+    "stable-diffusion": "SD 1.5",
+    "sd-1.5": "SD 1.5",
+    "flux": "Flux",
+    "pony": "Pony",
+    "sd-3.5": "SD 3.5",
+}
+
+
+def _extract_hf_base_model(model: dict) -> Optional[str]:
+    """Extract base model category from HF model tags."""
+    tags = model.get("tags", [])
+    for tag in tags:
+        tag_lower = tag.lower()
+        for pattern, base in HF_BASE_MODEL_TAGS.items():
+            if pattern in tag_lower:
+                return base
+    return None
+
+
 def enrich_file(
     sha256: str,
     filename: str,
     civitai_client: Any,
     kind: Optional[AssetKind] = None,
+    hf_client: Any = None,
 ) -> EnrichmentResult:
-    """Full enrichment pipeline: hash → name → filename-only fallback.
+    """Full enrichment pipeline: hash → name(Civitai) → name(HF) → filename-only fallback.
 
     Always returns a result — worst case is filename_only with display_name.
     """
     stem = extract_stem(filename)
 
-    # 1. Hash lookup (most reliable)
+    # 1. Hash lookup on Civitai (most reliable)
     result = enrich_by_hash(sha256, civitai_client, kind)
     if result:
         return result
 
-    # 2. Name search (fallback)
+    # 2. Name search on Civitai (fallback)
     result = enrich_by_name(stem, civitai_client, kind)
     if result:
         return result
 
-    # 3. Filename-only fallback (always succeeds)
+    # 3. Name search on HuggingFace (second fallback)
+    result = enrich_by_hf(stem, hf_client, kind)
+    if result:
+        return result
+
+    # 4. Filename-only fallback (always succeeds)
     return EnrichmentResult(
         source="filename_only",
         display_name=stem or filename,

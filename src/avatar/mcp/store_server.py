@@ -1283,6 +1283,20 @@ def _search_huggingface_impl(
             if info_parts:
                 lines.append(f"   {', '.join(info_parts)}")
 
+            # Detect base model from tags (shared constant)
+            from src.store.enrichment import HF_BASE_MODEL_TAGS
+            detected_base = None
+            for _t in tags:
+                _tl = _t.lower()
+                for _pat, _bm in HF_BASE_MODEL_TAGS.items():
+                    if _pat in _tl:
+                        detected_base = _bm
+                        break
+                if detected_base:
+                    break
+            if detected_base:
+                lines.append(f"   Base model: {detected_base}")
+
             # Show relevant tags (skip generic ones)
             skip_tags = {"diffusers", "safetensors", "region:us", "endpoints_compatible"}
             relevant_tags = [t for t in tags if t not in skip_tags and not t.startswith("diffusers:")]

@@ -311,7 +311,7 @@ class ResolveService:
         validation = validate_before_apply(
             selector, kind,
             pack_base_model=pack_base_model,
-            candidate_base_model=None,  # TODO: extract from candidate
+            candidate_base_model=getattr(candidate, "base_model", None),
         )
 
         if not validation.success:
@@ -404,6 +404,9 @@ class ResolveService:
             by_key[key].append(hit)
             if key not in seeds:
                 seeds[key] = hit.candidate
+            elif hit.candidate.base_model and not seeds[key].base_model:
+                # Later seed has base_model that first-seen lacked — update
+                seeds[key] = hit.candidate
 
         # Score each candidate
         candidates: List[ResolutionCandidate] = []
@@ -417,7 +420,10 @@ class ResolveService:
             tier = get_tier_for_confidence(confidence)
 
             # Cross-kind compatibility check
-            candidate_base_model = getattr(seed.selector, "base_model", None)
+            candidate_base_model = (
+                seed.base_model
+                or getattr(seed.selector, "base_model", None)
+            )
             compat_warnings = check_cross_kind_compatibility(
                 pack_base_model, candidate_base_model, kind,
             )
@@ -432,6 +438,7 @@ class ResolveService:
                 display_name=seed.display_name,
                 display_description=seed.display_description,
                 provider=seed.provider_name,
+                base_model=candidate_base_model,
                 compatibility_warnings=compat_warnings,
             )
             candidates.append(candidate)

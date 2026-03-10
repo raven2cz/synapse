@@ -1208,6 +1208,62 @@ Soubor se hashuje, zkopiruje do blob store, a enrichuje se metadata z Civitai/HF
 - `tests/store/test_api_critical.py` — updated assertions
 - `tests/lint/test_architecture.py` — removed endpoint requirement
 
+### Phase 5: Deferred polish — 6 items ✅ DOKONCENO (2026-03-10)
+
+**Cil:** Implementovat vsech 6 odlozenych bodu pro kompletni resolve system.
+
+#### 5.1 candidate_base_model v apply() — ResolutionCandidate rozsireni
+- **Problem:** `apply()` line 314: `candidate_base_model=None` — cross-kind check disabled
+- **Fix:** Pridat `base_model: Optional[str] = None` na `ResolutionCandidate`
+- **Kde se plni:** `_merge_and_score()` — extrahovat z `canonical_source` nebo `selector_data`
+- **Evidence providery** uz maji base_model v CandidateSeed — propagovat do candidate
+
+#### 5.2 AUTO_APPLY_MARGIN konfigurovatelny
+- **Problem:** Hard-coded `0.15` na 2 mistech (resolve_config.py + __init__.py:645)
+- **Fix:** Pouzit `AUTO_APPLY_MARGIN` konstantu z resolve_config.py na obou mistech
+- **Konfigurace:** Pridat `resolve.auto_apply_margin` do config/settings.py `SynapseConfig`
+- **Default:** 0.15 (zachovat kompatibilitu)
+
+#### 5.3 Async hash computation
+- **Problem:** `compute_sha256()` blokuje na velkych souborech (7GB+ checkpointy)
+- **Fix:** Pridat `compute_sha256_async()` do hash_cache.py — `asyncio.to_thread()` wrapper
+- **Pouziti:** FastAPI endpointy mohou volat async verzi; sync zustava pro CLI/import
+
+#### 5.4 HF enrichment v local import
+- **Problem:** `enrich_file()` hleda jen na Civitai, ne na HuggingFace
+- **Fix:** Pridat `enrich_by_hf()` — HF API search by filename stem
+- **Pipeline:** hash(Civitai) → name(Civitai) → name(HF) → filename_only
+- **Parametr:** `hf_client: Optional[Any] = None` do `enrich_file()`
+
+#### 5.5 HF LFS pointer SHA256 (G2)
+- **Problem:** HuggingFaceClient.get_repo_files() UZ vraci LFS OID (=SHA256)
+- **Fix:** Pridat `search_models()` metodu na HuggingFaceClient pro HF Hub API search
+- **Pouziti:** HF enrichment + MCP tool search_huggingface
+
+#### 5.6 search_huggingface MCP tool — structured output
+- **Problem:** Tool vraci formatted text, ne JSON. AI nemuze extrahovat hashes
+- **Fix:** Doplnit base_model z repo tags, vratit JSON-friendly output
+- **Pozn:** Tool uz funguje dobre pro AI — text format je OK pro LLM. Doplnime base_model info
+
+**Soubory:**
+- `src/store/resolve_models.py` — ResolutionCandidate.base_model + CandidateSeed.base_model
+- `src/store/resolve_service.py` — propagace base_model, pouziti v apply(), merge fix
+- `src/store/resolve_config.py` — AUTO_APPLY_MARGIN import
+- `src/store/__init__.py` — pouzit AUTO_APPLY_MARGIN, migrate_resolve_deps check apply result
+- `src/store/hash_cache.py` — compute_sha256_async()
+- `src/store/enrichment.py` — enrich_by_hf(), HF_BASE_MODEL_TAGS shared constant, limit top 2
+- `src/store/local_file_service.py` — pass hf_client to enrich_file()
+- `src/clients/huggingface_client.py` — search_models()
+- `src/avatar/mcp/store_server.py` — base_model detection uses shared HF_BASE_MODEL_TAGS
+- Testy: 24 tests v test_phase5_deferred.py
+
+**Review findings (opraveno):**
+- Gemini: deduplikovany base_model_tags → shared HF_BASE_MODEL_TAGS
+- Gemini: enrich_by_hf limitovano na top 2 repos (ne vsech 5)
+- Codex: migrate_resolve_deps ted kontroluje apply_result.success
+- Codex: base_model propagace fix — prefer seed s base_model v _merge_and_score
+- Codex: local_file_service.py ted predava hf_client do enrich_file()
+
 ---
 
 ## 11. Implementation Design — presna mapa napojeni (v2)

@@ -111,6 +111,34 @@ class HuggingFaceClient:
             self.session.headers["Authorization"] = f"Bearer {self.token}"
         self.session.headers["User-Agent"] = "Synapse/1.0"
     
+    def search_models(
+        self,
+        query: str,
+        limit: int = 5,
+        pipeline_tag: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search HuggingFace Hub models by query string.
+
+        Returns list of model dicts with: id, tags, pipeline_tag, downloads, sha (latest commit).
+        Used by HF enrichment and MCP tool.
+        """
+        url = f"{self.API_URL}/models"
+        params: Dict[str, Any] = {
+            "search": query,
+            "limit": min(limit, 20),
+            "sort": "downloads",
+            "direction": "-1",
+        }
+        if pipeline_tag:
+            params["pipeline_tag"] = pipeline_tag
+
+        try:
+            response = self.session.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return []
+
     def get_repo_info(self, repo_id: str, revision: str = "main") -> Optional[Dict[str, Any]]:
         """Get basic repository information."""
         try:

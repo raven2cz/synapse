@@ -418,8 +418,9 @@ class LocalFileService:
                 progress_callback("enriching", 0.0)
 
             civitai = self._get_civitai()
+            hf = self._get_hf_client()
             kind = self._get_dep_kind(pack_name, dep_id)
-            enrichment = enrich_file(sha256, resolved_path.name, civitai, kind)
+            enrichment = enrich_file(sha256, resolved_path.name, civitai, kind, hf_client=hf)
 
             if progress_callback:
                 progress_callback("enriching", 1.0)
@@ -468,6 +469,15 @@ class LocalFileService:
         if ps is None:
             return None
         return getattr(ps, "civitai", None)
+
+    def _get_hf_client(self) -> Any:
+        """Get HuggingFace client via pack_service."""
+        if self._ps is None:
+            return None
+        ps = self._ps()
+        if ps is None:
+            return None
+        return getattr(ps, "hf_client", None)
 
     def _get_dep_kind(self, pack_name: str, dep_id: str) -> Optional[AssetKind]:
         """Get AssetKind for a dependency."""

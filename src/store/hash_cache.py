@@ -154,3 +154,13 @@ def compute_sha256(file_path: Path) -> str:
                 break
             h.update(chunk)
     return h.hexdigest()
+
+
+async def compute_sha256_async(file_path: Path) -> str:
+    """Compute SHA256 hash of a file without blocking the event loop.
+
+    Offloads the I/O-heavy computation to a thread pool via asyncio.to_thread().
+    Use this in FastAPI endpoints for large files (7GB+ checkpoints).
+    """
+    import asyncio
+    return await asyncio.to_thread(compute_sha256, file_path)

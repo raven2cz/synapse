@@ -97,6 +97,12 @@ class HashEvidenceProvider:
                     display_name = result.get("model", {}).get("name", "Unknown")
 
                     if model_id and version_id:
+                        # Extract base_model from Civitai API response
+                        candidate_base_model = (
+                            result.get("baseModel")
+                            or result.get("base_model")
+                            or (result.get("model", {}) or {}).get("baseModel")
+                        )
                         seed = CandidateSeed(
                             key=f"civitai:{model_id}:{version_id}",
                             selector=DependencySelector(
@@ -109,6 +115,7 @@ class HashEvidenceProvider:
                             ),
                             display_name=display_name,
                             provider_name="civitai",
+                            base_model=candidate_base_model,
                         )
                         hits.append(EvidenceHit(
                             candidate=seed,
