@@ -237,10 +237,74 @@ Každý skript musí:
 
 ---
 
+## Domain Audit Findings (2026-05-02)
+
+Z `plans/audits/DOMAIN-AUDIT.md` + `plans/audits/codex-domain-audit.md`. Install Packs
+**nejsou modelovány** v `src/store/models.py` — `PackCategory.INSTALL` existuje jako enum
+hodnota, ale `Pack` nemá žádná pole pro install-pack semantics.
+
+### M7 [MEDIUM] — Install pack data není modelovaný
+
+**Finding:** `Pack.pack_category = PackCategory.INSTALL` se dá nastavit, ale na `Pack`
+chybí všechna data, která install pack potřebuje:
+
+| Co chybí | Účel |
+|----------|------|
+| `script_manifest: List[ScriptEntry]` | seznam skriptů + jejich entry-pointy + popis |
+| `install_dir: Path` | kam se UI instaluje (např. `~/.local/share/synapse/comfyui`) |
+| `entrypoints: Dict[str, Command]` | start/stop/update/restart commands |
+| `health_check: HealthCheckConfig` | jak ověřit, že běží (port, HTTP probe) |
+| `requires_runtime: List[Runtime]` | python_version, gpu_requirements, system deps |
+| `version_check: Optional[VersionCheck]` | jak detekovat aktuální verzi UI |
+
+**Důsledek:** `PackCategory.INSTALL` je dnes jen "nálepka" bez backend logiky. UI
+prototype (`InstallPlugin.tsx`) má zatím **mock skripty** — nemá z čeho je číst, protože
+`Pack` to neukládá.
+
+**Recommendation:** Před implementací Install Packs (Phase 1) **přidat pole do `Pack`
+modelu** (nebo do samostatného `InstallManifest` modelu, který se ukládá vedle pack.json
+jako `install.json`). Detail v DOMAIN-AUDIT Section 9 → "Custom/Install/Workflow Pack
+Futures".
+
+**Volba A — flat pole na Pack:**
+```python
+class Pack(BaseModel):
+    # ... existing fields ...
+    script_manifest: Optional[List[ScriptEntry]] = None
+    install_dir: Optional[Path] = None
+    entrypoints: Optional[Dict[str, Command]] = None
+```
+Výhoda: jednoduché. Nevýhoda: Pack je už přetížený (L1 audit finding).
+
+**Volba B — discriminated union nebo separátní soubor:**
+```
+state/packs/<install-pack>/
+  pack.json          # core Pack metadata
+  install.json       # InstallManifest (jen pro INSTALL category)
+```
+Výhoda: čistá separace, EXTERNAL/CUSTOM packy se nezatíží. Nevýhoda: další model + IO.
+
+→ **Open Question pro vlastníka.**
+
+**Severity:** MEDIUM (blokuje implementaci Phase 1; Pack-Edit prototype běží na mocku)
+**Refs:** `models.py:837 Pack`, `models.py PackCategory`, DOMAIN-AUDIT Section 9.
+
+### Související otázky pro vlastníka (z auditu)
+
+1. **Open Q #5** — Jsou install packy first-party only (Synapse-spravované jako
+   ComfyUI/Forge/A1111), nebo user-uploadable arbitrary install scripts? Bezpečnostní
+   konsekvence diametrálně odlišné.
+2. **Open Q #9** — ComfyUI custom nodes: store assets, install packs, nebo separate
+   extension manager? (Související s `AssetKind.CUSTOM_NODE` v PLAN-Workflow-Wizard.md.)
+
+---
+
 ## Related Plans
 
 - **PLAN-Pack-Edit.md** - Original plugin system (InstallPlugin prototype)
 - **PLAN-Workflow-Wizard.md** - Workflow generation for UIs
+- **PLAN-Release-1-Roadmap.md** — distribuce všech audit findings.
+- **plans/audits/DOMAIN-AUDIT.md + codex-domain-audit.md** — full audit detail.
 
 ---
 
@@ -252,6 +316,8 @@ Každý skript musí:
 | Should we use Docker for isolation? | Open |
 | How to handle port conflicts? | Open |
 | Auto-update mechanism? | Open |
+| Install pack data layout: flat na Pack nebo separátní install.json? | Open (z DOMAIN-AUDIT) |
+| First-party only vs user-uploadable install packs? | Open (z DOMAIN-AUDIT Open Q #5) |
 
 ---
 

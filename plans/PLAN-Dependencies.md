@@ -395,10 +395,75 @@ MODIFY  apps/web/src/i18n/locales/cs.json     # New i18n keys
 
 ---
 
+## 5b. Domain Audit Findings (2026-05-02)
+
+Z `plans/audits/DOMAIN-AUDIT.md` + `plans/audits/codex-domain-audit.md`. Tyto nálezy
+**nejsou pokryté** v Phase 1-4 (které jsou DONE) — jsou to **nové body k rozhodnutí
+před Release 1**.
+
+### H4 [HIGH] — `pack_dependencies` nikdy expandované do view planu
+
+**Finding:** `Pack.pack_dependencies: List[PackDependencyRef]` (`models.py:837`) deklaruje,
+že pack potřebuje jiné packy. Existuje API endpoint pro CRUD, dependency-tree endpoint
+(Phase 2), a UI pro ně. Ale **`ViewBuilder.compute_plan()` je úplně ignoruje** — když pak
+profile aktivujete, runtime view neobsahuje assety z required pack deps.
+
+**Důsledek:** Uživatel přidá `pack_dependencies: [SDXL-base]` na svůj LoRA pack, deklaruje
+"tento LoRA potřebuje SDXL base". Profile s tímto LoRA packem se aktivuje, ale ComfyUI
+nedostane SDXL base do `extra_model_paths.yaml`. Uživatel musí přidat SDXL pack do profilu
+**zvlášť**, takže `pack_dependencies` slouží pouze jako informace pro UI.
+
+**Recommendation — vyžaduje rozhodnutí majitele (Open Question #1 z auditu):**
+
+Volba A — **operational**: `ViewBuilder.compute_plan()` rekurzivně expanduje
+`pack_dependencies` a vloží jejich assety do view planu. Vyřeší cykly přes already-visited
+set. Required deps jsou vždy expandované; optional deps jen pokud user explicitně.
+
+Volba B — **informational**: Přejmenovat na `related_packs` nebo `recommended_packs`,
+přidat do UI banner "Tento pack doporučuje také: ...". Žádné runtime side-effects.
+
+**Severity:** HIGH (current state je ambivalentní — half-implemented operational behavior)
+**Refs:** `models.py:837 Pack.pack_dependencies`, `view_builder.py compute_plan()`,
+DOMAIN-AUDIT Section 4 + 6.
+
+### H5 [HIGH] — `version_constraint` nikdy enforcovaný
+
+**Finding:** `PackDependencyRef.version_constraint: Optional[str]` (`models.py:438`) má
+nést sémantickou constraint (`>=1.0`, `~2.x`, atd.), ale **žádný kód v `src/store/` ji
+nečte ani nevalidate**. `grep -r version_constraint src/store/` vrátí jen modelovou definici
+a serializaci.
+
+**Důsledek:** User napíše `version_constraint: ">=2.0"`. Uloží se. Při resolve/install se
+ignoruje. Žádný error, žádný warning, žádné vynucení.
+
+**Recommendation:** Buď enforce v `resolve_pack()` (parse constraint, porovnat s lock
+version, fail/warn pokud mismatch), nebo **odstranit pole** a deferrovat sémantický
+versioning na pozdější release. Aktuální stav ("model říká, že to umíme, kód to neumí") je
+horší než žádné pole.
+
+**Severity:** HIGH (silent failure mode)
+**Refs:** `models.py:438`, DOMAIN-AUDIT Section 4.
+
+### L2 [LOW] — `DependencySelector` discriminated union
+
+**Finding:** `DependencySelector` má 6 Optional polí (`civitai_*`, `hf_*`, `local_path`, `url`)
++ `strategy: SelectorStrategy` enum. Některé kombinace jsou neplatné (Civitai strategy
++ chybějící civitai_*). Discriminated union per strategy by tohle compile-time vyloučil.
+
+**Recommendation:** Refactorovat na Pydantic discriminated union (Tagged unions s `Literal`
+discriminator). Detail v DOMAIN-AUDIT Section 13 → "Make Selectors Self-Validating".
+
+**Severity:** LOW (current Pydantic v2 model_validator pokrývá runtime, ale typecheck
+nepomáhá)
+
+---
+
 ## 6. Related Plans
 
 - **🔗 PLAN-Updates.md** - Phase 3 propojuje dependency impact s update systémem. Po dokončení Phase 1-3 pokračujeme na Updates UI vylepšení (bulk updates, update options dialog).
 - **🔗 PLAN-Resolution.md** - Smart Resolution (extracted from Phase 5). Local scanning, AI recommendations, download orchestration.
+- **🔗 PLAN-Release-1-Roadmap.md** — distribuce všech audit findings.
+- **🔗 plans/audits/DOMAIN-AUDIT.md + codex-domain-audit.md** — full audit detail.
 
 ---
 

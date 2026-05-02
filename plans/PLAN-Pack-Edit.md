@@ -98,6 +98,47 @@ MediaPreview má komplexní logiku:
 
 ---
 
+## 🐛 Domain Audit Findings (2026-05-02)
+
+Z `plans/audits/DOMAIN-AUDIT.md` (Claude Opus 4.7) + `plans/audits/codex-domain-audit.md`
+(Codex GPT-5.5 high). Per-bug detail v auditních souborech.
+
+### H1 [HIGH severity] — Runtime AttributeError: `store.layout.pack_path()` neexistuje
+
+**Finding:** `api.py` volá `store.layout.pack_path(pack_name)` na **8 místech**, ale tato
+metoda v `layout.py` neexistuje. Jediná dostupná metoda je `Layout.pack_dir(pack_name)`
+(`layout.py:169`). Při spuštění některého z následujících endpointů aplikace **spadne na
+runtime AttributeError**:
+
+| File:Line | Endpoint kontext |
+|-----------|------------------|
+| `api.py:3334` | create_pack — `(pack_path / "resources" / "previews").mkdir(...)` |
+| `api.py:3424` | rename_pack — `old_path = store.layout.pack_path(pack_name)` |
+| `api.py:4078` | update pack metadata |
+| `api.py:4581` | upload preview |
+| `api.py:4739` | upload workflow |
+| `api.py:4790` | edit pack JSON |
+| `api.py:4859` | delete preview / workflow |
+| `api.py:4958` | misc pack file operation |
+
+**Recommendation:** Find/replace `store.layout.pack_path(` → `store.layout.pack_dir(`
+v `api.py`. Triviální oprava, ale **kriticky blokuje custom pack flow** (Pack-Edit feature).
+Přidat regression test, který otevře každý z těchto endpointů na temp store a ověří, že
+nehází `AttributeError`.
+
+**Severity:** HIGH (runtime crash, blokuje funkčnost custom packs)
+**Refs:** `plans/audits/DOMAIN-AUDIT.md` Section 12 → bug #1
+
+### M-link Cross-cutting issues (read in audit)
+
+Pack-Edit dotýká i těchto bodů z auditu, které jsou primárně řešeny jinde:
+
+- **L1** — `Pack` třída dělá příliš (9 dimenzí na jednom modelu). Před přidáním custom-pack
+  rozšíření zvážit refactor / discriminated union. Detail: DOMAIN-AUDIT Section 13.
+- **M7** — Custom packs nemají `script_manifest` ani `install_dir`. Řeší PLAN-Install-Packs.md.
+
+---
+
 ## Table of Contents
 
 1. [Problem Statement](#problem-statement)

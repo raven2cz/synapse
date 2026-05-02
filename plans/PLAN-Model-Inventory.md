@@ -3471,6 +3471,56 @@ class TestAutoRestore:
 
 ---
 
+## 10b. Domain Audit Findings (2026-05-02)
+
+Z `plans/audits/DOMAIN-AUDIT.md` + `plans/audits/codex-domain-audit.md`. Inventory je
+většinou hotový — tyto 2 nálezy zůstávají jako TODO.
+
+### M3 [MEDIUM] — `InventoryItem.active_in_uis = []` TODO
+
+**Finding:** `_build_item()` v `inventory_service.py:377` natvrdo vrací prázdný list:
+
+```python
+active_in_uis=[],  # TODO: Get from runtime
+```
+
+UI sloupec "Active in UIs" v `BlobsTable.tsx` tak vždy zobrazuje prázdno. Uživatel
+nepozná, který blob aktuálně používá ComfyUI/Forge/SDnext.
+
+**Recommendation:** Přidat lookup z aktivních profile views. Zdroj pravdy je
+`view_state.json` per UI root (které profile je aktivní → jaký view → jaký pack →
+jaké assety → resolved blobs). Implementace:
+
+1. `InventoryService.__init__` přijme `profile_service: ProfileService` (už ji Store má).
+2. `_build_item()` projde aktivní profily, vyfiltruje ty, které mají v lock.json daný
+   sha256, a vrátí list jejich UI rootů.
+3. Cache na úrovni `_build_inventory()` aby se nešel `view_state.json` znovu pro každý blob.
+
+**Severity:** MEDIUM (data viditelná v UI je neúplná, ale neblokuje funkčnost)
+**Refs:** `inventory_service.py:377`, DOMAIN-AUDIT Section 7.
+
+### M4 [MEDIUM] — `ImpactAnalysis.active_in_uis = []` (transitivní z M3)
+
+**Finding:** `get_impacts(sha256)` v `inventory_service.py:613` propaguje
+`item.active_in_uis` z `_build_item()`, takže Impact dialog ("Used by these packs, active
+in these UIs") vždy zobrazuje prázdný "Active in UIs" seznam.
+
+**Recommendation:** Stejné jako M3. Po opravě M3 se M4 automaticky vyřeší (transitivní).
+Přidat regression test: `test_impact_analysis_includes_active_uis()`.
+
+**Severity:** MEDIUM (transitivní z M3)
+**Refs:** `inventory_service.py:613`.
+
+### Související otázky pro vlastníka
+
+Z DOMAIN-AUDIT Open Questions, relevantní pro Inventory:
+
+- **#10** — Backup state sync: push/pull only, nebo bidirectional merge s conflict
+  resolution? Aktuálně je `BlobLocation.CONFLICT` enum hodnota, ale **nikdy se nepoužívá**.
+  → Buď implementovat true sync, nebo enum hodnotu odstranit.
+
+---
+
 ## 11. Slovnicek pojmu
 
 | Pojem | Vyznam |

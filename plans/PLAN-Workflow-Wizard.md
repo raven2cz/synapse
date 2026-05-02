@@ -320,10 +320,104 @@ class WorkflowGenerator(ABC):
 
 ---
 
+## Domain Audit Findings (2026-05-02)
+
+Z `plans/audits/DOMAIN-AUDIT.md` + `plans/audits/codex-domain-audit.md`. Tři klíčové
+nálezy blokují Workflow Wizard implementaci.
+
+### H6 [HIGH] — `AssetKind.CUSTOM_NODE` chybí v `UIKindMap`
+
+**Finding:** `AssetKind.CUSTOM_NODE = "custom_node"` existuje v enumu (`models.py:42`),
+ale **`UIKindMap` ho nemá jako pole** (`models.py:121-132`):
+
+```python
+class UIKindMap(BaseModel):
+    checkpoint: str = "models/checkpoints"
+    lora: str = "models/loras"
+    vae: str = "models/vae"
+    embedding: str = "models/embeddings"
+    controlnet: str = "models/controlnet"
+    upscaler: str = "models/upscale_models"
+    clip: str = "models/clip"
+    text_encoder: str = "models/text_encoders"
+    diffusion_model: str = "models/diffusion_models"
+    unet: str = "models/unet"
+    # ❌ chybí: custom_node, workflow, unknown
+```
+
+Při `UIKindMap.get_path(AssetKind.CUSTOM_NODE)` se vrátí `None` (řádek 134-136 — `getattr`
+fallback). `ViewBuilder.compute_plan()` pak má fallback na `models/{kind.value}`, takže
+custom node se zapíše do `models/custom_node/<file>` místo do `custom_nodes/<repo>/`.
+
+**Důsledek:** ComfyUI custom nodes po profile aktivaci nejsou v `custom_nodes/`, takže
+ComfyUI je nenačte. Workflow používající custom node selhe s "Node not found" errorem.
+
+**Recommendation:**
+
+1. Přidat `custom_node: str = "custom_nodes"` (a varianty per UI) do `UIKindMap`.
+2. ComfyUI custom nodes jsou ale **adresáře, ne soubory** — `UIKindMap` možná potřebuje
+   layout type ("file" vs "directory") nebo separátní mapping.
+3. Forge / A1111 custom_nodes neexistují (mají vlastní extension manager). Zvážit:
+   `custom_node: Optional[str]` per UI nebo "not supported" hodnota.
+4. Plus chybějící: `workflow`, `unknown` → triage dle Open Q #4.
+
+**Severity:** HIGH (custom_node assety se rozbijí, jakmile je profile aktivuje)
+**Refs:** `models.py:121`, `models.py:42`, `view_builder.py compute_plan()`
+DOMAIN-AUDIT Section 10.
+
+### M8 [MEDIUM] — Žádný `WORKFLOW` PackCategory
+
+**Finding:** `PackCategory` enum má jen `EXTERNAL`, `CUSTOM`, `INSTALL`. Workflow imports
+(point 4 z Release-1 roadmapy) nemají kam patřit. Volby:
+
+**Volba A — nový `PackCategory.WORKFLOW`:**
+- Vlastní lifecycle (workflow.json je první-class artifact, ne resource).
+- Vlastní routing: `state/packs/<workflow-pack>/workflow.json` + assety v lock.
+- Inventory rozliší workflow packy snadno.
+
+**Volba B — `PackCategory.CUSTOM` s `imported_workflow_ref` facetem:**
+- Workflow je jen "speciální custom pack" s flag-poli.
+- Méně modelových změn, ale custom packs se rozdělí na "true custom" (manuálně vyrobený)
+  vs "workflow-imported" (vyrobený import wizardem) — fragmentace sémantiky.
+
+→ **Open Question #4 z auditu, čeká na vlastníka.**
+
+**Severity:** MEDIUM (blokuje Phase 1 Workflow Wizard — neexistuje target shape)
+**Refs:** `models.py PackCategory`, DOMAIN-AUDIT Section 9.
+
+### M10 [MEDIUM] — `extra_model_paths.yaml` schema je YAML-string, ne modelovaný
+
+**Finding:** `ui_attach.py` generuje `extra_model_paths.yaml` (ComfyUI specifický config)
+manipulací string templatů. Není žádný typovaný `ExtraModelPathsConfig` model. Důsledek:
+
+- Při změně schématu (ComfyUI 0.4.0+ změnil layout) je nutná manuální úprava generátoru.
+- Žádná validace před zápisem — invalid YAML může rozbít ComfyUI.
+- Žádný diff mechanismus — view rebuild přepíše uživatelské manuální změny.
+
+**Recommendation:** Vytvořit `ExtraModelPathsConfig` Pydantic model + serializer
+(`yaml.safe_dump`). Validovat před zápisem. Pro user manual sections použít
+"BEGIN/END SYNAPSE" markery a zachovat content mimo ně.
+
+**Severity:** MEDIUM (cross-cutting — nedotýká se Workflow Wizard přímo, ale view-build
+flow se kterým Workflow Wizard musí integrovat)
+**Refs:** `ui_attach.py`, DOMAIN-AUDIT Section 10.
+
+### Související otázky pro vlastníka
+
+- **Open Q #4** — Workflow imports → `PackCategory.WORKFLOW` (samostatný) nebo `CUSTOM`
+  s facetem? **Musí být zodpovězeno před Phase 1.**
+- **Open Q #9** — Custom nodes: store assets, install packs, nebo separate extension
+  manager? Ovlivňuje H6 fix.
+
+---
+
 ## Related Plans
 
 - **PLAN-AI-Services.md** - AI parameter extraction (provides pack.parameters)
 - **PLAN-Pack-Edit.md** - Pack editing features (Phase 7 obsoleted by this)
+- **PLAN-Install-Packs.md** — související s Open Q #9 (custom nodes)
+- **PLAN-Release-1-Roadmap.md** — distribuce všech audit findings
+- **plans/audits/DOMAIN-AUDIT.md + codex-domain-audit.md** — full audit detail
 
 ---
 
@@ -335,6 +429,8 @@ class WorkflowGenerator(ABC):
 | Should workflows be editable in Synapse? | Open |
 | How to handle UI version differences? | Open |
 | Workflow validation before save? | Open |
+| Workflow → PackCategory.WORKFLOW nebo CUSTOM s facetem? | Open (DOMAIN-AUDIT Open Q #4) |
+| Custom nodes: store / install / extension manager? | Open (DOMAIN-AUDIT Open Q #9) |
 
 ---
 
