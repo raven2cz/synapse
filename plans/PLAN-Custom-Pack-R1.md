@@ -1,7 +1,7 @@
 # PLAN: Custom Pack — Release 1 Stabilization
 
-**Verze:** v0.2.0 (po Codex audit, čeká na zítřejší verifikaci na resolve-redesign branchi)
-**Status:** 🟡 PLANNING — vlastník odpověděl 2026-05-02, plán napsán Claude Opus 4.7, auditováno Codex GPT-5.5 high
+**Verze:** v0.3.0 (cross-cutting concerns: rename, backup, i18n, rate limiting)
+**Status:** 🟡 PLANNING — vlastník odpověděl 2026-05-02, plán napsán Claude Opus 4.7, auditováno Codex GPT-5.5 high, rozšířeno o integration concerns
 **Vytvořeno:** 2026-05-02
 **Branch:** `stabilization/release-1`
 **Autor:** raven2cz + Claude Opus 4.7 + Codex GPT-5.5 (audit)
@@ -303,6 +303,139 @@ ID-prefixed adresář aby se předešlo filename kolizím.
 
 **Risk:** MEDIUM (file I/O, security — filename sanitization, MIME validation,
 zip slip prevention pokud někdo uploaduje archive).
+
+---
+
+### Phase 2.5 — Cross-cutting Integration (rename, backup, inventory, rate limiting)
+
+**Cíl:** User-facing chování `pack.user_gallery` musí být **identické** jako Civitai
+`pack.previews` z perspektivy persistence, backup, inventory a rename.
+
+**Vlastníkův záměr (2026-05-02):**
+
+> *"porad se to chova stejne jako images a videos, co je git!"*
+
+User media je **git-versioned content** v `state/packs/<pack>/`, NE content-addressed
+blob. Tato fáze tu identitu explicitně zafixuje.
+
+#### 2.5.1 Pack rename support
+
+**Behavior:**
+- `PATCH /api/packs/{pack}` rename → adresář `state/packs/<old>/` přejmenovat na
+  `state/packs/<new>/`. User media files **putují s ním**, žádný kopír.
+- `pack.user_gallery[].id` (UUID4) zůstává **immutable** přes rename — žádné
+  field updates v JSON.
+- `UserMediaService.get_path(pack_name, item)` rekonstruuje cestu z **aktuálního**
+  `pack.name`, takže rename je transparent.
+- Frontend cache invalidation: po rename invalidovat user-media query keys
+  (`['userMedia', oldName]` → `['userMedia', newName]`).
+
+**Verifikace existing logiky:**
+- [ ] `PackService.rename_pack()` už dělá adresář move (existing — verify)
+- [ ] Test: rename custom pack s 3 user_media items → all 3 files dostupné na new path
+- [ ] Test: pack.json `user_gallery` items zachovají id, sha256, filename
+
+#### 2.5.2 Backup integration — git/state path
+
+**Behavior identické s `pack.previews`:**
+- User media files v `state/packs/<pack>/user_media/<id>/<filename>` jsou
+  **git-tracked** (jako `state/packs/<pack>/previews/`).
+- `backup_service` (blob backup) je **NEvidí ani neupravuje** — backup blob
+  storage scope = `data/blob_store/`.
+- State backup = git remote push (existing workflow).
+- `.gitignore` user media **NEvylučuje** (default state include).
+
+**Důsledky:**
+- Restore z git → user media obnoveny automaticky (jako previews).
+- Disaster recovery scope: blob backup (data/) + git push (state/).
+- Žádný separátní backup endpoint pro user media.
+
+**Verifikace:**
+- [ ] Test: vytvořit user_media → `git status` ukazuje untracked file → `git add`
+      funguje → commit → file je in repo
+- [ ] Test: clone fresh repo → user_media files restored
+
+#### 2.5.3 Inventory page scope clarification
+
+**Behavior:**
+- Inventory page (BlobsTable) = **content-addressed blob storage view**.
+- User media (state-versioned) **NENÍ v Inventory scope** — stejně jako Civitai
+  previews tam nejsou.
+- Pokud user chce vidět user media, používá `PackUserGallerySection` na pack detail
+  page (per-pack view).
+
+**Důvod:** Inventory řeší disk space + dedup pro velké model weights, ne user content.
+User media jsou typicky řádově menší (do 100 MB per file) a per-pack semanticky.
+
+**Documentation:** `docs/inventory.md` (pokud existuje) explicitně uvést že "user
+media + previews jsou git-versioned content v state/, mimo Inventory scope".
+
+#### 2.5.4 Rate limiting / concurrency control
+
+**Decision:** Synapse je single-user lokální aplikace bez multi-tenant scenarios.
+**Globální HTTP rate limiting NEPOTŘEBUJEME**. Stačí per-pack upload concurrency
+control:
+
+```python
+# src/store/user_media_service.py
+class UserMediaService:
+    def __init__(self, ...):
+        self._upload_locks: Dict[str, threading.Lock] = {}
+        self._locks_guard = threading.Lock()
+
+    def _get_pack_lock(self, pack_name: str) -> threading.Lock:
+        with self._locks_guard:
+            if pack_name not in self._upload_locks:
+                self._upload_locks[pack_name] = threading.Lock()
+            return self._upload_locks[pack_name]
+
+    def upload(self, pack_name: str, file: UploadFile) -> UserMedia:
+        with self._get_pack_lock(pack_name):
+            # ... validate, sha256, write file, append to pack ...
+```
+
+**Důvod:**
+- Per-pack lock chrání před race conditions na `pack.json` save.
+- Žádný globální limit — uživatel sám určuje rychlost.
+- Jiné enpointy (read endpoints) nelocknuté.
+
+**Risks tabulka update:** "rate limiting" → "per-pack upload lock".
+
+#### 2.5.5 i18n coverage (CRITICAL — vlastníkův explicit požadavek)
+
+> *"pozor preklady nutne musime spravne podporovat v cele aplikaci!"*
+
+**Pravidlo:** Každý nový user-facing string MUSÍ projít přes `t()` helper. Žádné
+hardcoded English/Czech strings v komponentách.
+
+**Pokrytí per fáze:**
+
+| Fáze | i18n key namespace | Soubory |
+|------|-------------------|---------|
+| 1 | `pack.empty.*` | `EmptySectionState`, všechny section empty states |
+| 2 | `pack.userGallery.*` | `PackUserGallerySection`, `AddUserMediaModal`, error messages |
+| 2 | `pack.userGallery.upload.*` | upload progress, validation errors, file size errors |
+| 3 | `pack.deps.optionalBanner.*` | banner pro optional deps |
+| 5 | `pack.updates.*` | per-dep update badges, "Update available" labels |
+| 6 | `pack.export.*` | ExportPackModal — title, options, "Include weights" checkbox |
+| 6 | `pack.import.*` | ImportPackModal — drag-drop, manifest preview, errors |
+| 6 | `pack.import.errors.*` | zip slip rejection, hash mismatch, MIME validation errors |
+| 7 | `pack.attachWorkflow.*` | attach workflow flow |
+| 8.3 | `pack.delete.*` | delete confirmation modal text |
+
+**Implementace:**
+1. Přidat klíče do **OBOU** `apps/web/src/i18n/locales/cs/translation.json`
+   a `apps/web/src/i18n/locales/en/translation.json`.
+2. Linting check: žádný hardcoded string v JSX > 3 chars (existující ESLint plugin?).
+3. Test: každý PR musí přidat klíče do obou locales (CI check).
+
+**Verifikační tooling:**
+- `pnpm test:i18n` script (NEW): checkne že všechny `t('key')` calls mají odpovídající
+  klíč v obou locales.
+- Failure mode: PR blocked dokud i18n keys missing.
+
+**Risk:** MEDIUM (i18n typicky retro-dělaný, snadné přehlédnout). Lock předmětně
+v Phase 9 acceptance criteria.
 
 ---
 
@@ -783,6 +916,11 @@ preflight. Viz sekce **Phase 0** výše.
 | 2 | `src/store/models.py` | Add `UserMedia`, extend `Pack.user_gallery`, schema v3 default |
 | 2 | `src/store/user_media_service.py` | NEW |
 | 2 | `src/store/api.py` | Add user-media endpoints |
+| 2.5 | `src/store/user_media_service.py` | Per-pack `threading.Lock` (concurrency) |
+| 2.5 | `src/store/pack_service.py` | Verify `rename_pack()` moves user_media dir |
+| 2.5 | `apps/web/src/i18n/locales/{cs,en}/translation.json` | i18n keys (per-phase) |
+| 2.5 | `apps/web/scripts/test-i18n.ts` (NEW) | i18n key parity check |
+| 2.5 | `apps/web/package.json` | `test:i18n` script |
 | 3 | `src/store/view_builder.py` | Recursive expansion s `visiting+visited+max_depth` |
 | 3 | `src/store/exceptions.py` | NEW: `PackDependencyCycle`, `PackDependencyTooDeep`, `MissingPackDependency` |
 | 3 | `src/store/__init__.py` | `Store.use_pack()` persist closure |
@@ -829,12 +967,15 @@ Per CLAUDE.md test pyramid:
 - PackService.attach_workflow: copy, collision, validation
 - All resolver code from existing (regression)
 
-**Integration (≥ 15 testů):**
+**Integration (≥ 18 testů):**
 - API endpoints: user-media upload → list → delete
 - Auto-add deps: use_pack → view contains expanded
 - Update flow: scan → update single dep → verify lock unchanged for other deps
 - Export/import roundtrip
 - Workflow attach: cross-pack copy
+- **Phase 2.5: pack rename → user_media files dostupné na new path**
+- **Phase 2.5: concurrent uploads na stejný pack — per-pack lock nebrekuje pack.json**
+- **Phase 2.5: backup roundtrip — git push/pull preservuje user_media files**
 
 **Smoke / E2E (≥ 7 testů):**
 - Full custom pack lifecycle: create → edit description → upload preview → upload user media → add dep → use → verify view
@@ -856,21 +997,32 @@ Per CLAUDE.md test pyramid:
 - Import pack
 - Use pack triggers auto-add of pack_deps
 
+**i18n CI check (`pnpm test:i18n`):**
+- Parita klíčů mezi `cs/translation.json` a `en/translation.json`
+- Žádné chybějící klíče volané přes `t()`
+- Žádné nepoužité klíče v locale files (warning, ne error)
+
 ---
 
 ## 8. Open Questions
 
 ✅ **All custom-pack specific questions answered by owner 2026-05-02.**
+✅ **Cross-cutting concerns answered 2026-05-02 (rename, backup, inventory, rate limiting, i18n) — viz Phase 2.5.**
 
-**Cross-cutting (still open from DOMAIN-AUDIT):**
+**Není open question — explicit out-of-scope nebo deferred:**
 
-1. **Schema migration framework (M6)** — Phase 2 user_gallery uses optional field
-   default to avoid migration. But pak za chvíli budeme migrace potřebovat. Zda
-   řešit teď nebo později → **doporučení: nechat na samostatný plán mimo scope
-   tohoto plánu** (M6 je infra concern).
+1. **Schema migration framework (M6) — OUT OF SCOPE.**
+   Co to je: jak migrovat existující v2 packy když v budoucnu změníme schema na
+   v4 (přidáme breaking change, ne jen optional field). Dnes řešíme jen
+   `default_factory` pro optional fields (Pack v3 user_gallery field), což
+   automaticky funguje. Ale když někdy v budoucnu potřebujeme rename nebo type
+   change, budeme potřebovat proper migration system (`alembic`-style versioned
+   scripts). **Patří do samostatného infra plánu.** Tento plán to neřeší.
 
-2. **Phase 4 (`EditDependenciesModal`)** — explicit deferred do BOD 1. Nikoli
-   open question, ale dependency.
+2. **Phase 4 (`EditDependenciesModal`) — DEFERRED na BOD 1.**
+   Není to question, jen dependency. Asset-level dep CRUD vyžaduje resolveer,
+   který je předmětem BOD 1 Resolve Model Redesign. Po dokončení BOD 1 tento
+   modal nahradí `DependencyResolverModal` (univerzální).
 
 ---
 
@@ -881,6 +1033,7 @@ Per CLAUDE.md test pyramid:
 | Phase 0 | **BLOKUJE všechny ostatní** | Preflight rename |
 | Phase 1 | Phase 0 | Independent jinak |
 | Phase 2 | Phase 0 | Independent jinak |
+| Phase 2.5 | Phase 2 | Cross-cutting (rename, backup, i18n, locks) — paralelně s 2 |
 | Phase 3 | Phase 0 | Independent jinak |
 | Phase 4 | BOD 1 (Resolve redesign) | DEFERRED |
 | Phase 5 | Phase 0 | Independent jinak |
@@ -889,16 +1042,21 @@ Per CLAUDE.md test pyramid:
 | Phase 8 | Phase 0 | Cleanup |
 | Phase 9 | All previous | Tests run continuously |
 
-**Doporučené pořadí (po Codex #1, #2):**
+**Doporučené pořadí (po Codex #1, #2 + cross-cutting concerns):**
 1. **Phase 0** — `pack_path` → `pack_dir` preflight (BLOCKER)
-2. **Phase 1** — Empty State CTAs
-3. **Phase 2** — User Gallery (Pack v3 schema bump)
-4. **Phase 3** — Pack Dependencies Operational
-5. **Phase 5** — Per-dep Update Flow
-6. **Phase 7 backend** — `attach_workflow_from_pack` (musí být hotové před exportem)
-7. **Phase 6** — Export/Import Bundle (security-hardened)
-8. **Phase 8** — Polish (8.1-8.4 — 8.5 už je v Phase 0)
-9. **Phase 9** — Final comprehensive test pass
+2. **Phase 1** — Empty State CTAs (i18n keys)
+3. **Phase 2** — User Gallery (Pack v3 schema bump, i18n)
+4. **Phase 2.5** — Cross-cutting: rename, backup, i18n CI check, per-pack locks
+5. **Phase 3** — Pack Dependencies Operational
+6. **Phase 5** — Per-dep Update Flow
+7. **Phase 7 backend** — `attach_workflow_from_pack` (musí být hotové před exportem)
+8. **Phase 6** — Export/Import Bundle (security-hardened)
+9. **Phase 8** — Polish (8.1-8.4 — 8.5 už je v Phase 0)
+10. **Phase 9** — Final comprehensive test pass
+
+**Pozn.:** Phase 2.5 je "compliance fáze" — nejde o feature work, ale o zajištění
+že feature work z Phase 1+2 splňuje požadavky vlastníka (rename, backup parity
+s previews, i18n coverage, concurrency safety).
 
 ---
 
@@ -940,7 +1098,10 @@ Per CLAUDE.md test pyramid:
 | Phase 3 cycle detection diagnostic | MEDIUM | `visiting+visited` + cyklus se hlásí s celou cestou `A → B → A` (Codex #9) |
 | Phase 2 persisted relative_path tampering | MEDIUM | Path je DERIVED, ne persisted; filename sanitization (Codex #4) |
 | Phase 2 file storage corruption | MEDIUM | sha256 verify on read, atomic write (temp + rename) |
-| User uploaded media size DoS | MEDIUM | 100 MB per file, 5 GB per pack soft limit, rate limiting |
+| User uploaded media size DoS | MEDIUM | 100 MB per file, 5 GB per pack soft limit; per-pack `threading.Lock` (Phase 2.5.4) — single-user app, no global HTTP rate limit needed |
+| i18n coverage chybí | MEDIUM | Phase 2.5.5 explicit pokrytí všech nových strings, `pnpm test:i18n` CI check, blok PR dokud klíče v cs+en (vlastník explicit požadavek) |
+| Pack rename × user_media path drift | MEDIUM | UUID-immutable items, path je derived; existing `PackService.rename_pack()` move directory, test coverage v Phase 2.5.1 |
+| Inventory page misleads o user_media scope | LOW | Phase 2.5.3 documentation: state-versioned mimo Inventory scope, viz `PackUserGallerySection` |
 | Phase 6 collision/duplicate paths in zip | MEDIUM | Reject duplicate normalized names před extrakcí |
 | Phase 6 concurrent metadata write | MEDIUM | Per-store import lock, jen 1 import at a time |
 | Phase 5 update breaks pack.version | LOW | Test pack.version unchanged after dep update |
@@ -974,6 +1135,22 @@ zapracované do v0.2.0**. Tabulka mapování nálezů → změna v plánu:
 ---
 
 ## 13. Changelog
+
+### 2026-05-02 — v0.3.0 (cross-cutting concerns)
+- **Phase 2.5 přidaná** — řeší 5 integration concerns identifikovaných po v0.2.0:
+  - **2.5.1 Pack rename** — adresář move + UUID-immutable user_media items, derived path
+  - **2.5.2 Backup integration** — user_media je git/state-versioned (jako Civitai previews),
+    blob backup je nevidí, restore přes git
+  - **2.5.3 Inventory page scope** — Inventory = blob storage view, user_media mimo scope
+  - **2.5.4 Rate limiting decision** — single-user app, žádný globální HTTP rate limit;
+    per-pack `threading.Lock` na uploads
+  - **2.5.5 i18n coverage** — explicit požadavek vlastníka, klíče per phase, `pnpm test:i18n`
+    CI check, blok PR dokud cs+en kompletní
+- Section 8 Open Questions vyčištěna — bod 1 (M6 schema migration) explicit OUT OF SCOPE,
+  bod 2 (Phase 4) explicit DEFERRED.
+- Risks tabulka rozšířena: i18n coverage, pack rename drift, inventory scope mislead.
+- Backend tabulka přidává: per-pack lock v UserMediaService, i18n test script.
+- Recommended order updatován: Phase 2.5 hned po Phase 2.
 
 ### 2026-05-02 — v0.2.0
 - **Codex GPT-5.5 high effort audit** — 14 findings (3 CRITICAL, 8 HIGH, 3 MEDIUM, 1 LOW).
