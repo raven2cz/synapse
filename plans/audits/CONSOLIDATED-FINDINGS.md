@@ -100,7 +100,26 @@ chybí, na co se zeptat uživatele, jak se to napojuje na zbytek aplikace.
 ## BOD 2 — Custom Pack (deep audit)
 
 **Branch:** `main`.
-**Spec:** `plans/PLAN-Pack-Edit.md` (status říká "complete", reálně řada děr).
+**Spec:** `plans/PLAN-Pack-Edit.md` (původní, status "complete") + **`plans/PLAN-Custom-Pack-R1.md`** (v0.2.0, owner-driven, post-Codex audit).
+
+### ⚠️ Korekce vůči předchozí verzi tohoto souboru (2026-05-02)
+
+Předchozí Bod 2 obsahoval chybný claim *"Modaly EXISTUJÍ ale jsou ukryté: EditDependenciesModal,
+DescriptionEditorModal, EditPreviewsModal, EditPackModal"*. **Verifikace v kódu (2026-05-02)
+ukázala, že to není pravda** — design je per-section edit, ne global edit toggle.
+
+| Modal | Skutečný stav | Trigger |
+|-------|---------------|---------|
+| `EditPackModal` | ✅ rendered `PackDetailPage.tsx:468` | Per-section "Edit" button (User Tags) |
+| `EditPreviewsModal` | ✅ rendered `PackDetailPage.tsx:527` | Gallery edit button |
+| `DescriptionEditorModal` | ✅ rendered `PackDetailPage.tsx:571` | Description edit button |
+| `AddPackDependencyModal` | ✅ rendered `PackDepsSection.tsx:541` | "Add pack dep" button |
+| `BaseModelResolverModal` | ✅ rendered, použit i v Civitai packs | Resolve flow |
+| `EditDependenciesModal` (asset-level) | ❌ exportován, **nikde nepoužíván** | — (orphan) |
+
+`PackDetailPage.tsx:309-314` má v kódu **explicitní komentář** o per-section edit designu.
+Jediný skutečně orphan modal je `EditDependenciesModal` (asset-level dep CRUD), který
+**čeká na BOD 1 Resolve redesign** (nahradí ho univerzální `DependencyResolverModal`).
 
 ### Kde jsme
 - **`PackCategory.CUSTOM` enum + Pack model jsou kompletní.** Backend zná
@@ -111,72 +130,77 @@ chybí, na co se zeptat uživatele, jak se to napojuje na zbytek aplikace.
 - **Backend patch endpoint `PATCH /api/packs/{pack}` podporuje** description, tags,
   cover, author, version, trigger words, base model, user tags, rename.
 - **Backend má resolvery pro Civitai, HF, local, URL, base-model strategie.**
-- **Modaly EXISTUJÍ ale jsou ukryté:** `EditDependenciesModal`, `DescriptionEditorModal`,
-  `EditPreviewsModal`, `EditPackModal`. Komponenty jsou napsané, ale `PackDetailPage`
-  je nerendruje (edit mode není zapojen).
+- **Per-section edit modaly jsou wired** (viz tabulka výše) — funkční.
 - **Frontend `usePackData.updatePack` je typovaný jen jako `{ user_tags: string[] }`**,
   i když runtime by zvládl víc.
 
-### Co chybí
-- **Edit mode není reachable z aktivní stránky.** `PackDetailPage:309` neposílá
-  `onStartEdit` do `PackHeader`. Bez toho jsou všechny edit modaly nedosažitelné z UI.
-- **Generic dependency CRUD endpoint chybí.** Existuje delete-resource a set-base-model,
-  ale ne POST/PATCH `PackDependency` pro custom packs. Aktivní backend nemá obecný
-  "add model dependency" endpoint.
-- **`PackInfoSection` vrací `null`** když pack nemá trigger words / model info / description.
-  Custom pack s prázdnou description NEMÁ visible section a žádné "add first description"
-  tlačítko.
+### Co skutečně chybí
+- **`PackInfoSection` vrací `null`** pro prázdnou description / trigger words / model info.
+  Nový custom pack tedy NEMÁ visible section a žádné "add first description" tlačítko.
 - **`PackGallery` se renderuje JEN když `pack.previews.length > 0`.** Nový custom pack
   se zero previews → žádná gallery sekce, žádné "add first preview" tlačítko.
-- **Pack dependencies (pack-to-pack) backend funguje, ale UI je hidden.** `EditDependenciesModal`
-  není importován do `PackDetailPage`.
-- **CustomPlugin advertises edit features, ale `getHeaderActions()` returns null.** Extra
-  section pouze ukazuje capability flags, které se renderují jen v edit mode (= nikdy).
+- **Generic dependency CRUD endpoint chybí.** Existuje delete-resource a set-base-model,
+  ale ne POST/PATCH `PackDependency` pro custom packs. (Řešeno v BOD 1 přes `DependencyResolverModal`.)
 - **`pack_dependencies` se NESEMANTICKY rekurzivně neexpanduje do profilu.**
   `ProfileService._load_packs_for_profile` načítá jen `profile.packs` přímo;
   `ViewBuilder.compute_plan` taky. Pokud Custom Pack A závisí na Pack B přes
-  `pack_dependencies`, použití A NEPŘIDÁ B do view symlinks.
-- **Workflow symlink delete URL mismatch:** UI volá DELETE, backend mu nepřijímá
-  (`apps/web/src/components/modules/pack-detail/hooks/usePackData.ts:401` vs
-  `src/store/api.py:4630`).
+  `pack_dependencies`, použití A NEPŘIDÁ B do view symlinks. (DOMAIN-AUDIT H4.)
 - **Custom pack export/import neexistuje.** Žádný portable bundle (pack.json + lock +
   previews + workflows + blobs). Backup je pro state protection, ne export.
 - **Update handling pro custom packs je undefined.** CustomPlugin disabluje update checks
   v UI, ale backend `update_service` rozhoduje podle dependency policy — custom pack
   s `FOLLOW_LATEST` Civitai dep je teoreticky updatable, ale UI ho neukáže.
 - **Pack dependency navigation používá `/pack/{name}` místo `/packs/{name}`** — broken link.
+- **Workflow symlink delete URL mismatch:** UI volá DELETE, backend mu nepřijímá
+  (`apps/web/src/components/modules/pack-detail/hooks/usePackData.ts:401` vs
+  `src/store/api.py:4630`).
+- **User-vytvořený obsah (videa/obrázky) nemá vyhrazené pole** — momentálně by se
+  míchal s Civitai `previews`. Vlastník chce separátní `pack.user_gallery`.
+- **Workflow attach z jiného packu** není možný — vlastník ho chce přes copy semantics
+  (`B1`).
 - **Frontend testy mirror-ují simplified local definitions** místo importu reálných pluginů.
 
-### Otázky pro uživatele
-1. **Mají custom packs podporovat libovolné model dependencies v R1, nebo jen base + workflows + previews + params?**
-2. **Má "Create Custom Pack" wizard rovnou nabídnout výběr dependencies?**
-3. **Má custom pack creation auto-přidat pack do globálního profilu?**
-4. **Jsou `pack_dependencies` operační (mění profile/view symlinks), nebo informační?**
-5. **Pokud operační — má `use(pack)` rekurzivně zahrnout `pack_dependencies`?**
-6. **Mají optional `pack_dependencies` být zahrnuté automaticky, nebo jen warning?**
-7. **Má se `version_constraint` enforcovat?**
-8. **Mají custom packs povolit `FOLLOW_LATEST` Civitai dependencies?**
-9. **Pokud ano — má CustomPlugin exposovat updates? Pokud ne — má backend zakázat follow-latest na custom packs?**
-10. **Co je expected export/import artifact — metadata only, +lock, +previews/workflows, +blobs, all?**
-11. **Má `EditDependenciesModal` být revived, replaced by `DependencyResolverModal`, nebo removed?**
-12. **Mají blank sekce vždy renderovat pro editable custom packs?**
+### Decision Table — vlastníkovy odpovědi (2026-05-02)
+
+Vlastník odpověděl na 12 původních + 5 dodatečných otázek. Plné mapování viz
+`plans/PLAN-Custom-Pack-R1.md` Section 4.
+
+| # | Otázka | Volba |
+|---|--------|-------|
+| Q1 | Arbitrary model deps v R1? | **A — Ano** |
+| Q2 | Create wizard rovnou s deps? | **B — jednoduchý wizard, ad-hoc edit** |
+| Q3 | Auto-add do globálního profilu? | **A — Ano** (recursive) |
+| Q4 | `pack_dependencies` operational? | **A required / B optional** |
+| Q5 | `use(pack)` recursive? | **per Q4 — required ano, optional ne** |
+| Q6 | Optional deps automatic? | **per Q4 — banner only** |
+| Q7 | `version_constraint` enforce? | **B — UI info only** |
+| Q8 | `FOLLOW_LATEST` Civitai deps? | **A — Ano** |
+| Q9 | Custom pack updatable? | **A — per-dep, ne pack-level** |
+| Q10 | Export bundle scope? | **C2 default + C3 opt-in (`--include-weights`)** |
+| Q11 | `EditDependenciesModal`? | **B — wait for BOD 1, replace s `DependencyResolverModal`** |
+| Q12 | Empty sekce render? | **A — Ano pro editable** |
+| Qx-A | User gallery? | **A2 — separátní `pack.user_gallery`** |
+| Qx-B | Embedded workflow? | **B1 — copy** |
+| Qx-C | Export scope? | **C2 + opt C3** |
+| Qx-D | Delete cascade? | **D4 — dumb delete** |
+| Qx-E | Version bump? | **E1 — manual only** |
 
 ### Napojení do aplikace
 - **Vstupní bod:** `PacksPage` → "Create Pack" → `CreatePackModal` → `POST /api/packs/create`
   → `Pack` s `pack_category=CUSTOM` → navigace na `/packs/{name}`.
-- **Edit cesta (CHYBÍ TEĎ):** `PackDetailPage` musí dostat `edit mode wired` →
-  `PackHeader.onStartEdit` → `usePackEdit` state → buď global modal nebo per-section
-  modaly (`EditPackModal`, `DescriptionEditorModal`, `EditPreviewsModal`,
-  `EditDependenciesModal`).
+- **Per-section edit:** Každá sekce má vlastní edit button → konkrétní modal (Description,
+  Previews, Pack Tags, atd.). **Není** global "edit mode toggle".
 - **Plugin priority:** `usePackPlugin.ts:100` má pořadí Install → Civitai → Custom.
   CustomPlugin je fallback (`pack.pack?.pack_category === 'custom' || true`), což
-  znamená že **i unknown pack types se chovají jako custom**. To může být úmyslné, ale
-  je to past.
+  znamená že **i unknown pack types se chovají jako custom**. Codex audit upozorňuje
+  že empty state CTAs musí gateovat na `pack_category === 'custom' && plugin.id === 'custom'`,
+  ne jen na `plugin.features` (jinak Civitai packy dostanou CTAs).
 - **Resolve napojení:** Custom pack → `PackDependenciesSection` → "Resolve" → použije
   stejný `DependencyResolverModal` jako Civitai packs (BOD 1).
 - **Profile napojení:** `use(custom_pack)` vytvoří `work__{name}` profile, vloží do něj
   custom pack + global pack entries. `ViewBuilder.compute_plan` najde direct deps a
-  vytvoří symlinks. **Neexpanduje `pack_dependencies` rekurzivně** (kritická díra).
+  vytvoří symlinks. **Neexpanduje `pack_dependencies` rekurzivně** (kritická díra,
+  fix v PLAN-Custom-Pack-R1 Phase 3).
 
 ---
 
